@@ -29,6 +29,9 @@ import (
 	mediaPostgres "pidiekab/internal/modules/media/infrastructure/postgres"
 	mediaStorage "pidiekab/internal/modules/media/infrastructure/storage"
 	mediaHttp "pidiekab/internal/modules/media/transport/http"
+	searchApp "pidiekab/internal/modules/search/application"
+	searchPostgres "pidiekab/internal/modules/search/infrastructure/postgres"
+	searchHttp "pidiekab/internal/modules/search/transport/http"
 	settingsApp "pidiekab/internal/modules/settings/application"
 	settingsPostgres "pidiekab/internal/modules/settings/infrastructure/postgres"
 	settingsHttp "pidiekab/internal/modules/settings/transport/http"
@@ -172,6 +175,12 @@ func main() {
 			logger.Info("no active SSG release found on startup; scheduling initial site generation")
 			_, _ = jobRepo.Enqueue(ctx, nil, "site.initial_build", map[string]any{"trigger": "startup"})
 		}
+
+		// 10. Public Search
+		searchRepo := searchPostgres.NewSearchRepository(dbPool)
+		searchService := searchApp.NewSearchService(searchRepo)
+		searchHandler := searchHttp.NewSearchHandler(searchService)
+		registrars = append(registrars, searchHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}
