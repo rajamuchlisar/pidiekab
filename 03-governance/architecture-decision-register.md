@@ -27,7 +27,7 @@
 | ADR-012 | PostgreSQL sebagai satu database utama | LOCKED | Satu source of truth |
 | ADR-013 | Tidak memakai Redis atau message broker pada MVP | LOCKED | Evaluasi ulang hanya jika kebutuhan terbukti |
 | ADR-014 | SQL eksplisit, tanpa ORM | LOCKED | `pgx/v5` dan `pgxpool` sebagai baseline |
-| ADR-015 | Migration memakai Goose | PROPOSED | Harus dibuktikan kompatibilitas dengan SQL baseline |
+| ADR-015 | Migration memakai Goose | LOCKED | Terbukti kompatibel dengan DDL baseline via Goose v3.24 (Up, Down, Re-up idempotent) |
 | ADR-016 | Logging memakai `log/slog`; testing memakai `testing` dan `httptest` | LOCKED | Library tambahan harus memberi manfaat nyata |
 | ADR-017 | Password hashing Argon2id | PROPOSED | Memerlukan `golang.org/x/crypto`; bcrypt alternatif |
 | ADR-018 | In-process SSG worker pada satu service | LOCKED | PostgreSQL job queue; tanpa broker eksternal |
@@ -41,7 +41,7 @@
 | ADR-021 | Public website menggunakan SSG | LOCKED | SEO dan HTML awal harus tersedia tanpa client rendering penuh |
 | ADR-022 | Admin CMS menggunakan Vue SPA dinamis | LOCKED | Same-origin REST API |
 | ADR-023 | Node.js hanya untuk development/build | LOCKED | Tidak berjalan sebagai production web server |
-| ADR-024 | Tool SSG tertentu | OPEN | Wajib POC localized routes, metadata, sitemap, redirect, deploy output |
+| ADR-024 | Tool SSG memakai vite-ssg (dengan fallback prerender script) | LOCKED | Lolos 22/22 kriteria POC: localized ID/EN, SEO meta, hreflang, sitemap, draft exclusion, Go static serving |
 | ADR-025 | Public static files disajikan oleh Go | LOCKED | Tidak ada runtime web server tambahan |
 
 ## 4. Database, content & search

@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -13,8 +14,13 @@ import (
 	"pidiekab/internal/platform/httpserver/middleware"
 )
 
+// DatabasePinger is an interface for checking database health.
+type DatabasePinger interface {
+	Ping(ctx context.Context) error
+}
+
 // BuildHandler builds the router, handlers, and attaches middleware.
-func BuildHandler(cfg config.Config, logger *slog.Logger) http.Handler {
+func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger) http.Handler {
 	mux := http.NewServeMux()
 
 	// 1. Health endpoints
@@ -28,10 +34,36 @@ func BuildHandler(cfg config.Config, logger *slog.Logger) http.Handler {
 	})
 
 	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
-			"status":      "not_ready",
-			"reason":      "database_not_integrated",
+		if db == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"status":      "not_ready",
+				"reason":      "database_not_configured",
+				"service":     "pidiekab",
+				"environment": cfg.Environment,
+				"timestamp":   time.Now().UTC().Format(time.RFC3339),
+			})
+			return
+		}
+
+		pingCtx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		if err := db.Ping(pingCtx); err != nil {
+			logger.Warn("readiness probe failed: database ping error", "error", err)
+			writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+				"status":      "not_ready",
+				"reason":      "database_unreachable",
+				"service":     "pidiekab",
+				"environment": cfg.Environment,
+				"timestamp":   time.Now().UTC().Format(time.RFC3339),
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":      "ok",
 			"service":     "pidiekab",
+			"database":    "connected",
 			"environment": cfg.Environment,
 			"timestamp":   time.Now().UTC().Format(time.RFC3339),
 		})
@@ -63,11 +95,11 @@ func BuildHandler(cfg config.Config, logger *slog.Logger) http.Handler {
 	return handler
 }
 
-// New creates and configures an http.Server with explicit timeouts and middleware.
-func New(cfg config.Config, logger *slog.Logger) *http.Server {
+// New creates and configures an http.Server with explicit timeouts, database pinger, and middleware.
+func New(cfg config.Config, logger *slog.Logger, db DatabasePinger) *http.Server {
 	return &http.Server{
 		Addr:              cfg.Address,
-		Handler:           BuildHandler(cfg, logger),
+		Handler:           BuildHandler(cfg, logger, db),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
@@ -100,7 +132,6 @@ func servePublicStatic(w http.ResponseWriter, r *http.Request, rootDir string) {
 	// Check if directory index.html exists
 	indexPath := filepath.Join(targetPath, "index.html")
 	if stat, err := os.Stat(indexPath); err == nil && !stat.IsDir() {
-		// Enforce trailing slash for directory routes
 		if !strings.HasSuffix(r.URL.Path, "/") {
 			http.Redirect(w, r, r.URL.Path+"/", http.StatusMovedPermanently)
 			return
@@ -110,7 +141,6 @@ func servePublicStatic(w http.ResponseWriter, r *http.Request, rootDir string) {
 		return
 	}
 
-	// Not found
 	http.NotFound(w, r)
 }
 
@@ -120,7 +150,6 @@ func serveCMSStatic(w http.ResponseWriter, r *http.Request, rootDir string) {
 		return
 	}
 
-	// Strip /cms/ prefix to resolve within CMS dist
 	relPath := strings.TrimPrefix(r.URL.Path, "/cms/")
 	cleanPath := filepath.Clean(filepath.FromSlash(relPath))
 	if strings.Contains(cleanPath, "..") {
@@ -149,10 +178,8 @@ func serveCMSStatic(w http.ResponseWriter, r *http.Request, rootDir string) {
 
 func applyCacheHeaders(w http.ResponseWriter, requestPath string) {
 	if strings.HasPrefix(requestPath, "/assets/") {
-		// Immutable hashed assets
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	} else if strings.HasSuffix(requestPath, ".html") || strings.HasSuffix(requestPath, "/") {
-		// HTML: must revalidate to enable seamless deployments
 		w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 	}
 }

@@ -11,17 +11,22 @@ import (
 
 // Config holds all platform and runtime configurations for the PidieKab service.
 type Config struct {
-	Environment       string
-	Address           string
-	LogLevel          slog.Level
-	ReadHeaderTimeout time.Duration
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
-	ShutdownTimeout   time.Duration
-	DatabaseURL       string
-	PublicStaticDir   string
-	CMSStaticDir      string
+	Environment               string
+	Address                   string
+	LogLevel                  slog.Level
+	ReadHeaderTimeout         time.Duration
+	ReadTimeout               time.Duration
+	WriteTimeout              time.Duration
+	IdleTimeout               time.Duration
+	ShutdownTimeout           time.Duration
+	DatabaseURL               string
+	DatabaseMaxConns          int32
+	DatabaseMinConns          int32
+	DatabaseMaxConnLifetime   time.Duration
+	DatabaseMaxConnIdleTime   time.Duration
+	DatabaseHealthCheckPeriod time.Duration
+	PublicStaticDir           string
+	CMSStaticDir              string
 }
 
 // Load reads configuration from environment variables, applies validated defaults,
@@ -96,21 +101,61 @@ func Load() (Config, error) {
 	}
 
 	dbURL := env("PIDIEKAB_DATABASE_URL", "")
+
+	maxConns, err := parseIntEnv("PIDIEKAB_DATABASE_MAX_CONNS", 10)
+	if err != nil {
+		return Config{}, err
+	}
+	if maxConns <= 0 {
+		return Config{}, fmt.Errorf("PIDIEKAB_DATABASE_MAX_CONNS must be greater than 0")
+	}
+
+	minConns, err := parseIntEnv("PIDIEKAB_DATABASE_MIN_CONNS", 2)
+	if err != nil {
+		return Config{}, err
+	}
+	if minConns < 0 {
+		return Config{}, fmt.Errorf("PIDIEKAB_DATABASE_MIN_CONNS must be non-negative")
+	}
+	if minConns > maxConns {
+		return Config{}, fmt.Errorf("PIDIEKAB_DATABASE_MIN_CONNS (%d) cannot exceed PIDIEKAB_DATABASE_MAX_CONNS (%d)", minConns, maxConns)
+	}
+
+	maxConnLifetime, err := parseDurationEnv("PIDIEKAB_DATABASE_MAX_CONN_LIFETIME", 1*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+
+	maxConnIdleTime, err := parseDurationEnv("PIDIEKAB_DATABASE_MAX_CONN_IDLE_TIME", 30*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+
+	healthCheckPeriod, err := parseDurationEnv("PIDIEKAB_DATABASE_HEALTH_CHECK_PERIOD", 1*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+
 	publicStaticDir := env("PIDIEKAB_PUBLIC_STATIC_DIR", "frontend/public-site/dist")
 	cmsStaticDir := env("PIDIEKAB_CMS_STATIC_DIR", "frontend/admin-cms/dist")
 
 	return Config{
-		Environment:       envName,
-		Address:           addr,
-		LogLevel:          logLevel,
-		ReadHeaderTimeout: readHeaderTimeout,
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
-		IdleTimeout:       idleTimeout,
-		ShutdownTimeout:   shutdownTimeout,
-		DatabaseURL:       dbURL,
-		PublicStaticDir:   publicStaticDir,
-		CMSStaticDir:      cmsStaticDir,
+		Environment:               envName,
+		Address:                   addr,
+		LogLevel:                  logLevel,
+		ReadHeaderTimeout:         readHeaderTimeout,
+		ReadTimeout:               readTimeout,
+		WriteTimeout:              writeTimeout,
+		IdleTimeout:               idleTimeout,
+		ShutdownTimeout:           shutdownTimeout,
+		DatabaseURL:               dbURL,
+		DatabaseMaxConns:          int32(maxConns),
+		DatabaseMinConns:          int32(minConns),
+		DatabaseMaxConnLifetime:   maxConnLifetime,
+		DatabaseMaxConnIdleTime:   maxConnIdleTime,
+		DatabaseHealthCheckPeriod: healthCheckPeriod,
+		PublicStaticDir:           publicStaticDir,
+		CMSStaticDir:              cmsStaticDir,
 	}, nil
 }
 
@@ -119,6 +164,18 @@ func env(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func parseIntEnv(key string, fallback int) (int, error) {
+	val, ok := os.LookupEnv(key)
+	if !ok || val == "" {
+		return fallback, nil
+	}
+	i, err := strconv.Atoi(val)
+	if err != nil {
+		return 0, fmt.Errorf("invalid integer for %s (%q): %w", key, val, err)
+	}
+	return i, nil
 }
 
 func parseDurationEnv(key string, fallback time.Duration) (time.Duration, error) {

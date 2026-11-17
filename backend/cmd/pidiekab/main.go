@@ -9,14 +9,15 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"pidiekab/internal/platform/config"
+	"pidiekab/internal/platform/database"
 	"pidiekab/internal/platform/httpserver"
 )
 
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		// Log explicit startup failure to stderr
 		slog.Error("fatal: invalid configuration on startup", "error", err)
 		os.Exit(1)
 	}
@@ -26,10 +27,29 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	server := httpserver.New(cfg, logger)
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	var dbPool *pgxpool.Pool
+	if cfg.DatabaseURL != "" {
+		dbPool, err = database.NewPool(ctx, database.Config{
+			URL:               cfg.DatabaseURL,
+			MaxConns:          cfg.DatabaseMaxConns,
+			MinConns:          cfg.DatabaseMinConns,
+			MaxConnLifetime:   cfg.DatabaseMaxConnLifetime,
+			MaxConnIdleTime:   cfg.DatabaseMaxConnIdleTime,
+			HealthCheckPeriod: cfg.DatabaseHealthCheckPeriod,
+		}, logger)
+		if err != nil {
+			logger.Error("fatal: database connection failed on startup", "error", err)
+			os.Exit(1)
+		}
+		defer dbPool.Close()
+	} else {
+		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
+	}
+
+	server := httpserver.New(cfg, logger, dbPool)
 
 	errCh := make(chan error, 1)
 	go func() {

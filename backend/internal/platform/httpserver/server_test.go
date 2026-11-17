@@ -1,7 +1,9 @@
 package httpserver_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -15,7 +17,15 @@ import (
 	"pidiekab/internal/platform/httpserver"
 )
 
-func newTestServerWithStatic(publicDir, cmsDir string) http.Handler {
+type mockPinger struct {
+	pingErr error
+}
+
+func (m *mockPinger) Ping(ctx context.Context) error {
+	return m.pingErr
+}
+
+func newTestServerWithStaticAndDB(publicDir, cmsDir string, db httpserver.DatabasePinger) http.Handler {
 	cfg := config.Config{
 		Environment:       "test",
 		Address:           "127.0.0.1:0",
@@ -29,11 +39,11 @@ func newTestServerWithStatic(publicDir, cmsDir string) http.Handler {
 		CMSStaticDir:      cmsDir,
 	}
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	return httpserver.BuildHandler(cfg, logger)
+	return httpserver.BuildHandler(cfg, logger, db)
 }
 
 func TestHealthLiveEndpoint(t *testing.T) {
-	handler := newTestServerWithStatic("", "")
+	handler := newTestServerWithStaticAndDB("", "", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
 	rec := httptest.NewRecorder()
@@ -65,8 +75,8 @@ func TestHealthLiveEndpoint(t *testing.T) {
 	}
 }
 
-func TestHealthReadyEndpoint(t *testing.T) {
-	handler := newTestServerWithStatic("", "")
+func TestHealthReadyEndpointUnconfigured(t *testing.T) {
+	handler := newTestServerWithStaticAndDB("", "", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
 	rec := httptest.NewRecorder()
@@ -84,10 +94,63 @@ func TestHealthReadyEndpoint(t *testing.T) {
 	if res["status"] != "not_ready" {
 		t.Errorf("expected status 'not_ready', got %v", res["status"])
 	}
+	if res["reason"] != "database_not_configured" {
+		t.Errorf("expected reason 'database_not_configured', got %v", res["reason"])
+	}
+}
+
+func TestHealthReadyEndpointUnreachable(t *testing.T) {
+	pinger := &mockPinger{pingErr: errors.New("connection refused")}
+	handler := newTestServerWithStaticAndDB("", "", pinger)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 Service Unavailable, got %d", rec.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode JSON response: %v", err)
+	}
+
+	if res["status"] != "not_ready" {
+		t.Errorf("expected status 'not_ready', got %v", res["status"])
+	}
+	if res["reason"] != "database_unreachable" {
+		t.Errorf("expected reason 'database_unreachable', got %v", res["reason"])
+	}
+}
+
+func TestHealthReadyEndpointHealthy(t *testing.T) {
+	pinger := &mockPinger{pingErr: nil}
+	handler := newTestServerWithStaticAndDB("", "", pinger)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode JSON response: %v", err)
+	}
+
+	if res["status"] != "ok" {
+		t.Errorf("expected status 'ok', got %v", res["status"])
+	}
+	if res["database"] != "connected" {
+		t.Errorf("expected database 'connected', got %v", res["database"])
+	}
 }
 
 func TestRootRedirectsToIndonesian(t *testing.T) {
-	handler := newTestServerWithStatic("", "")
+	handler := newTestServerWithStaticAndDB("", "", nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -112,7 +175,7 @@ func TestPublicStaticServing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := newTestServerWithStatic(tempDir, "")
+	handler := newTestServerWithStaticAndDB(tempDir, "", nil)
 
 	// 1. Without trailing slash -> 301 to /id/
 	req := httptest.NewRequest(http.MethodGet, "/id", nil)
@@ -152,9 +215,8 @@ func TestCMSStaticServingSPA(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler := newTestServerWithStatic("", tempDir)
+	handler := newTestServerWithStaticAndDB("", tempDir, nil)
 
-	// Route to /cms/dashboard -> falls back to CMS index.html with no-cache
 	req := httptest.NewRequest(http.MethodGet, "/cms/dashboard", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

@@ -1,10 +1,4 @@
--- PidieKab PostgreSQL baseline schema
--- Migration: 001_initial_schema.sql
--- Review this migration against the finalized Technical Specification before production.
--- PostgreSQL 15+ recommended. No extensions are required by this baseline.
-
-BEGIN;
-
+-- +goose Up
 -- ---------------------------------------------------------------------------
 -- 1. Identity & access
 -- ---------------------------------------------------------------------------
@@ -217,30 +211,23 @@ CREATE INDEX content_translations_content_idx ON content_translations (content_i
 CREATE INDEX content_translations_search_gin_idx
     ON content_translations USING GIN (search_vector);
 
--- The search_vector is maintained by the application in MVP.
--- Locale-specific text-search configuration and Indonesian tokenization
--- must be validated before production.
-
 CREATE TABLE content_sources (
-    id              BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    content_id      BIGINT NOT NULL REFERENCES contents(id) ON DELETE CASCADE,
-    source_type     TEXT NOT NULL,
-    source_name     TEXT NOT NULL,
-    source_url      TEXT,
+    id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    content_id          BIGINT NOT NULL REFERENCES contents(id) ON DELETE CASCADE,
+    source_type         TEXT NOT NULL,
+    source_name         TEXT NOT NULL,
+    source_url          TEXT,
     source_published_at TIMESTAMPTZ,
-    accessed_at     TIMESTAMPTZ,
-    notes           TEXT,
-    created_by      BIGINT REFERENCES admins(id) ON DELETE SET NULL,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    accessed_at         TIMESTAMPTZ,
+    notes               TEXT,
+    created_by          BIGINT REFERENCES admins(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT content_sources_type_chk
         CHECK (source_type IN ('research', 'visit', 'official', 'social')),
     CONSTRAINT content_sources_name_nonempty CHECK (BTRIM(source_name) <> '')
 );
 
 CREATE INDEX content_sources_content_idx ON content_sources (content_id);
-
--- At least one source per content is an application-level publish validation:
--- it cannot be safely expressed as a simple row CHECK constraint.
 
 -- ---------------------------------------------------------------------------
 -- 6. Editorial curation
@@ -419,4 +406,30 @@ CREATE INDEX audit_logs_created_idx ON audit_logs (created_at DESC);
 CREATE INDEX audit_logs_entity_idx ON audit_logs (entity_type, entity_id);
 CREATE INDEX audit_logs_admin_created_idx ON audit_logs (admin_id, created_at DESC);
 
-COMMIT;
+
+-- +goose Down
+-- ---------------------------------------------------------------------------
+-- Drop tables in reverse dependency order
+-- ---------------------------------------------------------------------------
+
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS url_redirects;
+DROP TABLE IF EXISTS site_generation_jobs;
+DROP TABLE IF EXISTS site_setting_translations;
+DROP TABLE IF EXISTS site_settings;
+DROP TABLE IF EXISTS static_page_translations;
+DROP TABLE IF EXISTS static_pages;
+DROP TABLE IF EXISTS homepage_story_items;
+DROP TABLE IF EXISTS featured_contents;
+DROP TABLE IF EXISTS content_sources;
+DROP TABLE IF EXISTS content_translations;
+DROP TABLE IF EXISTS contents;
+DROP TABLE IF EXISTS category_translations;
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS media_assets;
+DROP TABLE IF EXISTS villages;
+DROP TABLE IF EXISTS districts;
+DROP TABLE IF EXISTS regencies;
+DROP TABLE IF EXISTS admin_sessions;
+DROP TABLE IF EXISTS admins;
+
