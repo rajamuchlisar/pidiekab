@@ -39,6 +39,7 @@ import (
 	"pidiekab/internal/platform/config"
 	"pidiekab/internal/platform/database"
 	"pidiekab/internal/platform/httpserver"
+	"pidiekab/internal/workers/sitegeneration"
 )
 
 func main() {
@@ -147,6 +148,30 @@ func main() {
 		settingsService := settingsApp.NewSettingsService(settingsRepo, auditRepo)
 		settingsHandler := settingsHttp.NewSettingsHandler(settingsService, authService)
 		registrars = append(registrars, settingsHandler)
+
+		// 9. Site Generation Workers & SSG Pipeline
+		releaseMgr, err := sitegeneration.NewReleaseManager(cfg.SSGOutputRoot, cfg.SSGReleasesToKeep)
+		if err != nil {
+			logger.Error("failed to initialize SSG release manager", "error", err)
+			os.Exit(1)
+		}
+		registrars = append(registrars, releaseMgr)
+
+		jobRepo := sitegeneration.NewJobRepository(dbPool)
+		contentService.SetJobEnqueuer(jobRepo)
+		pageService.SetJobEnqueuer(jobRepo)
+
+		generator := sitegeneration.NewGenerator(dbPool, "https://pidiekab.go.id")
+		ssgWorker := sitegeneration.NewWorker(jobRepo, generator, releaseMgr, cfg.SSGWorkerPollInterval, cfg.SSGJobMaxAttempts, logger)
+
+		// Run background SSG worker lifecycle
+		go ssgWorker.Start(ctx)
+
+		// Trigger initial build if no release exists yet
+		if _, err := releaseMgr.GetActiveReleaseDir(); err != nil {
+			logger.Info("no active SSG release found on startup; scheduling initial site generation")
+			_, _ = jobRepo.Enqueue(ctx, nil, "site.initial_build", map[string]any{"trigger": "startup"})
+		}
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}

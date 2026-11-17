@@ -27,6 +27,11 @@ type Config struct {
 	DatabaseHealthCheckPeriod time.Duration
 	PublicStaticDir           string
 	CMSStaticDir              string
+	StoragePath               string
+	SSGOutputRoot             string
+	SSGReleasesToKeep         int
+	SSGWorkerPollInterval     time.Duration
+	SSGJobMaxAttempts         int
 }
 
 // Load reads configuration from environment variables, applies validated defaults,
@@ -138,6 +143,23 @@ func Load() (Config, error) {
 
 	publicStaticDir := env("PIDIEKAB_PUBLIC_STATIC_DIR", "frontend/public-site/dist")
 	cmsStaticDir := env("PIDIEKAB_CMS_STATIC_DIR", "frontend/admin-cms/dist")
+	storagePath := env("PIDIEKAB_STORAGE_PATH", "data/media")
+	ssgOutputRoot := env("PIDIEKAB_SSG_OUTPUT_ROOT", "data/ssg")
+
+	ssgReleasesToKeep, err := parseIntEnv("PIDIEKAB_SSG_RELEASES_TO_KEEP", 5)
+	if err != nil || ssgReleasesToKeep < 1 {
+		ssgReleasesToKeep = 5
+	}
+
+	ssgWorkerPollInterval, err := parseDurationEnv("PIDIEKAB_SSG_POLL_INTERVAL", 5*time.Second)
+	if err != nil || ssgWorkerPollInterval <= 0 {
+		ssgWorkerPollInterval = 5 * time.Second
+	}
+
+	ssgJobMaxAttempts, err := parseIntEnv("PIDIEKAB_SSG_JOB_MAX_ATTEMPTS", 3)
+	if err != nil || ssgJobMaxAttempts < 1 {
+		ssgJobMaxAttempts = 3
+	}
 
 	return Config{
 		Environment:               envName,
@@ -156,6 +178,11 @@ func Load() (Config, error) {
 		DatabaseHealthCheckPeriod: healthCheckPeriod,
 		PublicStaticDir:           publicStaticDir,
 		CMSStaticDir:              cmsStaticDir,
+		StoragePath:               storagePath,
+		SSGOutputRoot:             ssgOutputRoot,
+		SSGReleasesToKeep:         ssgReleasesToKeep,
+		SSGWorkerPollInterval:     ssgWorkerPollInterval,
+		SSGJobMaxAttempts:         ssgJobMaxAttempts,
 	}, nil
 }
 

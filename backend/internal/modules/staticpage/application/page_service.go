@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	auditDomain "pidiekab/internal/modules/audit/domain"
 	"pidiekab/internal/modules/staticpage/domain"
 	"pidiekab/internal/modules/staticpage/infrastructure/postgres"
@@ -15,13 +16,22 @@ type AuditRecorder interface {
 	Record(ctx context.Context, entry auditDomain.Log) error
 }
 
+type JobEnqueuer interface {
+	Enqueue(ctx context.Context, tx pgx.Tx, jobType string, payload any) (int64, error)
+}
+
 type PageService struct {
-	repo  *postgres.PageRepository
-	audit AuditRecorder
+	repo     *postgres.PageRepository
+	audit    AuditRecorder
+	enqueuer JobEnqueuer
 }
 
 func NewPageService(repo *postgres.PageRepository, audit AuditRecorder) *PageService {
 	return &PageService{repo: repo, audit: audit}
+}
+
+func (s *PageService) SetJobEnqueuer(enqueuer JobEnqueuer) {
+	s.enqueuer = enqueuer
 }
 
 func (s *PageService) CreatePage(ctx context.Context, adminID int64, pageKey string) (*domain.StaticPage, error) {
@@ -128,6 +138,13 @@ func (s *PageService) PublishTranslation(ctx context.Context, adminID int64, pag
 		"locale":         locale,
 	}, nil)
 
+	if s.enqueuer != nil {
+		_, _ = s.enqueuer.Enqueue(ctx, nil, "static_page.publish", map[string]any{
+			"page_id": pageID,
+			"locale":  locale,
+		})
+	}
+
 	return nil
 }
 
@@ -144,6 +161,13 @@ func (s *PageService) ArchiveTranslation(ctx context.Context, adminID int64, pag
 		"static_page_id": pageID,
 		"locale":         locale,
 	}, nil)
+
+	if s.enqueuer != nil {
+		_, _ = s.enqueuer.Enqueue(ctx, nil, "static_page.archive", map[string]any{
+			"page_id": pageID,
+			"locale":  locale,
+		})
+	}
 
 	return nil
 }

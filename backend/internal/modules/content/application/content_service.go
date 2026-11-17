@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	auditDomain "pidiekab/internal/modules/audit/domain"
 	categoryDomain "pidiekab/internal/modules/category/domain"
 	"pidiekab/internal/modules/content/domain"
@@ -22,6 +23,11 @@ type AuditRecorder interface {
 	Record(ctx context.Context, entry auditDomain.Log) error
 }
 
+// JobEnqueuer defines contract for queuing generation jobs.
+type JobEnqueuer interface {
+	Enqueue(ctx context.Context, tx pgx.Tx, jobType string, payload any) (int64, error)
+}
+
 // ContentService orchestrates content operations.
 type ContentService struct {
 	contentRepo     *postgres.ContentRepository
@@ -29,6 +35,7 @@ type ContentService struct {
 	sourceRepo      *postgres.SourceRepository
 	categoryChecker CategoryChecker
 	audit           AuditRecorder
+	enqueuer        JobEnqueuer
 }
 
 // NewContentService creates a new ContentService.
@@ -46,6 +53,11 @@ func NewContentService(
 		categoryChecker: categoryChecker,
 		audit:           audit,
 	}
+}
+
+// SetJobEnqueuer attaches a generation job enqueuer to trigger atomic builds on publication.
+func (s *ContentService) SetJobEnqueuer(enqueuer JobEnqueuer) {
+	s.enqueuer = enqueuer
 }
 
 // CreateContent validates category and coordinates, then persists a new content record.
@@ -282,6 +294,13 @@ func (s *ContentService) PublishLocale(ctx context.Context, contentID int64, loc
 		"locale":     locale,
 	}, ip)
 
+	if s.enqueuer != nil {
+		_, _ = s.enqueuer.Enqueue(ctx, nil, "content.publish", map[string]any{
+			"content_id": contentID,
+			"locale":     locale,
+		})
+	}
+
 	return nil
 }
 
@@ -306,6 +325,13 @@ func (s *ContentService) ArchiveLocale(ctx context.Context, contentID int64, loc
 		"content_id": contentID,
 		"locale":     locale,
 	}, ip)
+
+	if s.enqueuer != nil {
+		_, _ = s.enqueuer.Enqueue(ctx, nil, "content.archive", map[string]any{
+			"content_id": contentID,
+			"locale":     locale,
+		})
+	}
 
 	return nil
 }

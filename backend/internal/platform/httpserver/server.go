@@ -19,6 +19,11 @@ type DatabasePinger interface {
 	Ping(ctx context.Context) error
 }
 
+// ReleaseLocator provides dynamic resolution of the active SSG release directory.
+type ReleaseLocator interface {
+	GetActiveReleaseDir() (string, error)
+}
+
 // RouteRegistrar allows domain modules to attach their HTTP routes onto the ServeMux.
 type RouteRegistrar interface {
 	RegisterRoutes(mux *http.ServeMux)
@@ -75,9 +80,13 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 	})
 
 	// 2. Module routes (Identity, Content, etc.)
+	var releaseLocator ReleaseLocator
 	for _, reg := range registrars {
 		if reg != nil {
 			reg.RegisterRoutes(mux)
+			if rl, ok := reg.(ReleaseLocator); ok {
+				releaseLocator = rl
+			}
 		}
 	}
 
@@ -93,7 +102,13 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 
 	// 5. Public static serving (SSG generated HTML, assets, sitemap.xml, robots.txt)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		servePublicStatic(w, r, cfg.PublicStaticDir)
+		rootDir := cfg.PublicStaticDir
+		if releaseLocator != nil {
+			if activeDir, err := releaseLocator.GetActiveReleaseDir(); err == nil && activeDir != "" {
+				rootDir = activeDir
+			}
+		}
+		servePublicStatic(w, r, rootDir)
 	})
 
 	// Standard middleware wrapping order:
