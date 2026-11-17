@@ -1,0 +1,401 @@
+openapi: 3.1.0
+info:
+  title: PidieKab API
+  version: 1.0.0
+  description: >
+    Baseline API contract for PidieKab public search and Admin CMS.
+    Public content pages are primarily delivered as SSG files by the Go server.
+servers:
+  - url: /api/v1
+tags:
+  - name: Public Search
+  - name: Admin Auth
+  - name: Admin Content
+  - name: Admin Categories
+  - name: Admin Media
+paths:
+  /public/{locale}/search:
+    get:
+      tags: [Public Search]
+      summary: Search published content in the requested locale
+      parameters:
+        - $ref: '#/components/parameters/Locale'
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 120 }
+        - name: category
+          in: query
+          required: false
+          schema: { type: string }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+  /admin/auth/login:
+    post:
+      tags: [Admin Auth]
+      summary: Authenticate an administrator and establish a secure session cookie
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 1 }
+      responses:
+        '204':
+          description: Authenticated; session cookie is set
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+        '401':
+          $ref: '#/components/responses/Problem'
+        '429':
+          $ref: '#/components/responses/Problem'
+  /admin/auth/logout:
+    post:
+      tags: [Admin Auth]
+      responses:
+        '204': { description: Session revoked }
+        '401':
+          $ref: '#/components/responses/Problem'
+  /admin/auth/me:
+    get:
+      tags: [Admin Auth]
+      responses:
+        '200':
+          description: Current administrator
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMeResponse'
+        '401':
+          $ref: '#/components/responses/Problem'
+  /admin/contents:
+    get:
+      tags: [Admin Content]
+      summary: List content records
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: category_id
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [draft, published, archived] }
+        - name: locale
+          in: query
+          schema: { type: string, enum: [id, en] }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+      responses:
+        '200':
+          description: Content list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentListResponse'
+        '401':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags: [Admin Content]
+      summary: Create content identity and shared fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContentCreate'
+      responses:
+        '201':
+          description: Content created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContentResponse'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/contents/{content_id}/translations/{locale}:
+    parameters:
+      - $ref: '#/components/parameters/ContentId'
+      - $ref: '#/components/parameters/Locale'
+    get:
+      tags: [Admin Content]
+      responses:
+        '200':
+          description: Translation detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationResponse'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+    put:
+      tags: [Admin Content]
+      summary: Create or update one locale translation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TranslationWrite'
+      responses:
+        '200':
+          description: Translation saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationResponse'
+        '401':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/contents/{content_id}/translations/{locale}/publish:
+    parameters:
+      - $ref: '#/components/parameters/ContentId'
+      - $ref: '#/components/parameters/Locale'
+    post:
+      tags: [Admin Content]
+      summary: Publish a locale after domain validation and enqueue SSG
+      responses:
+        '202':
+          description: Publication accepted and generation job queued
+        '401':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/contents/{content_id}/translations/{locale}/archive:
+    parameters:
+      - $ref: '#/components/parameters/ContentId'
+      - $ref: '#/components/parameters/Locale'
+    post:
+      tags: [Admin Content]
+      summary: Archive one locale and enqueue SSG
+      responses:
+        '202': { description: Archive accepted and generation job queued }
+        '401':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+  /admin/categories:
+    get:
+      tags: [Admin Categories]
+      responses:
+        '200': { description: Category list }
+        '401':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags: [Admin Categories]
+      responses:
+        '201': { description: Category created }
+        '401':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+  /admin/media:
+    get:
+      tags: [Admin Media]
+      responses:
+        '200': { description: Media library list }
+        '401':
+          $ref: '#/components/responses/Problem'
+    post:
+      tags: [Admin Media]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                alt_id: { type: string }
+                alt_en: { type: string }
+                source: { type: string }
+                license: { type: string }
+                attribution: { type: string }
+      responses:
+        '201': { description: Media uploaded }
+        '401':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    AdminSession:
+      type: apiKey
+      in: cookie
+      name: pidiekab_admin_session
+  parameters:
+    Locale:
+      name: locale
+      in: path
+      required: true
+      schema: { type: string, enum: [id, en] }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 50, default: 12 }
+    ContentId:
+      name: content_id
+      in: path
+      required: true
+      schema: { type: string, pattern: '^[0-9]+$' }
+  responses:
+    Problem:
+      description: Problem details response
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      required: [title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string }
+        detail: { type: string }
+        request_id: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
+    SearchResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [id, title, category, url]
+            properties:
+              id: { type: string }
+              title: { type: string }
+              category:
+                type: object
+                required: [slug, name]
+                properties:
+                  slug: { type: string }
+                  name: { type: string }
+              location:
+                type: [object, 'null']
+                properties:
+                  district: { type: [string, 'null'] }
+                  village: { type: [string, 'null'] }
+              url: { type: string }
+        meta:
+          type: object
+          required: [locale, query, page, per_page, total_items, total_pages]
+          properties:
+            locale: { type: string, enum: [id, en] }
+            query: { type: string }
+            category: { type: [string, 'null'] }
+            page: { type: integer }
+            per_page: { type: integer }
+            total_items: { type: integer }
+            total_pages: { type: integer }
+    AdminMeResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            email: { type: string }
+            name: { type: string }
+    ContentCreate:
+      type: object
+      required: [category_id]
+      properties:
+        category_id: { type: string }
+        district_id: { type: [string, 'null'] }
+        village_id: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        latitude: { type: [number, 'null'], minimum: -90, maximum: 90 }
+        longitude: { type: [number, 'null'], minimum: -180, maximum: 180 }
+        location_accuracy: { type: [string, 'null'], enum: [accurate, approximate, null] }
+        main_media_id: { type: [string, 'null'] }
+    ContentResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id: { type: string }
+            category_id: { type: string }
+    ContentListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              category_id: { type: string }
+              translations:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    title: { type: [string, 'null'] }
+                    status: { type: string, enum: [draft, published, archived] }
+        meta:
+          type: object
+    TranslationWrite:
+      type: object
+      required: [title, slug, body]
+      properties:
+        title: { type: string, minLength: 1 }
+        slug: { type: string, minLength: 1 }
+        summary: { type: [string, 'null'] }
+        body:
+          type: object
+          description: Sanitized structured rich-text document; arbitrary executable HTML is not accepted.
+        seo_title: { type: [string, 'null'] }
+        seo_description: { type: [string, 'null'] }
+    TranslationResponse:
+      type: object
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/TranslationWrite'
+            - type: object
+              properties:
+                status: { type: string, enum: [draft, published, archived] }
+security:
+  - AdminSession: []

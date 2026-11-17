@@ -1,0 +1,152 @@
+name: CI Quality Gate
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Go 1.24)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: backend/go.sum
+
+      - name: Verify Formatting (gofmt)
+        run: |
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "The following Go files are not formatted:"
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: Run Go Vet
+        run: go vet ./...
+
+      - name: Run Unit Tests
+        run: go test -v -race ./...
+
+      - name: Build Go Binary
+        run: go build -v -o ../bin/pidiekab ./cmd/pidiekab
+
+  frontend-public:
+    name: Frontend Public Site (Vue 3 SSG)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/public-site
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/public-site/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: TypeScript Typecheck
+        run: npm run typecheck
+
+      - name: Lint Check
+        run: npm run lint
+
+      - name: Build SSG Website
+        run: npm run build
+
+      - name: Run SSG Acceptance Test Suite
+        run: node scripts/test-ssg-poc.mjs
+
+  frontend-admin:
+    name: Frontend Admin CMS (Vue 3 SPA)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/admin-cms
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/admin-cms/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: TypeScript Typecheck
+        run: npm run typecheck
+
+      - name: Lint Check
+        run: npm run lint
+
+      - name: Build Admin SPA
+        run: npm run build
+
+  database-migration:
+    name: PostgreSQL Migration Validation
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: admin
+          POSTGRES_DB: pidiekab_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install Goose CLI
+        run: go install github.com/pressly/goose/v3/cmd/goose@v3.24.1
+
+      - name: Execute Goose Up
+        run: |
+          goose -dir migrations postgres "postgres://postgres:admin@localhost:5432/pidiekab_ci?sslmode=disable" up
+
+      - name: Verify Goose Status
+        run: |
+          goose -dir migrations postgres "postgres://postgres:admin@localhost:5432/pidiekab_ci?sslmode=disable" status
+
+      - name: Execute Goose Down (Rollback Validation)
+        run: |
+          goose -dir migrations postgres "postgres://postgres:admin@localhost:5432/pidiekab_ci?sslmode=disable" down
+
+      - name: Re-apply Goose Up (Idempotency Validation)
+        run: |
+          goose -dir migrations postgres "postgres://postgres:admin@localhost:5432/pidiekab_ci?sslmode=disable" up

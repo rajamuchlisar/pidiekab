@@ -1,0 +1,48 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Go build outputs
+/bin/
+/dist/
+/coverage.out
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+# Node.js and Frontend build outputs
+node_modules/
+**/node_modules/
+**/dist/
+**/.vite/
+package-lock.json.bak
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Database & local media
+*.dump
+*.sql.gz
+/uploads/
+/media/
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
