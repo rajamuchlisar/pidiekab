@@ -48,6 +48,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/publish", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handlePublishLocale))))
 	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/archive", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleArchiveLocale))))
 
+	// Preview
+	mux.Handle("GET /api/v1/admin/preview/contents/{content_id}", authMiddleware(http.HandlerFunc(h.handlePreviewContent)))
+
 	// Sources
 	mux.Handle("GET /api/v1/admin/contents/{content_id}/sources", authMiddleware(http.HandlerFunc(h.handleListSources)))
 	mux.Handle("POST /api/v1/admin/contents/{content_id}/sources", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleAddSource))))
@@ -213,6 +216,59 @@ func (h *Handler) handleGetContent(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"data": detail,
+	})
+}
+
+func (h *Handler) handlePreviewContent(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("content_id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeProblem(w, r, http.StatusBadRequest, "BAD_REQUEST", "Invalid content ID.")
+		return
+	}
+
+	locale := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("locale")))
+	if locale == "" {
+		locale = domain.LocaleID
+	}
+	if locale != domain.LocaleID && locale != domain.LocaleEN {
+		writeProblem(w, r, http.StatusBadRequest, "BAD_REQUEST", "Invalid locale; must be 'id' or 'en'.")
+		return
+	}
+
+	detail, err := h.service.GetContent(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, domain.ErrContentNotFound) {
+			writeProblem(w, r, http.StatusNotFound, "NOT_FOUND", "Content not found.")
+			return
+		}
+		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve content.")
+		return
+	}
+
+	trans := detail.Translations[locale]
+
+	// Strict preview response headers to prevent accidental caching or search engine indexing
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": map[string]any{
+			"content_id":  detail.ID,
+			"locale":      locale,
+			"translation": trans,
+			"shared": map[string]any{
+				"category_id":       detail.CategoryID,
+				"village_id":        detail.VillageID,
+				"address":           detail.Address,
+				"latitude":          detail.Latitude,
+				"longitude":         detail.Longitude,
+				"location_accuracy": detail.LocationAccuracy,
+				"main_media_id":     detail.MainMediaID,
+			},
+			"sources":    detail.Sources,
+			"is_preview": true,
+		},
 	})
 }
 

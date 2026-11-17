@@ -11,6 +11,7 @@ var (
 	ErrInactiveAdmin             = errors.New("admin account is inactive")
 	ErrInvalidCredentials        = errors.New("invalid email or password")
 	ErrCannotDeactivateLastAdmin = errors.New("cannot deactivate the last active administrator")
+	ErrSelfDeactivation          = errors.New("cannot deactivate own administrator account")
 	ErrEmailAlreadyExists        = errors.New("email address is already in use")
 	ErrSessionNotFound           = errors.New("session not found")
 	ErrSessionExpired            = errors.New("session has expired")

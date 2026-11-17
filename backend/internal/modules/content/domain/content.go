@@ -87,6 +87,9 @@ type Content struct {
 type TranslationStatus string
 
 const (
+	LocaleID = "id"
+	LocaleEN = "en"
+
 	StatusDraft     TranslationStatus = "draft"
 	StatusPublished TranslationStatus = "published"
 	StatusArchived  TranslationStatus = "archived"

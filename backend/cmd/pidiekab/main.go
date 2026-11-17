@@ -25,6 +25,16 @@ import (
 	identityHttp "pidiekab/internal/modules/identity/transport/http"
 	locationPostgres "pidiekab/internal/modules/location/infrastructure/postgres"
 	locationHttp "pidiekab/internal/modules/location/transport/http"
+	mediaApp "pidiekab/internal/modules/media/application"
+	mediaPostgres "pidiekab/internal/modules/media/infrastructure/postgres"
+	mediaStorage "pidiekab/internal/modules/media/infrastructure/storage"
+	mediaHttp "pidiekab/internal/modules/media/transport/http"
+	settingsApp "pidiekab/internal/modules/settings/application"
+	settingsPostgres "pidiekab/internal/modules/settings/infrastructure/postgres"
+	settingsHttp "pidiekab/internal/modules/settings/transport/http"
+	pageApp "pidiekab/internal/modules/staticpage/application"
+	pagePostgres "pidiekab/internal/modules/staticpage/infrastructure/postgres"
+	pageHttp "pidiekab/internal/modules/staticpage/transport/http"
 	"pidiekab/internal/platform/authn"
 	"pidiekab/internal/platform/config"
 	"pidiekab/internal/platform/database"
@@ -110,6 +120,33 @@ func main() {
 		contentService := contentApp.NewContentService(contentRepo, translationRepo, sourceRepo, categoryService, auditRepo)
 		contentHandler := contentHttp.NewHandler(contentService, authService)
 		registrars = append(registrars, contentHandler)
+
+		// 6. Media Library & Secure Storage
+		mediaStoragePath := os.Getenv("PIDIEKAB_STORAGE_PATH")
+		if mediaStoragePath == "" {
+			mediaStoragePath = "./data/media"
+		}
+		localStorage, err := mediaStorage.NewLocalStorage(mediaStoragePath)
+		if err != nil {
+			logger.Error("failed to initialize media storage", "path", mediaStoragePath, "error", err)
+			os.Exit(1)
+		}
+		mediaRepo := mediaPostgres.NewMediaRepository(dbPool)
+		mediaService := mediaApp.NewMediaService(mediaRepo, localStorage, auditRepo)
+		mediaHandler := mediaHttp.NewMediaHandler(mediaService, authService)
+		registrars = append(registrars, mediaHandler)
+
+		// 7. Static Information Pages
+		pageRepo := pagePostgres.NewPageRepository(dbPool)
+		pageService := pageApp.NewPageService(pageRepo, auditRepo)
+		pageHandler := pageHttp.NewPageHandler(pageService, authService)
+		registrars = append(registrars, pageHandler)
+
+		// 8. Website Settings
+		settingsRepo := settingsPostgres.NewSettingsRepository(dbPool)
+		settingsService := settingsApp.NewSettingsService(settingsRepo, auditRepo)
+		settingsHandler := settingsHttp.NewSettingsHandler(settingsService, authService)
+		registrars = append(registrars, settingsHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}

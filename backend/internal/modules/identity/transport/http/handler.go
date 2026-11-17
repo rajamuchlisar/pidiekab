@@ -50,6 +50,11 @@ func (h *Handler) RegisterRoutesWithLimiter(mux *http.ServeMux, rateLimiter *mid
 	mux.Handle("POST /api/v1/admin/auth/logout", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleLogout))))
 	mux.Handle("GET /api/v1/admin/auth/me", authMiddleware(http.HandlerFunc(h.handleMe)))
 	mux.Handle("POST /api/v1/admin/auth/password/change", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleChangePassword))))
+
+	// Admin management routes
+	mux.Handle("GET /api/v1/admin/admins", authMiddleware(http.HandlerFunc(h.handleListAdmins)))
+	mux.Handle("POST /api/v1/admin/admins", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleCreateAdmin))))
+	mux.Handle("PUT /api/v1/admin/admins/{id}/status", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleToggleAdminStatus))))
 }
 
 type loginRequest struct {
@@ -191,6 +196,105 @@ func (h *Handler) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update password.", nil)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) handleListAdmins(w http.ResponseWriter, r *http.Request) {
+	admins, err := h.authService.ListAdmins(r.Context())
+	if err != nil {
+		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to list administrators.", nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": admins,
+	})
+}
+
+type createAdminRequest struct {
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	Password    string `json:"password"`
+}
+
+func (h *Handler) handleCreateAdmin(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok || admin == nil {
+		writeProblem(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Active admin session required.", nil)
+		return
+	}
+
+	var req createAdminRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "BAD_REQUEST", "Malformed JSON request body.", nil)
+		return
+	}
+
+	ip := extractClientIP(r)
+	created, err := h.authService.CreateAdmin(r.Context(), admin.ID, req.Email, req.DisplayName, req.Password, &ip)
+	if err != nil {
+		if errors.Is(err, domain.ErrEmailAlreadyExists) {
+			writeProblem(w, r, http.StatusConflict, "EMAIL_EXISTS", "Email address is already in use.", nil)
+			return
+		}
+		if errors.Is(err, domain.ErrInvalidPassword) || errors.Is(err, domain.ErrEmptyDisplayName) {
+			writeProblem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", err.Error(), nil)
+			return
+		}
+		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create administrator.", nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": created,
+	})
+}
+
+type toggleStatusRequest struct {
+	IsActive bool `json:"is_active"`
+}
+
+func (h *Handler) handleToggleAdminStatus(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok || admin == nil {
+		writeProblem(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Active admin session required.", nil)
+		return
+	}
+
+	targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || targetID <= 0 {
+		writeProblem(w, r, http.StatusBadRequest, "INVALID_ID", "Invalid administrator ID.", nil)
+		return
+	}
+
+	var req toggleStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "BAD_REQUEST", "Malformed JSON request body.", nil)
+		return
+	}
+
+	ip := extractClientIP(r)
+	err = h.authService.ToggleAdminStatus(r.Context(), admin.ID, targetID, req.IsActive, &ip)
+	if err != nil {
+		if errors.Is(err, domain.ErrSelfDeactivation) {
+			writeProblem(w, r, http.StatusBadRequest, "SELF_DEACTIVATION_FORBIDDEN", "You cannot deactivate your own account.", nil)
+			return
+		}
+		if errors.Is(err, domain.ErrCannotDeactivateLastAdmin) {
+			writeProblem(w, r, http.StatusConflict, "LAST_ADMIN_PROTECTED", "Cannot deactivate the last active administrator.", nil)
+			return
+		}
+		if errors.Is(err, domain.ErrAdminNotFound) {
+			writeProblem(w, r, http.StatusNotFound, "NOT_FOUND", "Administrator not found.", nil)
+			return
+		}
+		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update administrator status.", nil)
 		return
 	}
 

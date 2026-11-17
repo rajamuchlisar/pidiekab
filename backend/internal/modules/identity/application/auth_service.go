@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	auditDomain "pidiekab/internal/modules/audit/domain"
@@ -259,6 +260,84 @@ func (s *AuthService) BootstrapAdmin(ctx context.Context, email, displayName, pa
 
 	s.recordAudit(ctx, &admin.ID, "admin.bootstrap", "admin", &admin.ID, nil, nil)
 	return admin, nil
+}
+
+// ListAdmins returns all administrators.
+func (s *AuthService) ListAdmins(ctx context.Context) ([]*domain.Admin, error) {
+	return s.admins.List(ctx)
+}
+
+// CreateAdmin creates a new administrator by an existing active administrator.
+func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, displayName, password string, ipAddress *string) (*domain.Admin, error) {
+	normalizedEmail := domain.NormalizeEmail(email)
+	if normalizedEmail == "" {
+		return nil, errors.New("email cannot be empty")
+	}
+	if strings.TrimSpace(displayName) == "" {
+		return nil, domain.ErrEmptyDisplayName
+	}
+	if len(password) < 8 {
+		return nil, domain.ErrInvalidPassword
+	}
+
+	hash, err := authn.HashPassword(password, s.argonParams)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	admin := &domain.Admin{
+		Email:        normalizedEmail,
+		PasswordHash: hash,
+		DisplayName:  strings.TrimSpace(displayName),
+		IsActive:     true,
+	}
+
+	if err := s.admins.Create(ctx, admin); err != nil {
+		return nil, err
+	}
+
+	s.recordAudit(ctx, &creatorID, "admin.create", "admin", &admin.ID, map[string]any{
+		"email": admin.Email,
+	}, ipAddress)
+
+	return admin, nil
+}
+
+// ToggleAdminStatus activates or deactivates an administrator with self-lockout and last-active protections.
+func (s *AuthService) ToggleAdminStatus(ctx context.Context, currentAdminID, targetAdminID int64, isActive bool, ipAddress *string) error {
+	if !isActive {
+		if currentAdminID == targetAdminID {
+			return domain.ErrSelfDeactivation
+		}
+
+		activeCount, err := s.admins.CountActive(ctx)
+		if err != nil {
+			return err
+		}
+		if activeCount <= 1 {
+			return domain.ErrCannotDeactivateLastAdmin
+		}
+	}
+
+	if err := s.admins.SetIsActive(ctx, targetAdminID, isActive); err != nil {
+		return err
+	}
+
+	// If deactivating, immediately revoke all active sessions of target admin
+	if !isActive {
+		now := time.Now().UTC()
+		_ = s.sessions.RevokeAllForAdmin(ctx, targetAdminID, now)
+	}
+
+	action := "admin.activate"
+	if !isActive {
+		action = "admin.deactivate"
+	}
+	s.recordAudit(ctx, &currentAdminID, action, "admin", &targetAdminID, map[string]any{
+		"is_active": isActive,
+	}, ipAddress)
+
+	return nil
 }
 
 func (s *AuthService) recordAudit(ctx context.Context, adminID *int64, action, entityType string, entityID *int64, meta map[string]any, ip *string) {
