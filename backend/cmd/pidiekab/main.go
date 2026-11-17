@@ -20,6 +20,9 @@ import (
 	contentApp "pidiekab/internal/modules/content/application"
 	contentPostgres "pidiekab/internal/modules/content/infrastructure/postgres"
 	contentHttp "pidiekab/internal/modules/content/transport/http"
+	curationApp "pidiekab/internal/modules/curation/application"
+	curationPostgres "pidiekab/internal/modules/curation/infrastructure/postgres"
+	curationHttp "pidiekab/internal/modules/curation/transport/http"
 	identityApp "pidiekab/internal/modules/identity/application"
 	identityPostgres "pidiekab/internal/modules/identity/infrastructure/postgres"
 	identityHttp "pidiekab/internal/modules/identity/transport/http"
@@ -181,6 +184,12 @@ func main() {
 		searchService := searchApp.NewSearchService(searchRepo)
 		searchHandler := searchHttp.NewSearchHandler(searchService)
 		registrars = append(registrars, searchHandler)
+
+		// 11. Editorial Curation
+		curationRepo := curationPostgres.NewCurationRepository(dbPool)
+		curationService := curationApp.NewCurationService(curationRepo, auditRepo, jobRepo)
+		curationHandler := curationHttp.NewCurationHandler(curationService, authService)
+		registrars = append(registrars, curationHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}
