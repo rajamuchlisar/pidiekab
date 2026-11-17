@@ -139,3 +139,4 @@ func TestSSGJobLifecycleAndGeneration(t *testing.T) {
 	checkFile("robots.txt", "Sitemap: https://pidiekab.go.id/sitemap.xml")
 	checkFile("index.html", "content=\"0;url=/id/\"")
 }
+

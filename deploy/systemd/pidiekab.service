@@ -1,27 +1,31 @@
 [Unit]
 Description=PidieKab Regional Promotion & Discovery Platform
-After=network.target postgresql.service
-Wants=postgresql.service
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
 
 [Service]
 Type=simple
 User=pidiekab
 Group=pidiekab
-WorkingDirectory=/opt/pidiekab
+WorkingDirectory=/opt/pidiekab/current
 EnvironmentFile=/etc/pidiekab/pidiekab.env
-ExecStart=/opt/pidiekab/bin/pidiekab
+ExecStart=/opt/pidiekab/current/bin/pidiekab
 Restart=on-failure
 RestartSec=5s
+TimeoutStartSec=30s
+TimeoutStopSec=90s
+KillSignal=SIGTERM
 
-# Security sandboxing
-LimitNOFILE=65535
+# Security sandboxing & capability inheritance
+LimitNOFILE=65536
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/pidiekab/uploads /opt/pidiekab/releases
+ReadOnlyPaths=/etc/pidiekab
+ReadWritePaths=/var/lib/pidiekab /opt/pidiekab/releases
 
 [Install]
 WantedBy=multi-user.target

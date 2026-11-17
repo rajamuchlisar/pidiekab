@@ -86,3 +86,4 @@ func TestCurationLifecycle(t *testing.T) {
 		t.Errorf("response does not contain locale id: %s", rec.Body.String())
 	}
 }
+

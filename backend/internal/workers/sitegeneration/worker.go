@@ -120,3 +120,4 @@ func (w *Worker) ProcessSingleJob(ctx context.Context) (bool, error) {
 func (w *Worker) processNextJob(ctx context.Context) {
 	_, _ = w.ProcessSingleJob(ctx)
 }
+

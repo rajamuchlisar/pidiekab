@@ -1,37 +1,103 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ==============================================================================
 # PidieKab Automated Release Deployment Script (Ubuntu 24.04 Target)
-# Follows atomic release switching and non-root execution principles.
+# Architecture: Single Go Binary, Vue 3 SSG & SPA, PostgreSQL, systemd
+# ==============================================================================
 
-APP_DIR="/opt/pidiekab"
-RELEASE_TAG=$(date +%Y%m%d%H%M%S)
+APP_DIR="${PIDIEKAB_APP_DIR:-/opt/pidiekab}"
+RELEASE_TAG=$(date +%Y%m%d_%H%M%S)
 NEW_RELEASE_DIR="${APP_DIR}/releases/${RELEASE_TAG}"
+CURRENT_LINK="${APP_DIR}/current"
+SERVICE_NAME="pidiekab.service"
+HEALTH_URL="http://127.0.0.1:8080/health/ready"
 
-echo "==> Deploying PidieKab release: ${RELEASE_TAG}"
+echo "=================================================="
+echo "Starting PidieKab Deployment: ${RELEASE_TAG}"
+echo "Target Release Directory: ${NEW_RELEASE_DIR}"
+echo "=================================================="
 
-# 1. Prepare release directory
+# 1. Validate environment & dependencies
+if [ -z "${PIDIEKAB_DATABASE_URL:-}" ]; then
+    echo "ERROR: PIDIEKAB_DATABASE_URL is not set." >&2
+    exit 1
+fi
+
+if [ ! -f "bin/pidiekab" ]; then
+    echo "ERROR: Compiled binary bin/pidiekab not found. Build artifact first." >&2
+    exit 1
+fi
+
+# 2. Record previous release for rollback capability
+PREV_RELEASE=""
+if [ -L "${CURRENT_LINK}" ]; then
+    PREV_RELEASE=$(readlink -f "${CURRENT_LINK}")
+    echo "--> Current active release identified: ${PREV_RELEASE}"
+fi
+
+# 3. Prepare release directory layout
+echo "--> Creating release directory structure..."
+mkdir -p "${NEW_RELEASE_DIR}/bin"
 mkdir -p "${NEW_RELEASE_DIR}/public"
 mkdir -p "${NEW_RELEASE_DIR}/cms"
-mkdir -p "${NEW_RELEASE_DIR}/bin"
 
-# 2. Copy artifacts
-echo "==> Copying build artifacts..."
-cp -r frontend/public-site/dist/* "${NEW_RELEASE_DIR}/public/"
-cp -r frontend/admin-cms/dist/* "${NEW_RELEASE_DIR}/cms/"
-cp bin/pidiekab "${NEW_RELEASE_DIR}/bin/"
+# 4. Copy build artifacts
+echo "--> Deploying binary and frontend assets..."
+cp bin/pidiekab "${NEW_RELEASE_DIR}/bin/pidiekab"
 chmod +x "${NEW_RELEASE_DIR}/bin/pidiekab"
 
-# 3. Apply database migrations
-echo "==> Applying database migrations with Goose..."
-goose -dir migrations postgres "${PIDIEKAB_DATABASE_URL}" up
+if [ -d "frontend/public-site/dist" ]; then
+    cp -r frontend/public-site/dist/* "${NEW_RELEASE_DIR}/public/"
+fi
 
-# 4. Atomic symlink switch
-echo "==> Switching active release symlink..."
-ln -sfn "${NEW_RELEASE_DIR}" "${APP_DIR}/current"
+if [ -d "frontend/admin-cms/dist" ]; then
+    cp -r frontend/admin-cms/dist/* "${NEW_RELEASE_DIR}/cms/"
+fi
 
-# 5. Restart systemd service
-echo "==> Restarting pidiekab.service..."
-systemctl restart pidiekab.service
+# Set proper ownership
+chown -R pidiekab:pidiekab "${NEW_RELEASE_DIR}"
 
-echo "==> Deployment completed successfully: ${RELEASE_TAG}"
+# 5. Apply database migrations
+echo "--> Applying database migrations with Goose..."
+goose -dir 01-technical/database/migrations postgres "${PIDIEKAB_DATABASE_URL}" up
+
+# 6. Atomic symlink switch
+echo "--> Switching active release symlink to ${NEW_RELEASE_DIR}..."
+ln -sfn "${NEW_RELEASE_DIR}" "${CURRENT_LINK}"
+
+# 7. Restart systemd service
+echo "--> Restarting ${SERVICE_NAME}..."
+systemctl restart "${SERVICE_NAME}"
+
+# 8. Post-deployment Health & Readiness verification
+echo "--> Waiting for service readiness (${HEALTH_URL})..."
+READY=0
+for i in {1..15}; do
+    if curl -s -f "${HEALTH_URL}" > /dev/null 2>&1; then
+        READY=1
+        break
+    fi
+    sleep 2
+done
+
+if [ "${READY}" -ne 1 ]; then
+    echo "ERROR: Readiness probe failed after restart! Initiating automated rollback..." >&2
+    if [ -n "${PREV_RELEASE}" ] && [ -d "${PREV_RELEASE}" ]; then
+        ln -sfn "${PREV_RELEASE}" "${CURRENT_LINK}"
+        systemctl restart "${SERVICE_NAME}"
+        echo "--> Rollback to ${PREV_RELEASE} completed."
+    fi
+    exit 1
+fi
+
+echo "--> Service is healthy and ready."
+
+# 9. Prune old releases (Keep last 5 releases)
+echo "--> Pruning old releases in ${APP_DIR}/releases..."
+cd "${APP_DIR}/releases"
+ls -dt */ | tail -n +6 | xargs -r rm -rf
+
+echo "=================================================="
+echo "Deployment of ${RELEASE_TAG} SUCCEEDED at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "=================================================="

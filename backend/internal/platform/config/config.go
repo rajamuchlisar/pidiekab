@@ -32,6 +32,9 @@ type Config struct {
 	SSGReleasesToKeep         int
 	SSGWorkerPollInterval     time.Duration
 	SSGJobMaxAttempts         int
+	TLSCertFile               string
+	TLSKeyFile                string
+	HTTPRedirectAddr          string
 }
 
 // Load reads configuration from environment variables, applies validated defaults,
@@ -161,6 +164,17 @@ func Load() (Config, error) {
 		ssgJobMaxAttempts = 3
 	}
 
+	tlsCertFile := env("PIDIEKAB_TLS_CERT_FILE", "")
+	tlsKeyFile := env("PIDIEKAB_TLS_KEY_FILE", "")
+	if (tlsCertFile != "" && tlsKeyFile == "") || (tlsCertFile == "" && tlsKeyFile != "") {
+		return Config{}, fmt.Errorf("both PIDIEKAB_TLS_CERT_FILE and PIDIEKAB_TLS_KEY_FILE must be set together")
+	}
+
+	httpRedirectAddr := env("PIDIEKAB_HTTP_REDIRECT_ADDR", "")
+	if tlsCertFile != "" && httpRedirectAddr == "" {
+		httpRedirectAddr = ":80"
+	}
+
 	return Config{
 		Environment:               envName,
 		Address:                   addr,
@@ -183,6 +197,9 @@ func Load() (Config, error) {
 		SSGReleasesToKeep:         ssgReleasesToKeep,
 		SSGWorkerPollInterval:     ssgWorkerPollInterval,
 		SSGJobMaxAttempts:         ssgJobMaxAttempts,
+		TLSCertFile:               tlsCertFile,
+		TLSKeyFile:                tlsKeyFile,
+		HTTPRedirectAddr:          httpRedirectAddr,
 	}, nil
 }
 

@@ -231,3 +231,78 @@ func TestCMSStaticServingSPA(t *testing.T) {
 		t.Errorf("expected no-cache for SPA, got %q", cache)
 	}
 }
+
+func TestSecurityHeadersHardening(t *testing.T) {
+	handler := newTestServerWithStaticAndDB("", "", nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	headers := rec.Header()
+	if csp := headers.Get("Content-Security-Policy"); csp == "" {
+		t.Error("expected Content-Security-Policy header, got empty")
+	}
+	if perm := headers.Get("Permissions-Policy"); perm == "" {
+		t.Error("expected Permissions-Policy header, got empty")
+	}
+	if coop := headers.Get("Cross-Origin-Opener-Policy"); coop != "same-origin" {
+		t.Errorf("expected Cross-Origin-Opener-Policy 'same-origin', got %q", coop)
+	}
+	if corp := headers.Get("Cross-Origin-Resource-Policy"); corp != "same-origin" {
+		t.Errorf("expected Cross-Origin-Resource-Policy 'same-origin', got %q", corp)
+	}
+
+	// Test HTTPS request gets HSTS header
+	reqHTTPS := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	reqHTTPS.Header.Set("X-Forwarded-Proto", "https")
+	recHTTPS := httptest.NewRecorder()
+	handler.ServeHTTP(recHTTPS, reqHTTPS)
+	if hsts := recHTTPS.Header().Get("Strict-Transport-Security"); hsts == "" {
+		t.Error("expected Strict-Transport-Security header for HTTPS request, got empty")
+	}
+}
+
+func TestHTTPToHTTPSRedirectServer(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	redirectSrv := httpserver.NewHTTPToHTTPSRedirectServer(":80", logger)
+
+	req := httptest.NewRequest(http.MethodGet, "/id/wisata-destinasi?page=1", nil)
+	req.Host = "pidiekab.go.id:80"
+	rec := httptest.NewRecorder()
+	redirectSrv.Handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("expected 301 Moved Permanently, got %d", rec.Code)
+	}
+
+	location := rec.Header().Get("Location")
+	expected := "https://pidiekab.go.id/id/wisata-destinasi?page=1"
+	if location != expected {
+		t.Errorf("expected redirect location %q, got %q", expected, location)
+	}
+}
+
+func TestTLSConfiguration(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	cfg := config.Config{
+		Address:           ":443",
+		TLSCertFile:       "dummy_cert.pem",
+		TLSKeyFile:        "dummy_key.pem",
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
+
+	srv := httpserver.New(cfg, logger, nil)
+	if srv.TLSConfig == nil {
+		t.Fatal("expected TLSConfig to be configured, got nil")
+	}
+	if srv.TLSConfig.MinVersion < 0x0303 { // TLS 1.2
+		t.Errorf("expected min TLS version 1.2, got %x", srv.TLSConfig.MinVersion)
+	}
+	if len(srv.TLSConfig.CipherSuites) == 0 {
+		t.Error("expected explicit secure cipher suites, got empty")
+	}
+}

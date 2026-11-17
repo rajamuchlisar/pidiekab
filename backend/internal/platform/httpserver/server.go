@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -123,14 +124,56 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 }
 
 // New creates and configures an http.Server with explicit timeouts, database pinger, and middleware.
+// If TLS certificates are configured in cfg, modern TLS 1.2+ configuration is applied.
 func New(cfg config.Config, logger *slog.Logger, db DatabasePinger, registrars ...RouteRegistrar) *http.Server {
-	return &http.Server{
+	srv := &http.Server{
 		Addr:              cfg.Address,
 		Handler:           BuildHandler(cfg, logger, db, registrars...),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
 		IdleTimeout:       cfg.IdleTimeout,
+	}
+
+	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+		srv.TLSConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			CurvePreferences: []tls.CurveID{
+				tls.X25519,
+				tls.CurveP256,
+			},
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305,
+				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			},
+		}
+	}
+
+	return srv
+}
+
+// NewHTTPToHTTPSRedirectServer creates an HTTP server that unconditionally redirects all traffic to HTTPS.
+func NewHTTPToHTTPSRedirectServer(addr string, logger *slog.Logger) *http.Server {
+	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if colonIdx := strings.Index(host, ":"); colonIdx != -1 {
+			host = host[:colonIdx]
+		}
+		target := "https://" + host + r.URL.RequestURI()
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
+
+	return &http.Server{
+		Addr:              addr,
+		Handler:           redirectHandler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       30 * time.Second,
 	}
 }
 

@@ -196,15 +196,37 @@ func main() {
 
 	server := httpserver.New(cfg, logger, dbPool, registrars...)
 
-	errCh := make(chan error, 1)
+	var redirectServer *http.Server
+	errCh := make(chan error, 2)
+
 	go func() {
-		logger.Info("starting pidiekab server",
-			"addr", cfg.Address,
-			"environment", cfg.Environment,
-			"log_level", cfg.LogLevel.String(),
-		)
-		errCh <- server.ListenAndServe()
+		if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+			logger.Info("starting pidiekab server with native TLS (HTTPS)",
+				"addr", cfg.Address,
+				"cert_file", cfg.TLSCertFile,
+				"environment", cfg.Environment,
+				"log_level", cfg.LogLevel.String(),
+			)
+			errCh <- server.ListenAndServeTLS(cfg.TLSCertFile, cfg.TLSKeyFile)
+		} else {
+			logger.Info("starting pidiekab server (HTTP)",
+				"addr", cfg.Address,
+				"environment", cfg.Environment,
+				"log_level", cfg.LogLevel.String(),
+			)
+			errCh <- server.ListenAndServe()
+		}
 	}()
+
+	if cfg.TLSCertFile != "" && cfg.HTTPRedirectAddr != "" {
+		redirectServer = httpserver.NewHTTPToHTTPSRedirectServer(cfg.HTTPRedirectAddr, logger)
+		go func() {
+			logger.Info("starting HTTP-to-HTTPS redirect server", "addr", cfg.HTTPRedirectAddr)
+			if err := redirectServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logger.Warn("HTTP redirect server stopped", "error", err)
+			}
+		}()
+	}
 
 	select {
 	case err := <-errCh:
@@ -217,6 +239,10 @@ func main() {
 
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 		defer cancel()
+
+		if redirectServer != nil {
+			_ = redirectServer.Shutdown(shutdownCtx)
+		}
 
 		if err := server.Shutdown(shutdownCtx); err != nil {
 			logger.Error("graceful shutdown failed", "error", err)

@@ -66,3 +66,4 @@ func TestLocationRepositoryIntegration(t *testing.T) {
 		t.Error("expected to find Kota Sigli district in seed data")
 	}
 }
+

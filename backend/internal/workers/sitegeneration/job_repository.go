@@ -152,3 +152,4 @@ func (r *JobRepository) MarkFailed(ctx context.Context, id int64, errDetail stri
 	_, err = r.pool.Exec(ctx, query, errDetail, intervalStr, id)
 	return err
 }
+
