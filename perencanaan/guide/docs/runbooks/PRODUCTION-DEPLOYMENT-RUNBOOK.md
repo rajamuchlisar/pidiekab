@@ -121,3 +121,4 @@ Jika versi rilis baru menimbulkan anomali di level aplikasi:
    ```bash
    curl -s http://127.0.0.1:8080/health/ready
    ```
+

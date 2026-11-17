@@ -63,3 +63,4 @@ Verifikasi log status Goose dan periksa readiness probe aplikasi:
 ```bash
 curl -s http://127.0.0.1:8080/health/ready
 ```
+

@@ -60,7 +60,7 @@ chown -R pidiekab:pidiekab "${NEW_RELEASE_DIR}"
 
 # 5. Apply database migrations
 echo "--> Applying database migrations with Goose..."
-goose -dir 01-technical/database/migrations postgres "${PIDIEKAB_DATABASE_URL}" up
+goose -dir migrations postgres "${PIDIEKAB_DATABASE_URL}" up
 
 # 6. Atomic symlink switch
 echo "--> Switching active release symlink to ${NEW_RELEASE_DIR}..."

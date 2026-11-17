@@ -21,27 +21,27 @@ PidieKab adalah platform digital independen (bukan website resmi pemerintah) yan
 
 ```text
 PidieKab/
-├── backend/                         # Backend Go application
+├── backend/                         # Backend Go application (Modular Monolith)
 │   ├── cmd/pidiekab/main.go         # Application composition root & entrypoint
-│   └── internal/
-│       └── platform/
-│           ├── config/              # Environment config loader & strict validation
-│           └── httpserver/          # HTTP server, routing & middleware
-│               └── middleware/      # RequestID, logging, security headers, recovery
-├── frontend/
-│   ├── public-site/                 # Public website (Vue 3 + TS + Vite + vite-ssg)
-│   └── admin-cms/                   # Admin CMS (Vue 3 + TS + Vite SPA + Pinia)
+│   └── internal/                    # Domain modules & platform infrastructure
+├── frontend/                        # Frontend applications
+│   ├── public-site/                 # Public website (Vue 3 + TS + Vite + SSG)
+│   └── admin-cms/                   # Admin CMS (Vue 3 + TS + Vite SPA)
 ├── migrations/                      # PostgreSQL DDL migrations (Goose format)
-├── deploy/
+├── deploy/                          # Deployment & operational assets
 │   ├── systemd/                     # systemd service unit configuration
-│   └── scripts/                     # Automated deployment script
-├── docs/
-│   └── reports/                     # Implementation & evaluation reports
-├── tasks/                           # Planning & execution tracking
+│   └── scripts/                     # Deployment, backup & restore scripts
+├── perencanaan/guide/               # Dokumentasi perencanaan, arsitektur & panduan (v79)
+│   ├── 00-discovery/                # Riset & product discovery
+│   ├── 01-technical/                # Dokumen arsitektur, API, database & security
+│   ├── 02-implementation/           # Implementation roadmap & backlog
+│   ├── 03-governance/               # ADR & tata kelola proyek
+│   ├── docs/                        # Reports & operational runbooks
+│   └── DOKUMENTASI-GUIDE.md         # Indeks master dokumentasi v79
 ├── .github/workflows/               # CI pipeline workflow
 ├── .env.example                     # Environment variables template
 ├── .gitignore                       # Git ignore definitions
-└── README.md                        # Project documentation
+└── README.md                        # Project overview & running instructions
 ```
 
 ---

@@ -70,3 +70,4 @@ find "${BACKUP_DIR}" -name "pidiekab_media_*.tar.gz*" -mtime "+${RETENTION_DAYS}
 echo "=================================================="
 echo "PidieKab Backup completed successfully at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 echo "=================================================="
+
