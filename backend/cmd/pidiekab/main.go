@@ -14,9 +14,17 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	auditPostgres "pidiekab/internal/modules/audit/infrastructure/postgres"
+	categoryApp "pidiekab/internal/modules/category/application"
+	categoryPostgres "pidiekab/internal/modules/category/infrastructure/postgres"
+	categoryHttp "pidiekab/internal/modules/category/transport/http"
+	contentApp "pidiekab/internal/modules/content/application"
+	contentPostgres "pidiekab/internal/modules/content/infrastructure/postgres"
+	contentHttp "pidiekab/internal/modules/content/transport/http"
 	identityApp "pidiekab/internal/modules/identity/application"
 	identityPostgres "pidiekab/internal/modules/identity/infrastructure/postgres"
 	identityHttp "pidiekab/internal/modules/identity/transport/http"
+	locationPostgres "pidiekab/internal/modules/location/infrastructure/postgres"
+	locationHttp "pidiekab/internal/modules/location/transport/http"
 	"pidiekab/internal/platform/authn"
 	"pidiekab/internal/platform/config"
 	"pidiekab/internal/platform/database"
@@ -62,11 +70,14 @@ func main() {
 		}
 		defer dbPool.Close()
 
-		// Wire Identity & Auth Module
+		isProd := cfg.Environment == "production"
+
+		// 1. Audit
 		auditRepo := auditPostgres.NewRepository(dbPool)
+
+		// 2. Identity & Auth
 		adminRepo := identityPostgres.NewAdminRepository(dbPool)
 		sessionRepo := identityPostgres.NewSessionRepository(dbPool)
-
 		authService := identityApp.NewAuthService(
 			adminRepo,
 			sessionRepo,
@@ -75,9 +86,30 @@ func main() {
 			12*time.Hour,
 			logger,
 		)
-
-		identityHandler := identityHttp.NewHandler(authService, cfg.Environment == "production")
+		identityHandler := identityHttp.NewHandler(authService, isProd)
 		registrars = append(registrars, identityHandler)
+
+		// 3. Location Master
+		locationRepo := locationPostgres.NewRepository(dbPool)
+		if err := locationRepo.SeedPidieBaselineIfEmpty(ctx); err != nil {
+			logger.Warn("location baseline seed skipped or failed", "error", err)
+		}
+		locationHandler := locationHttp.NewHandler(locationRepo, authService)
+		registrars = append(registrars, locationHandler)
+
+		// 4. Categories
+		categoryRepo := categoryPostgres.NewRepository(dbPool)
+		categoryService := categoryApp.NewService(categoryRepo, auditRepo)
+		categoryHandler := categoryHttp.NewHandler(categoryService, authService)
+		registrars = append(registrars, categoryHandler)
+
+		// 5. Contents, Translations & Sources
+		contentRepo := contentPostgres.NewContentRepository(dbPool)
+		translationRepo := contentPostgres.NewTranslationRepository(dbPool)
+		sourceRepo := contentPostgres.NewSourceRepository(dbPool)
+		contentService := contentApp.NewContentService(contentRepo, translationRepo, sourceRepo, categoryService, auditRepo)
+		contentHandler := contentHttp.NewHandler(contentService, authService)
+		registrars = append(registrars, contentHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}
