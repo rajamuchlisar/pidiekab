@@ -19,8 +19,13 @@ type DatabasePinger interface {
 	Ping(ctx context.Context) error
 }
 
+// RouteRegistrar allows domain modules to attach their HTTP routes onto the ServeMux.
+type RouteRegistrar interface {
+	RegisterRoutes(mux *http.ServeMux)
+}
+
 // BuildHandler builds the router, handlers, and attaches middleware.
-func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger) http.Handler {
+func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, registrars ...RouteRegistrar) http.Handler {
 	mux := http.NewServeMux()
 
 	// 1. Health endpoints
@@ -69,17 +74,24 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger) htt
 		})
 	})
 
-	// 2. Root redirect: / -> /id/
+	// 2. Module routes (Identity, Content, etc.)
+	for _, reg := range registrars {
+		if reg != nil {
+			reg.RegisterRoutes(mux)
+		}
+	}
+
+	// 3. Root redirect: / -> /id/
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/id/", http.StatusMovedPermanently)
 	})
 
-	// 3. Static serving for Admin CMS (/cms/ and /cms/*)
+	// 4. Static serving for Admin CMS (/cms/ and /cms/*)
 	mux.HandleFunc("/cms/", func(w http.ResponseWriter, r *http.Request) {
 		serveCMSStatic(w, r, cfg.CMSStaticDir)
 	})
 
-	// 4. Public static serving (SSG generated HTML, assets, sitemap.xml, robots.txt)
+	// 5. Public static serving (SSG generated HTML, assets, sitemap.xml, robots.txt)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		servePublicStatic(w, r, cfg.PublicStaticDir)
 	})
@@ -96,10 +108,10 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger) htt
 }
 
 // New creates and configures an http.Server with explicit timeouts, database pinger, and middleware.
-func New(cfg config.Config, logger *slog.Logger, db DatabasePinger) *http.Server {
+func New(cfg config.Config, logger *slog.Logger, db DatabasePinger, registrars ...RouteRegistrar) *http.Server {
 	return &http.Server{
 		Addr:              cfg.Address,
-		Handler:           BuildHandler(cfg, logger, db),
+		Handler:           BuildHandler(cfg, logger, db, registrars...),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,

@@ -29,7 +29,7 @@
 | ADR-014 | SQL eksplisit, tanpa ORM | LOCKED | `pgx/v5` dan `pgxpool` sebagai baseline |
 | ADR-015 | Migration memakai Goose | LOCKED | Terbukti kompatibel dengan DDL baseline via Goose v3.24 (Up, Down, Re-up idempotent) |
 | ADR-016 | Logging memakai `log/slog`; testing memakai `testing` dan `httptest` | LOCKED | Library tambahan harus memberi manfaat nyata |
-| ADR-017 | Password hashing Argon2id | PROPOSED | Memerlukan `golang.org/x/crypto`; bcrypt alternatif |
+| ADR-017 | Password hashing Argon2id | LOCKED | Terbukti dan diimplementasikan via `golang.org/x/crypto/argon2` dengan constant-time comparison |
 | ADR-018 | In-process SSG worker pada satu service | LOCKED | PostgreSQL job queue; tanpa broker eksternal |
 | ADR-019 | SSG build menggunakan temporary release dan atomic activation | LOCKED | Detail tool/generator masih OPEN |
 

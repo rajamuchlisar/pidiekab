@@ -3,13 +3,21 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	auditPostgres "pidiekab/internal/modules/audit/infrastructure/postgres"
+	identityApp "pidiekab/internal/modules/identity/application"
+	identityPostgres "pidiekab/internal/modules/identity/infrastructure/postgres"
+	identityHttp "pidiekab/internal/modules/identity/transport/http"
+	"pidiekab/internal/platform/authn"
 	"pidiekab/internal/platform/config"
 	"pidiekab/internal/platform/database"
 	"pidiekab/internal/platform/httpserver"
@@ -27,10 +35,18 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
+	// Check for CLI subcommands (e.g. `pidiekab admin create ...`)
+	if len(os.Args) > 1 && os.Args[1] == "admin" {
+		handleAdminCLI(cfg, logger)
+		return
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	var dbPool *pgxpool.Pool
+	var registrars []httpserver.RouteRegistrar
+
 	if cfg.DatabaseURL != "" {
 		dbPool, err = database.NewPool(ctx, database.Config{
 			URL:               cfg.DatabaseURL,
@@ -45,11 +61,28 @@ func main() {
 			os.Exit(1)
 		}
 		defer dbPool.Close()
+
+		// Wire Identity & Auth Module
+		auditRepo := auditPostgres.NewRepository(dbPool)
+		adminRepo := identityPostgres.NewAdminRepository(dbPool)
+		sessionRepo := identityPostgres.NewSessionRepository(dbPool)
+
+		authService := identityApp.NewAuthService(
+			adminRepo,
+			sessionRepo,
+			auditRepo,
+			authn.DefaultArgon2idParams(),
+			12*time.Hour,
+			logger,
+		)
+
+		identityHandler := identityHttp.NewHandler(authService, cfg.Environment == "production")
+		registrars = append(registrars, identityHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}
 
-	server := httpserver.New(cfg, logger, dbPool)
+	server := httpserver.New(cfg, logger, dbPool, registrars...)
 
 	errCh := make(chan error, 1)
 	go func() {
@@ -78,5 +111,69 @@ func main() {
 			os.Exit(1)
 		}
 		logger.Info("server shutdown completed successfully")
+	}
+}
+
+func handleAdminCLI(cfg config.Config, logger *slog.Logger) {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: pidiekab admin <subcommand> [flags]")
+		fmt.Println("Subcommands: create")
+		os.Exit(1)
+	}
+
+	switch os.Args[2] {
+	case "create", "bootstrap":
+		cmd := flag.NewFlagSet("admin create", flag.ExitOnError)
+		emailFlag := cmd.String("email", "", "Admin email address")
+		nameFlag := cmd.String("name", "", "Admin display name")
+		passwordFlag := cmd.String("password", "", "Admin password (minimum 8 characters)")
+
+		if err := cmd.Parse(os.Args[3:]); err != nil {
+			fmt.Println("Failed to parse flags:", err)
+			os.Exit(1)
+		}
+
+		if *emailFlag == "" || *nameFlag == "" || *passwordFlag == "" {
+			fmt.Println("Error: --email, --name, and --password are required.")
+			cmd.Usage()
+			os.Exit(1)
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		dbPool, err := database.NewPool(ctx, database.Config{
+			URL: cfg.DatabaseURL,
+		}, logger)
+		if err != nil {
+			logger.Error("database connection failed", "error", err)
+			os.Exit(1)
+		}
+		defer dbPool.Close()
+
+		adminRepo := identityPostgres.NewAdminRepository(dbPool)
+		sessionRepo := identityPostgres.NewSessionRepository(dbPool)
+		auditRepo := auditPostgres.NewRepository(dbPool)
+
+		authService := identityApp.NewAuthService(
+			adminRepo,
+			sessionRepo,
+			auditRepo,
+			authn.DefaultArgon2idParams(),
+			12*time.Hour,
+			logger,
+		)
+
+		admin, err := authService.BootstrapAdmin(ctx, *emailFlag, *nameFlag, *passwordFlag)
+		if err != nil {
+			logger.Error("failed to create admin", "error", err)
+			os.Exit(1)
+		}
+
+		logger.Info("administrator created successfully", "id", admin.ID, "email", admin.Email, "name", admin.DisplayName)
+		fmt.Printf("Administrator %q (ID %d) created successfully.\n", admin.Email, admin.ID)
+	default:
+		fmt.Printf("Unknown admin subcommand %q. Available: create\n", os.Args[2])
+		os.Exit(1)
 	}
 }
