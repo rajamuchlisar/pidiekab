@@ -84,7 +84,21 @@ Untuk membuat akun Administrator awal:
 ./bin/pidiekab admin create --email admin@pidiekab.id --name "Super Administrator" --password "Admin12345!"
 ```
 
-### 4. Menjalankan & Membangun Frontend Public Site (SSG)
+### 4. Inisialisasi Data Baseline & Konten Autentik (Seed CLI)
+Untuk mengisi database dengan data master wilayah (Kabupaten Pidie + 23 kecamatan), kategori dwibahasa, pengaturan, halaman statis, artikel autentik terverifikasi, dan memicu kompilasi statis (SSG):
+```bash
+./bin/pidiekab seed
+```
+Akun default yang terbentuk:
+- **Email:** `admin@pidiekab.go.id`
+- **Password:** `AdminPidie123!`
+
+Untuk membuat akun administrator tambahan:
+```bash
+./bin/pidiekab admin create --email nama@pidiekab.go.id --name "Nama Admin" --password "PasswordKuat123!"
+```
+
+### 5. Menjalankan & Membangun Frontend Public Site (SSG)
 ```bash
 cd frontend/public-site
 npm ci
@@ -92,11 +106,11 @@ npm run typecheck
 npm run lint
 npm run build
 # Menjalankan acceptance test SSG POC
-node scripts/test-ssg-poc.mjs
+npm run test:ssg
 ```
-Hasil build berupa HTML statis mandiri siap saji tersimpan di `frontend/public-site/dist/`.
+Hasil build berupa HTML statis mandiri siap saji tersimpan di `frontend/public-site/dist/` lengkap dengan `sitemap.xml`.
 
-### 5. Menjalankan & Membangun Frontend Admin CMS (SPA)
+### 6. Menjalankan & Membangun Frontend Admin CMS (SPA)
 ```bash
 cd frontend/admin-cms
 npm ci
@@ -106,7 +120,7 @@ npm run build
 ```
 Hasil build SPA tersimpan di `frontend/admin-cms/dist/`.
 
-### 6. Menjalankan Migrasi Database (PostgreSQL & Goose)
+### 7. Menjalankan Migrasi Database (PostgreSQL & Goose)
 Pastikan PostgreSQL berjalan dan database target (misalnya `pidiekab_dev`) telah dibuat:
 ```bash
 # Migrasi ke versi terbaru (Up)
@@ -118,6 +132,64 @@ goose -dir migrations postgres "postgres://postgres:password@localhost:5432/pidi
 # Menguji rollback (Down)
 goose -dir migrations postgres "postgres://postgres:password@localhost:5432/pidiekab_dev?sslmode=disable" down
 ```
+
+---
+
+## Kompilasi Binary Produksi (Cross-Platform)
+
+```bash
+cd backend
+
+# Binary untuk Windows
+go build -o ../bin/pidiekab.exe ./cmd/pidiekab
+
+# Binary untuk Linux Ubuntu 24.04 (ELF 64-bit x86-64)
+GOOS=linux GOARCH=amd64 go build -o ../bin/pidiekab ./cmd/pidiekab
+```
+
+---
+
+## Operasional & Deployment Produksi (Ubuntu 24.04 LTS)
+
+Platform PidieKab dirancang untuk berjalan sebagai **Single Go Binary** native di bawah pengawasan `systemd` tanpa memerlukan Nginx, Apache, Redis, atau container bloat.
+
+### 1. Konfigurasi Layanan systemd
+Salin file service dan environment template:
+```bash
+sudo cp deploy/systemd/pidiekab.service /etc/systemd/system/
+sudo mkdir -p /etc/pidiekab
+sudo cp deploy/systemd/pidiekab.env.example /etc/pidiekab/pidiekab.env
+sudo chmod 0600 /etc/pidiekab/pidiekab.env
+sudo systemctl daemon-reload
+```
+
+### 2. Rilis Tanpa Downtime (Automated Deployment)
+Skrip `deploy/scripts/deploy.sh` melakukan:
+1. Pembuatan direktori rilis baru berbasis timestamp di `/opt/pidiekab/releases/<tag>/`.
+2. Penyalinan binary Linux dan aset statis `dist/`.
+3. Menjalankan migrasi database via Goose.
+4. Pengalihan symlink atomik `/opt/pidiekab/current`.
+5. Restart layanan `systemctl restart pidiekab`.
+6. Health check probe (`/health/ready`). Jika gagal, otomatis melakukan rollback ke rilis sebelumnya.
+7. Pembersihan rilis lama (menyimpan 5 rilis terakhir).
+
+```bash
+export PIDIEKAB_DATABASE_URL="postgres://pidiekab:password@127.0.0.1:5432/pidiekab_prod?sslmode=disable"
+bash deploy/scripts/deploy.sh
+```
+
+### 3. Backup & Disaster Recovery Drill
+- **Backup Terjadwal:**
+  ```bash
+  export PIDIEKAB_DATABASE_URL="postgres://pidiekab:password@127.0.0.1:5432/pidiekab_prod?sslmode=disable"
+  bash deploy/scripts/backup.sh
+  ```
+  Menghasilkan logical dump PostgreSQL (`.dump`), arsip media (`.tar.gz`), dan verifikasi checksum SHA-256 di `/var/backups/pidiekab/`.
+
+- **Restore & Recovery Drill:**
+  ```bash
+  bash deploy/scripts/restore.sh /var/backups/pidiekab/pidiekab_db_YYYYMMDD_HHMMSS.dump "postgres://.../target_db"
+  ```
 
 ---
 

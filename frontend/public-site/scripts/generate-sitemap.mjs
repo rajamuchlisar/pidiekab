@@ -7,45 +7,22 @@ const distDir = path.resolve(__dirname, '../dist')
 
 const DOMAIN = 'https://pidiekab.id'
 
-// Published routes definition (mirrored from fixtures snapshot)
-const PUBLISHED_PAGES = [
-  {
-    path: '/id/',
-    locales: { id: '/id/', en: '/en/' },
-    changefreq: 'daily',
-    priority: '1.0',
-  },
-  {
-    path: '/en/',
-    locales: { id: '/id/', en: '/en/' },
-    changefreq: 'daily',
-    priority: '1.0',
-  },
-  {
-    path: '/id/wisata-destinasi/',
-    locales: { id: '/id/wisata-destinasi/', en: '/en/tourism-destinations/' },
-    changefreq: 'weekly',
-    priority: '0.8',
-  },
-  {
-    path: '/en/tourism-destinations/',
-    locales: { id: '/id/wisata-destinasi/', en: '/en/tourism-destinations/' },
-    changefreq: 'weekly',
-    priority: '0.8',
-  },
-  {
-    path: '/id/wisata-destinasi/contoh-konten/',
-    locales: { id: '/id/wisata-destinasi/contoh-konten/', en: '/en/tourism-destinations/sample-content/' },
-    changefreq: 'monthly',
-    priority: '0.7',
-  },
-  {
-    path: '/en/tourism-destinations/sample-content/',
-    locales: { id: '/id/wisata-destinasi/contoh-konten/', en: '/en/tourism-destinations/sample-content/' },
-    changefreq: 'monthly',
-    priority: '0.7',
-  },
-]
+function findHtmlPages(dir, base = '') {
+  let pages = []
+  const entries = fs.readdirSync(dir, { withFileTypes: true })
+  for (const ent of entries) {
+    const fullPath = path.join(dir, ent.name)
+    const relPath = base ? `${base}/${ent.name}` : ent.name
+    if (ent.isDirectory()) {
+      if (ent.name !== 'assets' && ent.name !== '.vite') {
+        pages = pages.concat(findHtmlPages(fullPath, relPath))
+      }
+    } else if (ent.isFile() && ent.name === 'index.html' && base !== '') {
+      pages.push(`/${base}/`)
+    }
+  }
+  return pages
+}
 
 function generateSitemap() {
   if (!fs.existsSync(distDir)) {
@@ -53,17 +30,25 @@ function generateSitemap() {
     return
   }
 
-  const urls = PUBLISHED_PAGES.map((page) => {
-    let altLinks = ''
-    if (page.locales) {
-      for (const [lang, lPath] of Object.entries(page.locales)) {
-        altLinks += `\n    <xhtml:link rel="alternate" hreflang="${lang}" href="${DOMAIN}${lPath}"/>`
-      }
+  const paths = findHtmlPages(distDir).sort()
+
+  const urls = paths.map((p) => {
+    let priority = '0.7'
+    let changefreq = 'monthly'
+
+    if (p === '/id/' || p === '/en/') {
+      priority = '1.0'
+      changefreq = 'daily'
+    } else if (p.split('/').filter(Boolean).length === 2) {
+      // Category page (e.g. /id/wisata-alam/)
+      priority = '0.8'
+      changefreq = 'weekly'
     }
+
     return `  <url>
-    <loc>${DOMAIN}${page.path}</loc>${altLinks}
-    <changefreq>${page.changefreq}</changefreq>
-    <priority>${page.priority}</priority>
+    <loc>${DOMAIN}${p}</loc>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
   </url>`
   }).join('\n')
 
@@ -76,7 +61,7 @@ ${urls}
 
   const sitemapPath = path.join(distDir, 'sitemap.xml')
   fs.writeFileSync(sitemapPath, xml, 'utf-8')
-  console.log(`[sitemap] Generated sitemap.xml with ${PUBLISHED_PAGES.length} indexable published routes at ${sitemapPath}`)
+  console.log(`[sitemap] Generated sitemap.xml with ${paths.length} indexable published routes at ${sitemapPath}`)
 }
 
 generateSitemap()
