@@ -153,14 +153,14 @@ GOOS=linux GOARCH=amd64 go build -o ../bin/pidiekab ./cmd/pidiekab
 
 Platform PidieKab dirancang untuk berjalan sebagai **Single Go Binary** native di bawah pengawasan `systemd` tanpa memerlukan Nginx, Apache, Redis, atau container bloat.
 
-### 1. Konfigurasi Layanan systemd
-Salin file service dan environment template:
+### 1. Inisialisasi Host / Provisioning Otomatis
+Jalankan skrip provisioning host untuk membuat akun sistem `pidiekab` (tanpa shell login), struktur direktori dengan hak akses ketat (`/opt/pidiekab`, `/var/lib/pidiekab`, `/var/backups/pidiekab`), unit service systemd, dan penjadwalan cron backup harian:
 ```bash
-sudo cp deploy/systemd/pidiekab.service /etc/systemd/system/
-sudo mkdir -p /etc/pidiekab
-sudo cp deploy/systemd/pidiekab.env.example /etc/pidiekab/pidiekab.env
-sudo chmod 0600 /etc/pidiekab/pidiekab.env
-sudo systemctl daemon-reload
+sudo bash deploy/scripts/setup-server.sh
+```
+Setelah skrip selesai, sesuaikan kredensial database dan domain di `/etc/pidiekab/pidiekab.env`:
+```bash
+sudo nano /etc/pidiekab/pidiekab.env
 ```
 
 ### 2. Rilis Tanpa Downtime (Automated Deployment)

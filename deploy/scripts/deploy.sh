@@ -11,7 +11,7 @@ RELEASE_TAG=$(date +%Y%m%d_%H%M%S)
 NEW_RELEASE_DIR="${APP_DIR}/releases/${RELEASE_TAG}"
 CURRENT_LINK="${APP_DIR}/current"
 SERVICE_NAME="pidiekab.service"
-HEALTH_URL="http://127.0.0.1:8080/health/ready"
+HEALTH_URL="${PIDIEKAB_HEALTH_URL:-http://127.0.0.1:8080/health/ready}"
 
 echo "=================================================="
 echo "Starting PidieKab Deployment: ${RELEASE_TAG}"
@@ -19,8 +19,12 @@ echo "Target Release Directory: ${NEW_RELEASE_DIR}"
 echo "=================================================="
 
 # 1. Validate environment & dependencies
+if [ -z "${PIDIEKAB_DATABASE_URL:-}" ] && [ -f "/etc/pidiekab/pidiekab.env" ]; then
+    PIDIEKAB_DATABASE_URL=$(grep -E '^[[:space:]]*PIDIEKAB_DATABASE_URL=' /etc/pidiekab/pidiekab.env | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+fi
+
 if [ -z "${PIDIEKAB_DATABASE_URL:-}" ]; then
-    echo "ERROR: PIDIEKAB_DATABASE_URL is not set." >&2
+    echo "ERROR: PIDIEKAB_DATABASE_URL is not set and could not be loaded from /etc/pidiekab/pidiekab.env." >&2
     exit 1
 fi
 
@@ -41,6 +45,7 @@ echo "--> Creating release directory structure..."
 mkdir -p "${NEW_RELEASE_DIR}/bin"
 mkdir -p "${NEW_RELEASE_DIR}/public"
 mkdir -p "${NEW_RELEASE_DIR}/cms"
+mkdir -p "${NEW_RELEASE_DIR}/deploy"
 
 # 4. Copy build artifacts
 echo "--> Deploying binary and frontend assets..."
@@ -55,12 +60,20 @@ if [ -d "frontend/admin-cms/dist" ]; then
     cp -r frontend/admin-cms/dist/* "${NEW_RELEASE_DIR}/cms/"
 fi
 
+if [ -d "deploy" ]; then
+    cp -r deploy/* "${NEW_RELEASE_DIR}/deploy/"
+fi
+
 # Set proper ownership
 chown -R pidiekab:pidiekab "${NEW_RELEASE_DIR}"
 
 # 5. Apply database migrations
-echo "--> Applying database migrations with Goose..."
-goose -dir migrations postgres "${PIDIEKAB_DATABASE_URL}" up
+if command -v goose >/dev/null 2>&1; then
+    echo "--> Applying database migrations with Goose..."
+    goose -dir migrations postgres "${PIDIEKAB_DATABASE_URL}" up
+else
+    echo "WARNING: goose command not found in PATH; skipping automatic migration (ensure schema is up-to-date)."
+fi
 
 # 6. Atomic symlink switch
 echo "--> Switching active release symlink to ${NEW_RELEASE_DIR}..."

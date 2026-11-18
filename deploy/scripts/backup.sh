@@ -23,8 +23,12 @@ echo "Backup Destination: ${BACKUP_DIR}"
 echo "=================================================="
 
 # 1. PostgreSQL Logical Dump
+if [ -z "${PIDIEKAB_DATABASE_URL:-}" ] && [ -f "/etc/pidiekab/pidiekab.env" ]; then
+    PIDIEKAB_DATABASE_URL=$(grep -E '^[[:space:]]*PIDIEKAB_DATABASE_URL=' /etc/pidiekab/pidiekab.env | cut -d '=' -f2- | tr -d '"' | tr -d "'")
+fi
+
 if [ -z "${PIDIEKAB_DATABASE_URL:-}" ]; then
-    echo "ERROR: PIDIEKAB_DATABASE_URL is not set." >&2
+    echo "ERROR: PIDIEKAB_DATABASE_URL is not set and could not be loaded from /etc/pidiekab/pidiekab.env." >&2
     exit 1
 fi
 
