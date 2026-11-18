@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	auditPostgres "pidiekab/internal/modules/audit/infrastructure/postgres"
 	auditHttp "pidiekab/internal/modules/audit/transport/http"
 	categoryApp "pidiekab/internal/modules/category/application"
@@ -49,6 +48,8 @@ import (
 	"pidiekab/internal/platform/database"
 	"pidiekab/internal/platform/httpserver"
 	"pidiekab/internal/workers/sitegeneration"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 func main() {
@@ -63,14 +64,34 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	// Check for CLI subcommands (e.g. `pidiekab admin create ...` or `pidiekab seed`)
+	// Check for CLI subcommands (e.g. `pidiekab admin`, `pidiekab seed`, `pidiekab ssg build`, etc.)
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "version", "-v", "--version":
+			handleVersionCLI()
+			return
 		case "admin":
 			handleAdminCLI(cfg, logger)
 			return
 		case "seed":
 			handleSeedCLI(cfg, logger)
+			return
+		case "db":
+			if len(os.Args) > 2 && os.Args[2] == "status" {
+				handleDBStatusCLI(cfg, logger)
+				return
+			}
+			fmt.Println("Usage: pidiekab db status")
+			os.Exit(1)
+		case "ssg":
+			if len(os.Args) > 2 && os.Args[2] == "build" {
+				handleSSGBuildCLI(cfg, logger)
+				return
+			}
+			fmt.Println("Usage: pidiekab ssg build")
+			os.Exit(1)
+		case "help", "-h", "--help":
+			printUsage()
 			return
 		}
 	}

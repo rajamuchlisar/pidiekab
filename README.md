@@ -76,26 +76,33 @@ go run ./cmd/pidiekab
 Server akan aktif di `http://127.0.0.1:8080`.
 - Health Live: `GET http://127.0.0.1:8080/health/live` (mengembalikan 200 OK)
 - Health Ready: `GET http://127.0.0.1:8080/health/ready` (mengembalikan 200 OK jika PostgreSQL terkoneksi, 503 jika belum siap)
+- Health Metrics: `GET http://127.0.0.1:8080/health/metrics` (mengembalikan runtime telemetry, goroutine count, memory allocations, dan database latency)
 - Public Root: `GET http://127.0.0.1:8080/` (301 redirect otomatis ke `/id/`)
 - Admin CMS: `GET http://127.0.0.1:8080/cms/` (Dashboard Administrasi PidieKab)
 
-Untuk membuat akun Administrator awal:
+### 4. Perintah Operator CLI (Built-in Management)
+Binary PidieKab dilengkapi perintah diagnostik dan pemeliharaan mandiri:
 ```bash
-./bin/pidiekab admin create --email admin@pidiekab.go.id --name "Super Administrator" --password "Admin12345!"
-```
+# Menampilkan versi runtime dan informasi arsitektur
+./bin/pidiekab version
 
-### 4. Inisialisasi Data Baseline & Konten Autentik (Seed CLI)
-Untuk mengisi database dengan data master wilayah (Kabupaten Pidie + 23 kecamatan), kategori dwibahasa, pengaturan, halaman statis, artikel autentik terverifikasi, dan memicu kompilasi statis (SSG):
-```bash
+# Diagnostik PostgreSQL: latensi ping, ukuran DB, versi migrasi Goose, dan jumlah entri
+./bin/pidiekab db status
+
+# Memicu build SSG manual on-demand dan pengalihan symlink atomik secara instan
+./bin/pidiekab ssg build
+
+# Melihat daftar seluruh akun administrator
+./bin/pidiekab admin list
+
+# Membuat akun administrator baru
+./bin/pidiekab admin create --email admin@pidiekab.go.id --name "Super Administrator" --password "AdminKuat1234!"
+
+# Reset password administrator dan otomatis mencabut seluruh sesi login aktif
+./bin/pidiekab admin reset-password --email admin@pidiekab.go.id --password "PasswordBaru123!"
+
+# Mengisi database dengan baseline wilayah dan data demo
 ./bin/pidiekab seed
-```
-Akun default yang terbentuk:
-- **Email:** `admin@pidiekab.go.id`
-- **Password:** `AdminPidie123!`
-
-Untuk membuat akun administrator tambahan:
-```bash
-./bin/pidiekab admin create --email nama@pidiekab.go.id --name "Nama Admin" --password "PasswordKuat123!"
 ```
 
 ### 5. Menjalankan & Membangun Frontend Public Site (SSG)

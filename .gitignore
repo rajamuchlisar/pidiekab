@@ -35,6 +35,7 @@ pnpm-debug.log*
 /uploads/
 /media/
 /data/
+**/data/
 
 # Editor & OS files
 .DS_Store
