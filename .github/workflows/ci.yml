@@ -2,9 +2,9 @@ name: CI Quality Gate
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, Pidiekab]
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, Pidiekab]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -150,3 +150,10 @@ jobs:
       - name: Re-apply Goose Up (Idempotency Validation)
         run: |
           goose -dir migrations postgres "postgres://postgres:admin@localhost:5432/pidiekab_ci?sslmode=disable" up
+
+      - name: Validate PidieKab Seed Command
+        run: |
+          cd backend
+          go build -o ../bin/pidiekab ./cmd/pidiekab
+          cd ..
+          PIDIEKAB_DATABASE_URL="postgres://postgres:admin@localhost:5432/pidiekab_ci?sslmode=disable" ./bin/pidiekab seed
