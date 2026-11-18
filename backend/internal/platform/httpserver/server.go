@@ -157,6 +157,9 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 	})
 
 	// 5. Static serving for Admin CMS (/cms/ and /cms/*)
+	mux.HandleFunc("/cms", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/cms/", http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("/cms/", func(w http.ResponseWriter, r *http.Request) {
 		serveCMSStatic(w, r, cfg.CMSStaticDir)
 	})

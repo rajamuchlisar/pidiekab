@@ -40,8 +40,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   })
 
   // Handle 401 Unauthorized (session expired)
-  if (res.status === 401 && !endpoint.includes('/auth/login')) {
-    window.location.href = '/cms/login'
+  // Never redirect on /auth/login or /auth/me or when already on login page to avoid infinite reload loop
+  if (res.status === 401 && !endpoint.includes('/auth/login') && !endpoint.includes('/auth/me')) {
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/cms/login')) {
+      window.location.href = '/cms/login'
+    }
     throw new Error('Sesi Anda telah kedaluwarsa. Silakan login kembali.')
   }
 
