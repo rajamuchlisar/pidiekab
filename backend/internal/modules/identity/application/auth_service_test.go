@@ -253,6 +253,21 @@ func TestAuthServiceLifecycle(t *testing.T) {
 		t.Error("expected session to be revoked after logout, got nil error")
 	}
 
+	// 9. Reset password by operator
+	err = svc.ResetPasswordByOperator(ctx, "admin@pidiekab.id", "OperatorResetPass999!")
+	if err != nil {
+		t.Fatalf("operator password reset failed: %v", err)
+	}
+
+	// Login with operator reset password
+	resetLogin, err := svc.Login(ctx, "admin@pidiekab.id", "OperatorResetPass999!", &ip)
+	if err != nil {
+		t.Fatalf("login with operator reset password failed: %v", err)
+	}
+	if resetLogin.RawToken == "" {
+		t.Error("expected non-empty token after login with reset password")
+	}
+
 	// Verify audit logs were produced
 	if len(auditRepo.logs) == 0 {
 		t.Error("expected audit logs to be recorded")

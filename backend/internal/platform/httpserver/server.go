@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -25,6 +26,11 @@ type ReleaseLocator interface {
 	GetActiveReleaseDir() (string, error)
 }
 
+// RedirectFinder provides lookup for registered URL redirects.
+type RedirectFinder interface {
+	FindRedirect(ctx context.Context, path string) (targetPath string, statusCode int, err error)
+}
+
 // RouteRegistrar allows domain modules to attach their HTTP routes onto the ServeMux.
 type RouteRegistrar interface {
 	RegisterRoutes(mux *http.ServeMux)
@@ -33,8 +39,9 @@ type RouteRegistrar interface {
 // BuildHandler builds the router, handlers, and attaches middleware.
 func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, registrars ...RouteRegistrar) http.Handler {
 	mux := http.NewServeMux()
+	startTime := time.Now()
 
-	// 1. Health endpoints
+	// 1. Health & Observability endpoints
 	mux.HandleFunc("GET /health/live", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status":      "ok",
@@ -80,28 +87,60 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 		})
 	})
 
-	// 2. Module routes (Identity, Content, etc.)
+	// 2. Metrics endpoint
+	mux.HandleFunc("GET /health/metrics", func(w http.ResponseWriter, r *http.Request) {
+		var mem runtime.MemStats
+		runtime.ReadMemStats(&mem)
+
+		dbStatus := "unconfigured"
+		if db != nil {
+			pingCtx, cancel := context.WithTimeout(r.Context(), 1*time.Second)
+			defer cancel()
+			if err := db.Ping(pingCtx); err == nil {
+				dbStatus = "connected"
+			} else {
+				dbStatus = "unreachable"
+			}
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status":         "ok",
+			"service":        "pidiekab",
+			"uptime_seconds": int64(time.Since(startTime).Seconds()),
+			"database":       dbStatus,
+			"goroutines":     runtime.NumGoroutine(),
+			"mem_alloc_mb":   float64(mem.Alloc) / (1024 * 1024),
+			"mem_sys_mb":     float64(mem.Sys) / (1024 * 1024),
+			"timestamp":      time.Now().UTC().Format(time.RFC3339),
+		})
+	})
+
+	// 3. Module routes (Identity, Content, Redirects, etc.)
 	var releaseLocator ReleaseLocator
+	var redirectFinder RedirectFinder
 	for _, reg := range registrars {
 		if reg != nil {
 			reg.RegisterRoutes(mux)
 			if rl, ok := reg.(ReleaseLocator); ok {
 				releaseLocator = rl
 			}
+			if rf, ok := reg.(RedirectFinder); ok {
+				redirectFinder = rf
+			}
 		}
 	}
 
-	// 3. Root redirect: / -> /id/
+	// 4. Root redirect: / -> /id/
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/id/", http.StatusMovedPermanently)
 	})
 
-	// 4. Static serving for Admin CMS (/cms/ and /cms/*)
+	// 5. Static serving for Admin CMS (/cms/ and /cms/*)
 	mux.HandleFunc("/cms/", func(w http.ResponseWriter, r *http.Request) {
 		serveCMSStatic(w, r, cfg.CMSStaticDir)
 	})
 
-	// 5. Public static serving (SSG generated HTML, assets, sitemap.xml, robots.txt)
+	// 6. Public static serving (SSG generated HTML, assets, sitemap.xml, robots.txt)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		rootDir := cfg.PublicStaticDir
 		if releaseLocator != nil {
@@ -109,7 +148,7 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 				rootDir = activeDir
 			}
 		}
-		servePublicStatic(w, r, rootDir)
+		servePublicStatic(w, r, rootDir, redirectFinder)
 	})
 
 	// Standard middleware wrapping order:
@@ -177,7 +216,7 @@ func NewHTTPToHTTPSRedirectServer(addr string, logger *slog.Logger) *http.Server
 	}
 }
 
-func servePublicStatic(w http.ResponseWriter, r *http.Request, rootDir string) {
+func servePublicStatic(w http.ResponseWriter, r *http.Request, rootDir string, redirectFinder RedirectFinder) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 		return
@@ -209,6 +248,17 @@ func servePublicStatic(w http.ResponseWriter, r *http.Request, rootDir string) {
 		w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
 		http.ServeFile(w, r, indexPath)
 		return
+	}
+
+	// Check registered URL redirects before falling back to 404
+	if redirectFinder != nil {
+		if target, statusCode, err := redirectFinder.FindRedirect(r.Context(), r.URL.Path); err == nil && target != "" {
+			if statusCode == 0 {
+				statusCode = http.StatusMovedPermanently
+			}
+			http.Redirect(w, r, target, statusCode)
+			return
+		}
 	}
 
 	http.NotFound(w, r)

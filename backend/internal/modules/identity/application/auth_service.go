@@ -262,6 +262,44 @@ func (s *AuthService) BootstrapAdmin(ctx context.Context, email, displayName, pa
 	return admin, nil
 }
 
+// ResetPasswordByOperator resets an administrator's password directly from CLI/operator,
+// immediately revoking all active sessions for security.
+func (s *AuthService) ResetPasswordByOperator(ctx context.Context, email, newPassword string) error {
+	normalizedEmail := domain.NormalizeEmail(email)
+	if normalizedEmail == "" {
+		return errors.New("email cannot be empty")
+	}
+	if len(newPassword) < 8 {
+		return domain.ErrInvalidPassword
+	}
+
+	admin, err := s.admins.GetByEmail(ctx, normalizedEmail)
+	if err != nil {
+		return fmt.Errorf("failed to find admin by email: %w", err)
+	}
+	if admin == nil {
+		return domain.ErrAdminNotFound
+	}
+
+	hash, err := authn.HashPassword(newPassword, s.argonParams)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	if err := s.admins.UpdatePassword(ctx, admin.ID, hash); err != nil {
+		return fmt.Errorf("failed to update password: %w", err)
+	}
+
+	// Revoke all active sessions
+	_ = s.sessions.RevokeAllForAdmin(ctx, admin.ID, time.Now())
+
+	s.recordAudit(ctx, nil, "admin.operator_password_reset", "admin", &admin.ID, map[string]any{
+		"email": admin.Email,
+	}, nil)
+
+	return nil
+}
+
 // ListAdmins returns all administrators.
 func (s *AuthService) ListAdmins(ctx context.Context) ([]*domain.Admin, error) {
 	return s.admins.List(ctx)

@@ -67,6 +67,11 @@ async function handleLogout() {
           <span class="nav-label">Pengaturan Web</span>
         </router-link>
 
+        <router-link to="/redirects" class="nav-item" :class="{ active: currentRouteName === 'redirects' }">
+          <span class="nav-icon">🔀</span>
+          <span class="nav-label">URL Redirects</span>
+        </router-link>
+
         <router-link to="/admins" class="nav-item" :class="{ active: currentRouteName === 'admins' }">
           <span class="nav-icon">👥</span>
           <span class="nav-label">Administrator</span>

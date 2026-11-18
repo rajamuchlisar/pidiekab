@@ -32,6 +32,8 @@ import (
 	mediaPostgres "pidiekab/internal/modules/media/infrastructure/postgres"
 	mediaStorage "pidiekab/internal/modules/media/infrastructure/storage"
 	mediaHttp "pidiekab/internal/modules/media/transport/http"
+	redirectPostgres "pidiekab/internal/modules/redirect/infrastructure/postgres"
+	redirectHttp "pidiekab/internal/modules/redirect/transport/http"
 	searchApp "pidiekab/internal/modules/search/application"
 	searchPostgres "pidiekab/internal/modules/search/infrastructure/postgres"
 	searchHttp "pidiekab/internal/modules/search/transport/http"
@@ -196,6 +198,11 @@ func main() {
 		curationService := curationApp.NewCurationService(curationRepo, auditRepo, jobRepo)
 		curationHandler := curationHttp.NewCurationHandler(curationService, authService)
 		registrars = append(registrars, curationHandler)
+
+		// 12. Permanent URL Redirects (301)
+		redirectRepo := redirectPostgres.NewRedirectRepository(dbPool)
+		redirectHandler := redirectHttp.NewRedirectHandler(redirectRepo, authService)
+		registrars = append(registrars, redirectHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}
@@ -261,9 +268,34 @@ func main() {
 func handleAdminCLI(cfg config.Config, logger *slog.Logger) {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: pidiekab admin <subcommand> [flags]")
-		fmt.Println("Subcommands: create")
+		fmt.Println("Subcommands: create, list, reset-password")
 		os.Exit(1)
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	dbPool, err := database.NewPool(ctx, database.Config{
+		URL: cfg.DatabaseURL,
+	}, logger)
+	if err != nil {
+		logger.Error("database connection failed", "error", err)
+		os.Exit(1)
+	}
+	defer dbPool.Close()
+
+	adminRepo := identityPostgres.NewAdminRepository(dbPool)
+	sessionRepo := identityPostgres.NewSessionRepository(dbPool)
+	auditRepo := auditPostgres.NewRepository(dbPool)
+
+	authService := identityApp.NewAuthService(
+		adminRepo,
+		sessionRepo,
+		auditRepo,
+		authn.DefaultArgon2idParams(),
+		12*time.Hour,
+		logger,
+	)
 
 	switch os.Args[2] {
 	case "create", "bootstrap":
@@ -283,41 +315,64 @@ func handleAdminCLI(cfg config.Config, logger *slog.Logger) {
 			os.Exit(1)
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		dbPool, err := database.NewPool(ctx, database.Config{
-			URL: cfg.DatabaseURL,
-		}, logger)
-		if err != nil {
-			logger.Error("database connection failed", "error", err)
-			os.Exit(1)
-		}
-		defer dbPool.Close()
-
-		adminRepo := identityPostgres.NewAdminRepository(dbPool)
-		sessionRepo := identityPostgres.NewSessionRepository(dbPool)
-		auditRepo := auditPostgres.NewRepository(dbPool)
-
-		authService := identityApp.NewAuthService(
-			adminRepo,
-			sessionRepo,
-			auditRepo,
-			authn.DefaultArgon2idParams(),
-			12*time.Hour,
-			logger,
-		)
-
 		admin, err := authService.BootstrapAdmin(ctx, *emailFlag, *nameFlag, *passwordFlag)
 		if err != nil {
 			logger.Error("failed to create admin", "error", err)
+			fmt.Printf("Error: %v\n", err)
 			os.Exit(1)
 		}
 
 		logger.Info("administrator created successfully", "id", admin.ID, "email", admin.Email, "name", admin.DisplayName)
 		fmt.Printf("Administrator %q (ID %d) created successfully.\n", admin.Email, admin.ID)
+
+	case "list":
+		admins, err := authService.ListAdmins(ctx)
+		if err != nil {
+			logger.Error("failed to list admins", "error", err)
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Println("--------------------------------------------------------------------------------")
+		fmt.Printf("%-6s | %-30s | %-25s | %-8s\n", "ID", "Email", "Display Name", "Status")
+		fmt.Println("--------------------------------------------------------------------------------")
+		for _, a := range admins {
+			status := "active"
+			if !a.IsActive {
+				status = "inactive"
+			}
+			fmt.Printf("%-6d | %-30s | %-25s | %-8s\n", a.ID, a.Email, a.DisplayName, status)
+		}
+		fmt.Println("--------------------------------------------------------------------------------")
+		fmt.Printf("Total administrators: %d\n", len(admins))
+
+	case "reset-password":
+		cmd := flag.NewFlagSet("admin reset-password", flag.ExitOnError)
+		emailFlag := cmd.String("email", "", "Admin email address to reset")
+		passwordFlag := cmd.String("password", "", "New admin password (minimum 8 characters)")
+
+		if err := cmd.Parse(os.Args[3:]); err != nil {
+			fmt.Println("Failed to parse flags:", err)
+			os.Exit(1)
+		}
+
+		if *emailFlag == "" || *passwordFlag == "" {
+			fmt.Println("Error: --email and --password are required.")
+			cmd.Usage()
+			os.Exit(1)
+		}
+
+		if err := authService.ResetPasswordByOperator(ctx, *emailFlag, *passwordFlag); err != nil {
+			logger.Error("failed to reset admin password", "error", err)
+			fmt.Printf("Error resetting password: %v\n", err)
+			os.Exit(1)
+		}
+
+		logger.Info("administrator password reset successfully", "email", *emailFlag)
+		fmt.Printf("Password for administrator %q has been reset successfully. All active sessions revoked.\n", *emailFlag)
+
 	default:
-		fmt.Printf("Unknown admin subcommand %q. Available: create\n", os.Args[2])
+		fmt.Printf("Unknown admin subcommand %q. Available: create, list, reset-password\n", os.Args[2])
 		os.Exit(1)
 	}
 }

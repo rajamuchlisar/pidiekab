@@ -306,3 +306,61 @@ func TestTLSConfiguration(t *testing.T) {
 		t.Error("expected explicit secure cipher suites, got empty")
 	}
 }
+
+func TestHealthMetricsEndpoint(t *testing.T) {
+	handler := newTestServerWithStaticAndDB("", "", nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/metrics", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", rec.Code)
+	}
+
+	var res map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode JSON response: %v", err)
+	}
+
+	if res["status"] != "ok" {
+		t.Errorf("expected status 'ok', got %v", res["status"])
+	}
+	if _, ok := res["uptime_seconds"]; !ok {
+		t.Error("missing uptime_seconds in metrics response")
+	}
+	if _, ok := res["mem_alloc_mb"]; !ok {
+		t.Error("missing mem_alloc_mb in metrics response")
+	}
+}
+
+type mockRedirectFinder struct{}
+
+func (m *mockRedirectFinder) RegisterRoutes(mux *http.ServeMux) {}
+func (m *mockRedirectFinder) FindRedirect(ctx context.Context, path string) (string, int, error) {
+	if path == "/legacy-path/" || path == "/legacy-path" {
+		return "/id/wisata-alam/pantai-pelangi/", http.StatusMovedPermanently, nil
+	}
+	return "", 0, nil
+}
+
+func TestRedirectFinderIntegration(t *testing.T) {
+	cfg := config.Config{
+		Environment:     "test",
+		PublicStaticDir: t.TempDir(),
+	}
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	handler := httpserver.BuildHandler(cfg, logger, nil, &mockRedirectFinder{})
+
+	req := httptest.NewRequest(http.MethodGet, "/legacy-path/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusMovedPermanently {
+		t.Fatalf("expected 301 Moved Permanently, got %d", rec.Code)
+	}
+	loc := rec.Header().Get("Location")
+	if loc != "/id/wisata-alam/pantai-pelangi/" {
+		t.Errorf("expected redirect location '/id/wisata-alam/pantai-pelangi/', got %q", loc)
+	}
+}
