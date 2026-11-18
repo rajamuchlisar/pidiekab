@@ -157,3 +157,13 @@ jobs:
           go build -o ../bin/pidiekab ./cmd/pidiekab
           cd ..
           PIDIEKAB_DATABASE_URL="postgres://postgres:admin@localhost:5432/pidiekab_ci?sslmode=disable" ./bin/pidiekab seed
+
+      - name: Validate Operator CLI Diagnostics & Commands
+        run: |
+          export PIDIEKAB_DATABASE_URL="postgres://postgres:admin@localhost:5432/pidiekab_ci?sslmode=disable"
+          ./bin/pidiekab version
+          ./bin/pidiekab help
+          ./bin/pidiekab db status
+          ./bin/pidiekab admin list
+          ./bin/pidiekab admin reset-password --email admin@pidiekab.go.id --password "NewPass12345!"
+          ./bin/pidiekab ssg build
