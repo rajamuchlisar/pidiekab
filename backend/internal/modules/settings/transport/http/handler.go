@@ -72,6 +72,12 @@ func (h *SettingsHandler) HandleUpdateGeneral(w http.ResponseWriter, r *http.Req
 
 	res, err := h.service.UpdateGeneral(r.Context(), admin.ID, input)
 	if err != nil {
+		if errors.Is(err, domain.ErrInvalidContactEmail) ||
+			errors.Is(err, domain.ErrInvalidContactPhone) ||
+			errors.Is(err, domain.ErrInvalidSocialURL) {
+			writeJSONError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+			return
+		}
 		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update general settings")
 		return
 	}

@@ -24,6 +24,36 @@ func TestSettingsValidation(t *testing.T) {
 	if err := settingsDomain.ValidateSiteName("   "); err == nil {
 		t.Error("expected error for empty site name")
 	}
+
+	// OPEN-021 Contact and Social Link Policy
+	if err := settingsDomain.ValidateContactEmail("invalid-email"); err == nil {
+		t.Error("expected error for invalid contact email")
+	}
+	if err := settingsDomain.ValidateContactEmail("info@pidiekab.go.id"); err != nil {
+		t.Errorf("expected valid email, got: %v", err)
+	}
+
+	if err := settingsDomain.ValidateContactPhone("+62 812-3456-7890"); err != nil {
+		t.Errorf("expected valid phone, got: %v", err)
+	}
+	if err := settingsDomain.ValidateContactPhone("phone-with-letters-abc"); err == nil {
+		t.Error("expected error for phone with letters")
+	}
+
+	validSocial := json.RawMessage(`{"instagram": "@pesonapidie", "website": "https://pidiekab.go.id"}`)
+	if err := settingsDomain.ValidateSocialLinks(validSocial); err != nil {
+		t.Errorf("expected valid social links, got: %v", err)
+	}
+
+	insecureSocial := json.RawMessage(`{"site": "http://insecure-site.com"}`)
+	if err := settingsDomain.ValidateSocialLinks(insecureSocial); err == nil {
+		t.Error("expected error for insecure http:// scheme")
+	}
+
+	maliciousSocial := json.RawMessage(`{"site": "javascript:alert(1)"}`)
+	if err := settingsDomain.ValidateSocialLinks(maliciousSocial); err == nil {
+		t.Error("expected error for javascript: scheme")
+	}
 }
 
 func TestSettingsLifecycle(t *testing.T) {

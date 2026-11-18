@@ -38,6 +38,16 @@ type UpdateGeneralInput struct {
 }
 
 func (s *SettingsService) UpdateGeneral(ctx context.Context, adminID int64, input UpdateGeneralInput) (*domain.SiteSettings, error) {
+	if err := domain.ValidateContactEmail(input.ContactEmail); err != nil {
+		return nil, err
+	}
+	if err := domain.ValidateContactPhone(input.ContactPhone); err != nil {
+		return nil, err
+	}
+	if err := domain.ValidateSocialLinks(input.SocialLinks); err != nil {
+		return nil, err
+	}
+
 	social := input.SocialLinks
 	if len(social) == 0 {
 		social = json.RawMessage(`{}`)
