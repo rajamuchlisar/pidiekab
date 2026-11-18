@@ -1,0 +1,493 @@
+<script setup lang="ts">
+import { ref, onMounted, watch } from 'vue'
+import { api } from '../../api/client'
+import { useNotificationStore } from '../../stores/notification'
+import AppLayout from '../../components/layout/AppLayout.vue'
+
+const notification = useNotificationStore()
+
+const items = ref<any[]>([])
+const categories = ref<any[]>([])
+const isLoading = ref(true)
+
+const searchQuery = ref('')
+const selectedCategory = ref<number | ''>('')
+const selectedStatus = ref('')
+const currentPage = ref(1)
+const perPage = ref(12)
+const totalItems = ref(0)
+
+async function loadCategories() {
+  try {
+    const res = await api.get<{ categories: any[] }>('/api/v1/admin/categories')
+    if (res && res.categories) {
+      categories.value = res.categories
+    }
+  } catch (err: any) {
+    console.error('Failed to load categories', err)
+  }
+}
+
+async function loadContents() {
+  isLoading.value = true
+  try {
+    const params = new URLSearchParams()
+    params.set('page', String(currentPage.value))
+    params.set('per_page', String(perPage.value))
+    if (selectedCategory.value) {
+      params.set('category_id', String(selectedCategory.value))
+    }
+    if (selectedStatus.value) {
+      params.set('status', selectedStatus.value)
+    }
+    if (searchQuery.value) {
+      params.set('q', searchQuery.value)
+    }
+
+    const res = await api.get<{ items: any[]; total: number }>(`/api/v1/admin/contents?${params.toString()}`)
+    if (res && res.items) {
+      items.value = res.items
+      totalItems.value = res.total || res.items.length
+    } else {
+      items.value = []
+      totalItems.value = 0
+    }
+  } catch (err: any) {
+    notification.error('Gagal Memuat Konten', err.detail || 'Terjadi kesalahan saat memuat daftar artikel.', err.requestId)
+  } finally {
+    isLoading.value = false
+  }
+}
+
+async function deleteContent(item: any) {
+  const title = item.translations?.id?.title || item.translations?.en?.title || `ID #${item.id}`
+  const confirmed = confirm(
+    `PERINGATAN: Menghapus konten "${title}" akan menghapus permanen seluruh translasi (ID/EN) dan sitasi sumber terkait.\n\nApakah Anda yakin ingin menghapus permanen?`
+  )
+  if (!confirmed) return
+
+  try {
+    await api.del(`/api/v1/admin/contents/${item.id}`)
+    notification.success('Konten Dihapus', `Konten "${title}" berhasil dihapus permanen.`)
+    loadContents()
+  } catch (err: any) {
+    notification.error('Gagal Menghapus', err.detail || 'Konten tidak dapat dihapus.', err.requestId)
+  }
+}
+
+watch([selectedCategory, selectedStatus], () => {
+  currentPage.value = 1
+  loadContents()
+})
+
+function onSearchSubmit() {
+  currentPage.value = 1
+  loadContents()
+}
+
+onMounted(() => {
+  loadCategories()
+  loadContents()
+})
+</script>
+
+<template>
+  <AppLayout>
+    <div class="content-list-page">
+      <!-- Header Actions -->
+      <div class="page-header">
+        <div>
+          <h2 class="page-title">Manajemen Konten & Artikel</h2>
+          <p class="page-desc">Kelola seluruh artikel wisata, kuliner, dan budaya Kabupaten Pidie.</p>
+        </div>
+        <router-link to="/contents/new" class="btn btn-primary">+ Buat Artikel Baru</router-link>
+      </div>
+
+      <!-- Filters & Search Toolbar -->
+      <div class="filters-card">
+        <form @submit.prevent="onSearchSubmit" class="search-form">
+          <input
+            v-model="searchQuery"
+            type="text"
+            placeholder="Cari judul artikel..."
+            class="input-control search-input"
+          />
+          <button type="submit" class="btn btn-secondary">Cari</button>
+        </form>
+
+        <div class="filter-group">
+          <select v-model="selectedCategory" class="select-control">
+            <option :value="''">Semua Kategori</option>
+            <option v-for="cat in categories" :key="cat.id" :value="cat.id">
+              {{ cat.names?.id || cat.code }}
+            </option>
+          </select>
+
+          <select v-model="selectedStatus" class="select-control">
+            <option value="">Semua Status</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+            <option value="archived">Archived</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Contents Table -->
+      <div class="table-card">
+        <div v-if="isLoading" class="loading-state">
+          Memuat daftar konten...
+        </div>
+
+        <div v-else-if="items.length === 0" class="empty-state">
+          <span class="empty-icon">📭</span>
+          <p>Tidak ada konten yang sesuai dengan filter atau kata kunci pencarian.</p>
+          <router-link to="/contents/new" class="btn btn-primary btn-sm">+ Buat Konten Baru</router-link>
+        </div>
+
+        <div v-else class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width: 35%;">Judul Artikel</th>
+                <th>Kategori</th>
+                <th>Status (ID)</th>
+                <th>Status (EN)</th>
+                <th>Terakhir Diubah</th>
+                <th class="text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in items" :key="item.id">
+                <td>
+                  <div class="title-cell">
+                    <span class="content-title">
+                      {{ item.translations?.id?.title || item.translations?.en?.title || 'Tanpa Judul' }}
+                    </span>
+                    <span v-if="item.kecamatanName" class="content-sub">
+                      📍 {{ item.kecamatanName }}
+                    </span>
+                  </div>
+                </td>
+                <td>
+                  <span class="badge badge-category">{{ item.categoryName || 'Umum' }}</span>
+                </td>
+                <td>
+                  <span
+                    class="badge"
+                    :class="item.translations?.id?.status === 'published' ? 'badge-published' : 'badge-draft'"
+                  >
+                    {{ item.translations?.id?.status || 'none' }}
+                  </span>
+                </td>
+                <td>
+                  <span
+                    class="badge"
+                    :class="item.translations?.en?.status === 'published' ? 'badge-published' : 'badge-draft'"
+                  >
+                    {{ item.translations?.en?.status || 'none' }}
+                  </span>
+                </td>
+                <td class="text-muted">
+                  {{ new Date(item.updatedAt || item.createdAt).toLocaleDateString('id-ID') }}
+                </td>
+                <td class="text-right">
+                  <div class="action-buttons">
+                    <router-link :to="`/contents/${item.id}/edit`" class="btn-sm btn-outline">
+                      Edit
+                    </router-link>
+                    <button @click="deleteContent(item)" class="btn-sm btn-danger">
+                      Hapus
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div v-if="totalItems > perPage" class="pagination-bar">
+          <span class="pagination-info">Menampilkan {{ items.length }} dari {{ totalItems }} artikel</span>
+          <div class="pagination-controls">
+            <button
+              class="btn-page"
+              :disabled="currentPage <= 1"
+              @click="currentPage--; loadContents()"
+            >
+              &larr; Sebelumnya
+            </button>
+            <span class="page-current">Halaman {{ currentPage }}</span>
+            <button
+              class="btn-page"
+              :disabled="currentPage * perPage >= totalItems"
+              @click="currentPage++; loadContents()"
+            >
+              Selanjutnya &rarr;
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </AppLayout>
+</template>
+
+<style scoped>
+.content-list-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.page-title {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.page-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.filters-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.search-form {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+  max-width: 400px;
+}
+
+.filter-group {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.input-control, .select-control {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  color: #1e293b;
+}
+
+.search-input {
+  width: 100%;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.55rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.btn-primary {
+  background: #059669;
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background: #047857;
+}
+
+.btn-secondary {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.btn-secondary:hover {
+  background: #e2e8f0;
+}
+
+.table-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.875rem;
+}
+
+.data-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.data-table td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.title-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.content-title {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.content-sub {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.2rem;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.badge-published {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.badge-draft {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.badge-category {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.text-muted {
+  color: #64748b;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.action-buttons {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+
+.btn-sm {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.775rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-outline {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.btn-outline:hover {
+  background: #f8fafc;
+}
+
+.btn-danger {
+  border: 1px solid #fecaca;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.btn-danger:hover {
+  background: #fca5a5;
+}
+
+.pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1.25rem;
+  border-top: 1px solid #f1f5f9;
+  font-size: 0.85rem;
+}
+
+.pagination-info {
+  color: #64748b;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-page {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: #334155;
+}
+
+.btn-page:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-current {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.loading-state, .empty-state {
+  padding: 4rem 1rem;
+  text-align: center;
+  color: #64748b;
+}
+
+.empty-icon {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+</style>

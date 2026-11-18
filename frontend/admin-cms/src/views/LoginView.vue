@@ -2,93 +2,252 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useNotificationStore } from '../stores/notification'
 
 const router = useRouter()
 const authStore = useAuthStore()
+const notificationStore = useNotificationStore()
 
 const email = ref('')
 const password = ref('')
+const showPassword = ref(false)
+const isLoading = ref(false)
 const errorMessage = ref('')
 
 async function handleLogin() {
+  errorMessage.value = ''
   if (!email.value || !password.value) {
-    errorMessage.value = 'Email dan password wajib diisi.'
+    errorMessage.value = 'Email dan kata sandi wajib diisi.'
     return
   }
-  // Phase 0 placeholder
-  authStore.setUser({
-    id: '1',
-    email: email.value,
-    displayName: 'Administrator',
-  })
-  await router.push('/dashboard')
+
+  isLoading.value = true
+  try {
+    await authStore.login(email.value, password.value)
+    notificationStore.success('Login Berhasil', `Selamat datang kembali, ${authStore.user?.displayName}!`)
+    router.push('/dashboard')
+  } catch (err: any) {
+    errorMessage.value = err.detail || 'Email atau kata sandi tidak valid.'
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 
 <template>
-  <main class="login-container">
+  <div class="login-page">
     <div class="login-card">
-      <h1>PidieKab Admin CMS</h1>
-      <p>Masuk ke portal administrasi internal.</p>
-
-      <div v-if="errorMessage" class="error-banner">
-        {{ errorMessage }}
+      <div class="card-header">
+        <div class="logo-circle">PK</div>
+        <h2 class="title">PidieKab Admin CMS</h2>
+        <p class="subtitle">Platform Manajemen Konten & Informasi Daerah</p>
       </div>
 
-      <form @submit.prevent="handleLogin">
-        <label for="email">Email</label>
-        <input id="email" v-model="email" type="email" required autocomplete="email" />
+      <form @submit.prevent="handleLogin" class="login-form">
+        <div v-if="errorMessage" class="error-alert">
+          {{ errorMessage }}
+        </div>
 
-        <label for="password">Password</label>
-        <input id="password" v-model="password" type="password" required autocomplete="current-password" />
+        <div class="form-group">
+          <label for="email">Alamat Email</label>
+          <input
+            id="email"
+            v-model="email"
+            type="email"
+            required
+            placeholder="admin@pidiekab.id"
+            autocomplete="email"
+            class="input-control"
+          />
+        </div>
 
-        <button type="submit">Masuk</button>
+        <div class="form-group">
+          <label for="password">Kata Sandi</label>
+          <div class="password-wrapper">
+            <input
+              id="password"
+              v-model="password"
+              :type="showPassword ? 'text' : 'password'"
+              required
+              placeholder="••••••••"
+              autocomplete="current-password"
+              class="input-control"
+            />
+            <button
+              type="button"
+              class="btn-toggle-pw"
+              @click="showPassword = !showPassword"
+              tabindex="-1"
+            >
+              {{ showPassword ? 'Sembunyikan' : 'Lihat' }}
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-submit" :disabled="isLoading">
+          <span v-if="isLoading">Memverifikasi...</span>
+          <span v-else>Masuk ke Panel Admin</span>
+        </button>
       </form>
+
+      <div class="card-footer">
+        <p>Akses terbatas hanya untuk administrator internal PidieKab.</p>
+      </div>
     </div>
-  </main>
+  </div>
 </template>
 
 <style scoped>
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.login-page {
   min-height: 100vh;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
+  padding: 1rem;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
+
 .login-card {
   width: 100%;
-  max-width: 400px;
-  padding: 2rem;
+  max-width: 420px;
   background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
+  padding: 2.25rem 2rem;
 }
-.error-banner {
-  background-color: #fee2e2;
-  color: #991b1b;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin-bottom: 1rem;
+
+.card-header {
+  text-align: center;
+  margin-bottom: 2rem;
 }
-form {
+
+.logo-circle {
+  width: 52px;
+  height: 52px;
+  background: #10b981;
+  color: #064e3b;
+  font-weight: 800;
+  font-size: 1.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  margin: 0 auto 1rem auto;
+}
+
+.title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.35rem 0;
+}
+
+.subtitle {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.login-form {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
 }
-input {
-  padding: 0.5rem;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
+
+.error-alert {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
-button {
-  padding: 0.75rem;
-  background-color: #047857;
-  color: #ffffff;
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.input-control {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: #0f172a;
+  transition: border-color 0.15s;
+}
+
+.input-control:focus {
+  outline: none;
+  border-color: #059669;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}
+
+.password-wrapper {
+  position: relative;
+  display: flex;
+}
+
+.password-wrapper .input-control {
+  width: 100%;
+  padding-right: 5rem;
+}
+
+.btn-toggle-pw {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
   border: none;
-  border-radius: 4px;
+  font-size: 0.75rem;
+  color: #059669;
   font-weight: 600;
   cursor: pointer;
+  padding: 0.25rem 0.5rem;
+}
+
+.btn-submit {
+  margin-top: 0.5rem;
+  background: #059669;
+  color: #ffffff;
+  border: none;
+  padding: 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.btn-submit:hover:not(:disabled) {
+  background: #047857;
+}
+
+.btn-submit:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.card-footer {
+  margin-top: 1.75rem;
+  text-align: center;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 1rem;
+}
+
+.card-footer p {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0;
 }
 </style>

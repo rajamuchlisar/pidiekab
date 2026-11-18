@@ -34,6 +34,7 @@ pnpm-debug.log*
 *.sql.gz
 /uploads/
 /media/
+/data/
 
 # Editor & OS files
 .DS_Store
