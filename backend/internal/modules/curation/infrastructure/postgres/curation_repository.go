@@ -274,4 +274,3 @@ func (r *CurationRepository) GetRandom(ctx context.Context, locale string, exclu
 
 	return items, nil
 }
-

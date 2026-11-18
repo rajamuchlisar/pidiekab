@@ -96,4 +96,3 @@ func writeProblem(w http.ResponseWriter, r *http.Request, status int, code, deta
 
 	_ = json.NewEncoder(w).Encode(body)
 }
-

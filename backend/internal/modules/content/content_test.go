@@ -204,4 +204,3 @@ func TestContentLifecycleIntegration(t *testing.T) {
 		t.Errorf("expected ErrContentNotFound after delete, got %v", err)
 	}
 }
-

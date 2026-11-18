@@ -129,4 +129,3 @@ func (r *SearchRepository) Search(ctx context.Context, p SearchParams) ([]domain
 
 	return results, totalItems, nil
 }
-

@@ -90,4 +90,3 @@ func TestSearchHTTPIntegration(t *testing.T) {
 		t.Errorf("unexpected meta in response: %+v", res.Meta)
 	}
 }
-

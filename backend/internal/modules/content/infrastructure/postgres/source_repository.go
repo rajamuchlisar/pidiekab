@@ -147,4 +147,3 @@ func (r *SourceRepository) ListByContentID(ctx context.Context, contentID int64)
 	}
 	return sources, rows.Err()
 }
-

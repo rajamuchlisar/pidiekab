@@ -157,4 +157,3 @@ func parseWebPDimensions(b []byte) (int, int, error) {
 		return 0, 0, fmt.Errorf("unsupported WebP chunk format: %s", formatChunk)
 	}
 }
-

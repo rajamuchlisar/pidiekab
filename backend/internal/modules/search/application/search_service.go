@@ -72,4 +72,3 @@ func (s *SearchService) Search(ctx context.Context, input SearchInput) (*domain.
 		},
 	}, nil
 }
-

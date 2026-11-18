@@ -232,4 +232,3 @@ func (r *ContentRepository) List(ctx context.Context, p FilterParams) ([]*domain
 
 	return items, totalItems, nil
 }
-

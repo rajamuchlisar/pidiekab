@@ -240,4 +240,3 @@ func (r *PageRepository) UpdateStatus(ctx context.Context, pageID int64, locale,
 	}
 	return nil
 }
-

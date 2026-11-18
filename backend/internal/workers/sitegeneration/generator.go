@@ -602,4 +602,3 @@ func (g *Generator) renderSitemap(
 
 	return os.WriteFile(filepath.Join(targetDir, "sitemap.xml"), []byte(sb.String()), 0644)
 }
-
