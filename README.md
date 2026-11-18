@@ -6,14 +6,15 @@ PidieKab adalah platform digital independen (bukan website resmi pemerintah) yan
 
 ---
 
-## Status Proyek — Phase 0: Repository & Development Foundation
+## Status Proyek — Production Ready (Phase 0 – Phase 9 Complete)
 
-- **Backend:** Go 1.24 (`net/http`, Go standard library, Modular Monolith)
-- **Database:** PostgreSQL 15+ (Didukung migrasi via Goose v3)
+- **Backend:** Go 1.24 (`net/http`, Go standard library, Modular Monolith Architecture)
+- **Database:** PostgreSQL 17 (Migrasi terkelola via Goose v3)
 - **Frontend Public Site:** Vue 3 + TypeScript + Vite + Static Site Generation (`vite-ssg`)
-- **Frontend Admin CMS:** Vue 3 + TypeScript + Vite (Single Page Application)
-- **Reverse Proxy:** **None** (Go bertindak sebagai satu-satunya application web server di production)
-- **CI / Quality Gate:** GitHub Actions (`.github/workflows/ci.yml`)
+- **Frontend Admin CMS:** Vue 3 + TypeScript + Vite (Single Page Application dengan Pinia & Vue Router)
+- **Web Server & TLS:** Native Go `net/http` dengan modern TLS 1.2+ listener dan port 80 HTTP-to-HTTPS redirect (tanpa Nginx/Apache/reverse proxy)
+- **Keamanan:** Argon2id password hashing, SHA-256 session tokens, double-submit CSRF, rate limiter, Content-Security-Policy (CSP), HSTS
+- **CI / Quality Gate:** GitHub Actions (`.github/workflows/ci.yml`) dengan 100% test passing di backend, frontend, dan database migrations
 
 ---
 
@@ -74,8 +75,14 @@ go run ./cmd/pidiekab
 ```
 Server akan aktif di `http://127.0.0.1:8080`.
 - Health Live: `GET http://127.0.0.1:8080/health/live` (mengembalikan 200 OK)
-- Health Ready: `GET http://127.0.0.1:8080/health/ready` (mengembalikan 503 Not Ready - Database belum tersambung pada Phase 0)
+- Health Ready: `GET http://127.0.0.1:8080/health/ready` (mengembalikan 200 OK jika PostgreSQL terkoneksi, 503 jika belum siap)
 - Public Root: `GET http://127.0.0.1:8080/` (301 redirect otomatis ke `/id/`)
+- Admin CMS: `GET http://127.0.0.1:8080/cms/` (Dashboard Administrasi PidieKab)
+
+Untuk membuat akun Administrator awal:
+```bash
+./bin/pidiekab admin create --email admin@pidiekab.id --name "Super Administrator" --password "Admin12345!"
+```
 
 ### 4. Menjalankan & Membangun Frontend Public Site (SSG)
 ```bash
