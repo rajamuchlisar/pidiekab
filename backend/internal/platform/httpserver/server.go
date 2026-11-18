@@ -152,8 +152,9 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 	})
 
 	// Standard middleware wrapping order:
-	// RequestID -> Recovery -> Logger -> SecurityHeaders -> ServeMux
+	// RequestID -> Recovery -> Logger -> SecurityHeaders -> Gzip -> ServeMux
 	var handler http.Handler = mux
+	handler = middleware.Gzip(handler)
 	handler = middleware.SecurityHeaders(handler)
 	handler = middleware.Logger(logger)(handler)
 	handler = middleware.Recovery(logger)(handler)
@@ -297,7 +298,7 @@ func serveCMSStatic(w http.ResponseWriter, r *http.Request, rootDir string) {
 }
 
 func applyCacheHeaders(w http.ResponseWriter, requestPath string) {
-	if strings.HasPrefix(requestPath, "/assets/") {
+	if strings.Contains(requestPath, "/assets/") {
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 	} else if strings.HasSuffix(requestPath, ".html") || strings.HasSuffix(requestPath, "/") {
 		w.Header().Set("Cache-Control", "public, max-age=0, must-revalidate")
