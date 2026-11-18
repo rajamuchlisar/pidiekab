@@ -64,6 +64,11 @@ if [ -d "deploy" ]; then
     cp -r deploy/* "${NEW_RELEASE_DIR}/deploy/"
 fi
 
+if [ -d "api" ]; then
+    mkdir -p "${NEW_RELEASE_DIR}/api"
+    cp -r api/* "${NEW_RELEASE_DIR}/api/"
+fi
+
 # Set proper ownership
 chown -R pidiekab:pidiekab "${NEW_RELEASE_DIR}"
 

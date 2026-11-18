@@ -1,0 +1,282 @@
+openapi: 3.1.0
+info:
+  title: PidieKab Platform API
+  version: 1.0.0
+  description: >
+    Production API contract for PidieKab regional discovery platform, public search, and Admin CMS.
+    Public content pages are primarily delivered as pre-rendered SSG files by the Go native HTTP server.
+servers:
+  - url: /
+    description: Current host server root
+  - url: /api/v1
+    description: API v1 root
+tags:
+  - name: Platform Health
+  - name: Public Search
+  - name: Admin Auth
+  - name: Admin Content
+  - name: Admin Categories
+  - name: Admin Media
+  - name: Admin Curation
+  - name: Admin Static Pages
+  - name: Admin Settings
+  - name: Admin Redirects
+  - name: Admin Audit
+paths:
+  /health/live:
+    get:
+      tags: [Platform Health]
+      summary: Liveness check probe
+      security: []
+      responses:
+        '200':
+          description: Service process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /health/ready:
+    get:
+      tags: [Platform Health]
+      summary: Readiness check probe (verifies PostgreSQL database connection pool)
+      security: []
+      responses:
+        '200':
+          description: Service is ready to handle traffic
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+        '503':
+          description: Service or database is unavailable
+
+  /health/metrics:
+    get:
+      tags: [Platform Health]
+      summary: Runtime performance metrics, database status, and memory stats
+      security: []
+      responses:
+        '200':
+          description: Telemetry data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: healthy }
+                  uptime_seconds: { type: integer, example: 3600 }
+                  database: { type: string, example: connected }
+                  goroutines: { type: integer, example: 18 }
+                  mem_alloc_mb: { type: number, example: 12.4 }
+                  mem_sys_mb: { type: number, example: 28.5 }
+                  timestamp: { type: string, format: date-time }
+
+  /api/v1/public/{locale}/search:
+    get:
+      tags: [Public Search]
+      summary: Search published regional content with PostgreSQL full-text search
+      parameters:
+        - name: locale
+          in: path
+          required: true
+          schema: { type: string, enum: [id, en] }
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 2, maxLength: 120 }
+        - name: category
+          in: query
+          required: false
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, default: 10 }
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query: { type: string }
+                  locale: { type: string }
+                  total: { type: integer }
+                  page: { type: integer }
+                  per_page: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        title: { type: string }
+                        slug: { type: string }
+                        category_slug: { type: string }
+                        summary: { type: string }
+                        url: { type: string }
+
+  /api/v1/admin/auth/login:
+    post:
+      tags: [Admin Auth]
+      summary: Authenticate administrator and issue secure session cookie
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Logged in successfully
+          headers:
+            Set-Cookie:
+              schema: { type: string }
+        '401':
+          description: Invalid email or password
+        '429':
+          description: Too many failed login attempts (rate limited)
+
+  /api/v1/admin/auth/logout:
+    post:
+      tags: [Admin Auth]
+      summary: Revoke session token and clear cookies
+      responses:
+        '200':
+          description: Session terminated
+
+  /api/v1/admin/auth/me:
+    get:
+      tags: [Admin Auth]
+      summary: Retrieve current administrator identity and CSRF token
+      responses:
+        '200':
+          description: Current admin session info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: integer }
+                  email: { type: string }
+                  display_name: { type: string }
+                  csrf_token: { type: string }
+
+  /api/v1/admin/redirects:
+    get:
+      tags: [Admin Redirects]
+      summary: List all active permanent 301 URL redirects
+      responses:
+        '200':
+          description: List of URL redirects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    old_path: { type: string }
+                    new_path: { type: string }
+                    status_code: { type: integer }
+                    created_at: { type: string, format: date-time }
+    post:
+      tags: [Admin Redirects]
+      summary: Register a new permanent 301 URL redirect rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_path, new_path]
+              properties:
+                old_path: { type: string }
+                new_path: { type: string }
+                status_code: { type: integer, default: 301 }
+      responses:
+        '201':
+          description: Redirect created successfully
+
+  /api/v1/admin/redirects/{id}:
+    delete:
+      tags: [Admin Redirects]
+      summary: Delete an active URL redirect rule
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204':
+          description: Redirect deleted
+
+  /api/v1/admin/audit-logs:
+    get:
+      tags: [Admin Audit]
+      summary: Retrieve paginated immutable security and data modification audit trail
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: entity_type
+          in: query
+          schema: { type: string }
+        - name: admin_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Paginated audit records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        admin_id: { type: integer, nullable: true }
+                        admin_email: { type: string, nullable: true }
+                        admin_display_name: { type: string, nullable: true }
+                        action: { type: string }
+                        entity_type: { type: string }
+                        entity_id: { type: integer, nullable: true }
+                        metadata: { type: object }
+                        ip_address: { type: string, nullable: true }
+                        created_at: { type: string, format: date-time }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+
+components:
+  securitySchemes:
+    AdminSession:
+      type: apiKey
+      in: cookie
+      name: pidiekab_session
+security:
+  - AdminSession: []

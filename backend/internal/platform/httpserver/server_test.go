@@ -364,3 +364,21 @@ func TestRedirectFinderIntegration(t *testing.T) {
 		t.Errorf("expected redirect location '/id/wisata-alam/pantai-pelangi/', got %q", loc)
 	}
 }
+
+func TestOpenAPIEndpoint(t *testing.T) {
+	handler := newTestServerWithStaticAndDB("", "", nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/openapi.yaml", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	// Since api/openapi.yaml exists at project root, it should resolve and return 200 OK
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for /api/v1/openapi.yaml, got %d", rec.Code)
+	}
+
+	contentType := rec.Header().Get("Content-Type")
+	if contentType != "application/yaml; charset=utf-8" {
+		t.Errorf("expected application/yaml; charset=utf-8, got %q", contentType)
+	}
+}

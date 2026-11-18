@@ -115,6 +115,27 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 		})
 	})
 
+	// 3. OpenAPI 3.1 Contract Specification
+	mux.HandleFunc("GET /api/v1/openapi.yaml", func(w http.ResponseWriter, r *http.Request) {
+		candidates := []string{
+			"api/openapi.yaml",
+			"../api/openapi.yaml",
+			"../../api/openapi.yaml",
+			"../../../api/openapi.yaml",
+			"../../../../api/openapi.yaml",
+			"/opt/pidiekab/current/api/openapi.yaml",
+		}
+		for _, p := range candidates {
+			if stat, err := os.Stat(p); err == nil && !stat.IsDir() {
+				w.Header().Set("Content-Type", "application/yaml; charset=utf-8")
+				w.Header().Set("Cache-Control", "public, max-age=3600")
+				http.ServeFile(w, r, p)
+				return
+			}
+		}
+		http.NotFound(w, r)
+	})
+
 	// 3. Module routes (Identity, Content, Redirects, etc.)
 	var releaseLocator ReleaseLocator
 	var redirectFinder RedirectFinder
