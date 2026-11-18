@@ -32,6 +32,7 @@ pnpm-debug.log*
 # Database & local media
 *.dump
 *.sql.gz
+*.tar.gz
 /uploads/
 /media/
 /data/
@@ -48,3 +49,4 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+build/

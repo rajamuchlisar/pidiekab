@@ -135,8 +135,8 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 func (g *Generator) fetchSiteContext(ctx context.Context) (*SiteContext, error) {
 	sc := &SiteContext{
 		BaseURL:    g.baseURL,
-		SiteNameID: "Portal Wisata & Budaya Kabupaten Pidie",
-		SiteNameEN: "Pidie Regency Tourism & Cultural Portal",
+		SiteNameID: "PidieKab — Platform Promosi & Potensi Daerah Pidie",
+		SiteNameEN: "PidieKab — Regional Promotion & Discovery Platform",
 	}
 
 	query := `
@@ -416,7 +416,7 @@ func (g *Generator) renderLocaleSite(
         </section>
     </main>
     <footer>
-        <p>&copy; Pemerintah Kabupaten Pidie — Disparbud. Hak Cipta Dilindungi.</p>
+        <p>&copy; PidieKab — Inisiatif Platform Digital Independen Masyarakat Pidie. Bukan website resmi pemerintah.</p>
     </footer>
 </body>
 </html>`
@@ -464,7 +464,7 @@ func (g *Generator) renderLocaleSite(
         </article>
     </main>
     <footer>
-        <p>&copy; Pemerintah Kabupaten Pidie — Disparbud.</p>
+        <p>&copy; PidieKab — Independent Regional Promotion & Visitor Discovery Platform. Not an official government website.</p>
     </footer>
 </body>
 </html>`,

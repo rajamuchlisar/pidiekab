@@ -88,7 +88,7 @@ func TestSettingsLifecycle(t *testing.T) {
 	// 2. Update general settings
 	adminID := int64(1)
 	updateGen := settingsApp.UpdateGeneralInput{
-		ContactEmail:   "disparbud@pidiekab.go.id",
+		ContactEmail:   "kontak@pidiekab.id",
 		ContactPhone:   "+62 653 21234",
 		ContactAddress: "Kota Sigli, Kabupaten Pidie, Aceh",
 		SocialLinks:    json.RawMessage(`{"instagram":"@pesonapidie"}`),
@@ -97,15 +97,15 @@ func TestSettingsLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to update general settings: %v", err)
 	}
-	if res.ContactEmail != "disparbud@pidiekab.go.id" {
+	if res.ContactEmail != "kontak@pidiekab.id" {
 		t.Errorf("expected email updated, got %s", res.ContactEmail)
 	}
 
 	// 3. Upsert Indonesian translation
 	updateTransID := settingsApp.UpdateTranslationInput{
-		SiteName:              "Pidie Tourism Portal",
+		SiteName:              "PidieKab",
 		Tagline:               "Pesona Alam dan Budaya Pidie",
-		Description:           "Portal resmi informasi pariwisata dan kebudayaan Kabupaten Pidie.",
+		Description:           "Platform independen promosi potensi daerah Kabupaten Pidie.",
 		DefaultSeoTitle:       "Wisata Pidie — Keindahan Alam & Budaya",
 		DefaultSeoDescription: "Temukan destinasi wisata terbaik di Pidie.",
 	}

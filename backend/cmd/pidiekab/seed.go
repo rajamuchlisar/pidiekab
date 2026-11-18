@@ -173,10 +173,10 @@ func seedCategories(ctx context.Context, pool *pgxpool.Pool, adminID int64) map[
 			key:    "layanan-publik",
 			idName: "Layanan & Info Publik",
 			idSlug: "layanan-publik",
-			idDesc: "Informasi resmi pemerintah kabupaten, panduan layanan kependudukan, kesehatan, dan pariwisata.",
+			idDesc: "Panduan informasi publik, sarana fasilitas umum, dan kontak darurat di wilayah Kabupaten Pidie.",
 			enName: "Public Information & Services",
 			enSlug: "public-services",
-			enDesc: "Official public guides, visitor guidance, and community service contacts.",
+			enDesc: "Public visitor guidance, emergency contacts, and community amenities in Pidie.",
 		},
 	}
 
@@ -218,14 +218,13 @@ func seedCategories(ctx context.Context, pool *pgxpool.Pool, adminID int64) map[
 
 func seedSettings(ctx context.Context, pool *pgxpool.Pool, adminID int64) {
 	socials, _ := json.Marshal(map[string]string{
-		"facebook":  "https://facebook.com/PemerintahKabupatenPidie",
 		"instagram": "https://instagram.com/pidiekab",
-		"youtube":   "https://youtube.com/@humaspidie",
+		"twitter":   "https://twitter.com/pidiekab",
 	})
 
 	_, _ = pool.Exec(ctx, `
 		INSERT INTO site_settings (id, contact_email, contact_phone, contact_address, social_links, updated_by, updated_at)
-		VALUES (1, 'diskominfo@pidiekab.go.id', '+62 653 21123', 'Jl. Teuku Chik Ditiro No. 1, Kota Sigli, Kabupaten Pidie, Aceh 24112', $1, $2, NOW())
+		VALUES (1, 'kontak@pidiekab.id', '+62 653 21123', 'Sigli, Kabupaten Pidie, Aceh, Indonesia', $1, $2, NOW())
 		ON CONFLICT (id) DO UPDATE SET
 			contact_email = EXCLUDED.contact_email,
 			contact_phone = EXCLUDED.contact_phone,
@@ -237,10 +236,10 @@ func seedSettings(ctx context.Context, pool *pgxpool.Pool, adminID int64) {
 
 	_, _ = pool.Exec(ctx, `
 		INSERT INTO site_setting_translations (site_settings_id, locale, site_name, tagline, description, default_seo_title, default_seo_description)
-		VALUES (1, 'id', 'Portal Resmi Pidie', 'The Heritage of Aceh',
-			'Portal editorial mandiri dan eksplorasi destinasi Kabupaten Pidie, Provinsi Aceh.',
-			'PidieKab - Pesona Alam & Warisan Sejarah Pidie',
-			'Eksplorasi destinasi wisata, cagar budaya, kuliner khas, dan informasi publik Kabupaten Pidie.')
+		VALUES (1, 'id', 'PidieKab', 'Eksplorasi Pesona Wisata, Kuliner & Budaya Kabupaten Pidie',
+			'Platform digital independen masyarakat untuk mempromosikan potensi pariwisata, kekayaan budaya, kuliner legendaris, dan UMKM Kabupaten Pidie, Aceh. Bukan situs resmi pemerintah.',
+			'PidieKab — Direktori Wisata, Kuliner & Budaya Kabupaten Pidie',
+			'Portal independen eksplorasi destinasi wisata alam, cagar budaya, kuliner khas, dan potensi daerah Kabupaten Pidie.')
 		ON CONFLICT (site_settings_id, locale) DO UPDATE SET
 			site_name = EXCLUDED.site_name,
 			tagline = EXCLUDED.tagline,
@@ -251,10 +250,10 @@ func seedSettings(ctx context.Context, pool *pgxpool.Pool, adminID int64) {
 
 	_, _ = pool.Exec(ctx, `
 		INSERT INTO site_setting_translations (site_settings_id, locale, site_name, tagline, description, default_seo_title, default_seo_description)
-		VALUES (1, 'en', 'Discover Pidie', 'The Heritage of Aceh',
-			'The editorial visitor discovery portal for Pidie Regency, Aceh Province, Indonesia.',
-			'Discover Pidie - Nature, Heritage & Culture',
-			'Discover historical landmarks, nature destinations, traditional culinary treasures, and public information in Pidie.')
+		VALUES (1, 'en', 'PidieKab', 'Explore the Beauty, Culinary & Culture of Pidie Regency',
+			'An independent community digital platform promoting tourism, cultural heritage, culinary treasures, and local crafts of Pidie Regency, Aceh. Not an official government website.',
+			'PidieKab — Tourism, Culinary & Heritage of Pidie Regency',
+			'Independent visitor discovery platform showcasing natural landscapes, cultural heritage, and culinary treasures of Pidie.')
 		ON CONFLICT (site_settings_id, locale) DO UPDATE SET
 			site_name = EXCLUDED.site_name,
 			tagline = EXCLUDED.tagline,

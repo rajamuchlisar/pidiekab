@@ -173,7 +173,7 @@ func TestMediaUploadAndServe(t *testing.T) {
 	_, _ = part.Write(pngBytes)
 	_ = writer.WriteField("alt_id", "Pantai Sigli")
 	_ = writer.WriteField("alt_en", "Sigli Beach")
-	_ = writer.WriteField("attribution", "Disparbud Pidie")
+	_ = writer.WriteField("attribution", "Dokumentasi Komunitas PidieKab")
 	_ = writer.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/media", &body)
