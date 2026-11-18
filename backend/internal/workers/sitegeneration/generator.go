@@ -289,8 +289,15 @@ func renderBodyBlocksToHTML(bodyBytes []byte) template.HTML {
 		return template.HTML("<p>" + template.HTMLEscapeString(string(bodyBytes)) + "</p>")
 	}
 
+	if htmlStr, ok := parsed["html"].(string); ok && htmlStr != "" {
+		return template.HTML(htmlStr)
+	}
+
 	blocks, ok := parsed["blocks"].([]any)
 	if !ok {
+		if mdStr, ok := parsed["markdown"].(string); ok && mdStr != "" {
+			return template.HTML("<p>" + template.HTMLEscapeString(mdStr) + "</p>")
+		}
 		return ""
 	}
 

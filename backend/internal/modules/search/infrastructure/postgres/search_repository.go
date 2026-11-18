@@ -68,7 +68,7 @@ func (r *SearchRepository) Search(ctx context.Context, p SearchParams) ([]domain
 			c.id, ct.title, ct.slug,
 			cat_t.slug, cat_t.name,
 			d.name, v.name,
-			ts_rank_cd(ct.search_vector, plainto_tsquery($2, $3)) AS rank
+			COALESCE(ts_rank_cd(ct.search_vector, plainto_tsquery($2, $3)), 0.0) AS rank
 		FROM contents c
 		JOIN content_translations ct ON ct.content_id = c.id
 		JOIN categories cat ON cat.id = c.category_id AND cat.is_active = TRUE

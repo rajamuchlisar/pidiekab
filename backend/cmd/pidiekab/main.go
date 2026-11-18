@@ -60,10 +60,16 @@ func main() {
 	}))
 	slog.SetDefault(logger)
 
-	// Check for CLI subcommands (e.g. `pidiekab admin create ...`)
-	if len(os.Args) > 1 && os.Args[1] == "admin" {
-		handleAdminCLI(cfg, logger)
-		return
+	// Check for CLI subcommands (e.g. `pidiekab admin create ...` or `pidiekab seed`)
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "admin":
+			handleAdminCLI(cfg, logger)
+			return
+		case "seed":
+			handleSeedCLI(cfg, logger)
+			return
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -40,6 +40,8 @@ type Config struct {
 // Load reads configuration from environment variables, applies validated defaults,
 // and enforces strict validation. Startup fails explicitly if required values are invalid.
 func Load() (Config, error) {
+	loadDotEnvIfExists()
+
 	envName := strings.ToLower(env("PIDIEKAB_ENV", "development"))
 	switch envName {
 	case "development", "test", "production":
@@ -245,4 +247,33 @@ func ParseBoolEnv(key string, fallback bool) (bool, error) {
 		return false, fmt.Errorf("%s: %w", key, err)
 	}
 	return parsed, nil
+}
+
+// loadDotEnvIfExists reads a .env file from the current directory or parent directory if present,
+// populating environment variables that have not already been explicitly defined.
+func loadDotEnvIfExists() {
+	candidates := []string{".env", "../.env"}
+	for _, path := range candidates {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		for _, rawLine := range lines {
+			line := strings.TrimSpace(rawLine)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				k := strings.TrimSpace(parts[0])
+				v := strings.TrimSpace(parts[1])
+				v = strings.Trim(v, `"'`)
+				if _, set := os.LookupEnv(k); !set {
+					_ = os.Setenv(k, v)
+				}
+			}
+		}
+		break
+	}
 }
