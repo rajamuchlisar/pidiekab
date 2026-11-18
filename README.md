@@ -81,7 +81,7 @@ Server akan aktif di `http://127.0.0.1:8080`.
 
 Untuk membuat akun Administrator awal:
 ```bash
-./bin/pidiekab admin create --email admin@pidiekab.id --name "Super Administrator" --password "Admin12345!"
+./bin/pidiekab admin create --email admin@pidiekab.go.id --name "Super Administrator" --password "Admin12345!"
 ```
 
 ### 4. Inisialisasi Data Baseline & Konten Autentik (Seed CLI)
