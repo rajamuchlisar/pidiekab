@@ -28,6 +28,11 @@ type JobEnqueuer interface {
 	Enqueue(ctx context.Context, tx pgx.Tx, jobType string, payload any) (int64, error)
 }
 
+// RedirectRecorder records a permanent URL redirect when published content slugs change.
+type RedirectRecorder interface {
+	UpsertRedirect(ctx context.Context, oldPath, newPath string, statusCode int, adminID *int64, notes *string) error
+}
+
 // ContentService orchestrates content operations.
 type ContentService struct {
 	contentRepo     *postgres.ContentRepository
@@ -36,6 +41,7 @@ type ContentService struct {
 	categoryChecker CategoryChecker
 	audit           AuditRecorder
 	enqueuer        JobEnqueuer
+	redirects       RedirectRecorder
 }
 
 // NewContentService creates a new ContentService.
@@ -58,6 +64,11 @@ func NewContentService(
 // SetJobEnqueuer attaches a generation job enqueuer to trigger atomic builds on publication.
 func (s *ContentService) SetJobEnqueuer(enqueuer JobEnqueuer) {
 	s.enqueuer = enqueuer
+}
+
+// SetRedirectRecorder attaches a redirect recorder for automatic 301 URL migration.
+func (s *ContentService) SetRedirectRecorder(recorder RedirectRecorder) {
+	s.redirects = recorder
 }
 
 // CreateContent validates category and coordinates, then persists a new content record.
@@ -220,8 +231,33 @@ func (s *ContentService) SaveTranslation(
 	}
 
 	// Verify parent content exists
-	if _, err := s.contentRepo.GetByID(ctx, contentID); err != nil {
+	parentContent, err := s.contentRepo.GetByID(ctx, contentID)
+	if err != nil {
 		return nil, err
+	}
+
+	// If this translation was already published and its slug changes, register a 301 redirect
+	if s.redirects != nil {
+		if existing, err := s.translationRepo.GetByContentAndLocale(ctx, contentID, locale); err == nil && existing != nil {
+			if existing.Slug != slug && (existing.Status == domain.StatusPublished || existing.PublishedAt != nil) {
+				if cat, err := s.categoryChecker.GetCategory(ctx, parentContent.CategoryID); err == nil && cat != nil {
+					catSlug := ""
+					if cat.Translations != nil {
+						if tr, ok := cat.Translations[locale]; ok && tr != nil && tr.Slug != "" {
+							catSlug = tr.Slug
+						} else if tr, ok := cat.Translations["id"]; ok && tr != nil && tr.Slug != "" {
+							catSlug = tr.Slug
+						}
+					}
+					if catSlug != "" {
+						oldPath := fmt.Sprintf("/%s/%s/%s/", locale, catSlug, existing.Slug)
+						newPath := fmt.Sprintf("/%s/%s/%s/", locale, catSlug, slug)
+						notes := fmt.Sprintf("Auto-generated from content translation slug rename (Content #%d, %s)", contentID, locale)
+						_ = s.redirects.UpsertRedirect(ctx, oldPath, newPath, 301, &adminID, &notes)
+					}
+				}
+			}
+		}
 	}
 
 	t := &domain.ContentTranslation{

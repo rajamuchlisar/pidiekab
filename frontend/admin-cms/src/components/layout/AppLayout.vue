@@ -76,6 +76,11 @@ async function handleLogout() {
           <span class="nav-icon">👥</span>
           <span class="nav-label">Administrator</span>
         </router-link>
+
+        <router-link to="/audit-logs" class="nav-item" :class="{ active: currentRouteName === 'audit-logs' }">
+          <span class="nav-icon">🛡️</span>
+          <span class="nav-label">Audit Trail</span>
+        </router-link>
       </nav>
 
       <div class="sidebar-footer">

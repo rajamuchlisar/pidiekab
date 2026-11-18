@@ -141,3 +141,14 @@ func (r *RedirectRepository) Delete(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+// UpsertRedirect is a convenience helper for modules recording redirects.
+func (r *RedirectRepository) UpsertRedirect(ctx context.Context, oldPath, newPath string, statusCode int, adminID *int64, _ *string) error {
+	red := &domain.Redirect{
+		OldPath:    oldPath,
+		NewPath:    newPath,
+		StatusCode: statusCode,
+		CreatedBy:  adminID,
+	}
+	return r.Upsert(ctx, red)
+}

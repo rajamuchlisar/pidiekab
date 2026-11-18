@@ -12,6 +12,7 @@ import StaticPagesView from '../views/staticpages/StaticPagesView.vue'
 import SettingsView from '../views/settings/SettingsView.vue'
 import AdminsView from '../views/admins/AdminsView.vue'
 import RedirectsView from '../views/redirects/RedirectsView.vue'
+import AuditLogsView from '../views/audit/AuditLogsView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -89,6 +90,12 @@ const routes: RouteRecordRaw[] = [
     name: 'redirects',
     component: RedirectsView,
     meta: { requiresAuth: true, title: 'URL Redirects' },
+  },
+  {
+    path: '/audit-logs',
+    name: 'audit-logs',
+    component: AuditLogsView,
+    meta: { requiresAuth: true, title: 'Audit Trail' },
   },
 ]
 

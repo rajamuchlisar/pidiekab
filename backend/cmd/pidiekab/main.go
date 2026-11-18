@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	auditPostgres "pidiekab/internal/modules/audit/infrastructure/postgres"
+	auditHttp "pidiekab/internal/modules/audit/transport/http"
 	categoryApp "pidiekab/internal/modules/category/application"
 	categoryPostgres "pidiekab/internal/modules/category/infrastructure/postgres"
 	categoryHttp "pidiekab/internal/modules/category/transport/http"
@@ -203,6 +204,12 @@ func main() {
 		redirectRepo := redirectPostgres.NewRedirectRepository(dbPool)
 		redirectHandler := redirectHttp.NewRedirectHandler(redirectRepo, authService)
 		registrars = append(registrars, redirectHandler)
+		contentService.SetRedirectRecorder(redirectRepo)
+		pageService.SetRedirectRecorder(redirectRepo)
+
+		// 13. System Audit Logs
+		auditHandler := auditHttp.NewAuditHandler(auditRepo, authService)
+		registrars = append(registrars, auditHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}

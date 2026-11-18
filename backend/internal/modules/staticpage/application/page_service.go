@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -20,10 +21,16 @@ type JobEnqueuer interface {
 	Enqueue(ctx context.Context, tx pgx.Tx, jobType string, payload any) (int64, error)
 }
 
+// RedirectRecorder records a permanent URL redirect when published page slugs change.
+type RedirectRecorder interface {
+	UpsertRedirect(ctx context.Context, oldPath, newPath string, statusCode int, adminID *int64, notes *string) error
+}
+
 type PageService struct {
-	repo     *postgres.PageRepository
-	audit    AuditRecorder
-	enqueuer JobEnqueuer
+	repo      *postgres.PageRepository
+	audit     AuditRecorder
+	enqueuer  JobEnqueuer
+	redirects RedirectRecorder
 }
 
 func NewPageService(repo *postgres.PageRepository, audit AuditRecorder) *PageService {
@@ -32,6 +39,10 @@ func NewPageService(repo *postgres.PageRepository, audit AuditRecorder) *PageSer
 
 func (s *PageService) SetJobEnqueuer(enqueuer JobEnqueuer) {
 	s.enqueuer = enqueuer
+}
+
+func (s *PageService) SetRedirectRecorder(recorder RedirectRecorder) {
+	s.redirects = recorder
 }
 
 func (s *PageService) CreatePage(ctx context.Context, adminID int64, pageKey string) (*domain.StaticPage, error) {
@@ -85,11 +96,27 @@ func (s *PageService) SaveTranslation(ctx context.Context, adminID int64, pageID
 		return nil, err
 	}
 
+	newSlug := strings.TrimSpace(input.Slug)
+
+	// Check if existing published page is having its slug changed
+	if s.redirects != nil {
+		if pageDetail, err := s.repo.GetPageByID(ctx, pageID); err == nil && pageDetail != nil {
+			if existing, ok := pageDetail.Translations[locale]; ok && existing != nil {
+				if existing.Slug != newSlug && (existing.Status == domain.StatusPublished || existing.PublishedAt != nil) {
+					oldPath := fmt.Sprintf("/%s/%s/", locale, existing.Slug)
+					newPath := fmt.Sprintf("/%s/%s/", locale, newSlug)
+					notes := fmt.Sprintf("Auto-generated from static page slug rename (Page #%d, %s)", pageID, locale)
+					_ = s.redirects.UpsertRedirect(ctx, oldPath, newPath, 301, &adminID, &notes)
+				}
+			}
+		}
+	}
+
 	params := postgres.UpsertTranslationParams{
 		StaticPageID:   pageID,
 		Locale:         locale,
 		Title:          strings.TrimSpace(input.Title),
-		Slug:           strings.TrimSpace(input.Slug),
+		Slug:           newSlug,
 		Body:           input.Body,
 		SeoTitle:       strings.TrimSpace(input.SeoTitle),
 		SeoDescription: strings.TrimSpace(input.SeoDescription),
