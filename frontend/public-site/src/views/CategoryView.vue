@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import { CATEGORIES, CONTENTS } from '../data/fixtures'
+import SiteHeader from '../components/layout/SiteHeader.vue'
+import SiteFooter from '../components/layout/SiteFooter.vue'
 
 const route = useRoute()
 const locale = computed<'id' | 'en'>(() => (route.path.startsWith('/en') ? 'en' : 'id'))
@@ -83,93 +85,188 @@ useHead({
 </script>
 
 <template>
-  <div class="page-container">
-    <nav class="breadcrumb">
-      <RouterLink :to="`/${locale}/`">{{ isId ? 'Beranda' : 'Home' }}</RouterLink>
-      <span> / </span>
-      <span>{{ catTranslation?.name }}</span>
-    </nav>
+  <div class="site-layout">
+    <SiteHeader />
 
-    <header class="cat-header" v-if="catTranslation">
-      <h1>{{ catTranslation.name }}</h1>
-      <p>{{ catTranslation.description }}</p>
-    </header>
+    <main class="page-container">
+      <nav class="breadcrumb">
+        <RouterLink :to="`/${locale}/`">{{ isId ? 'Beranda' : 'Home' }}</RouterLink>
+        <span> / </span>
+        <span>{{ catTranslation?.name }}</span>
+      </nav>
 
-    <main class="item-list">
-      <div v-if="items.length === 0" class="empty">
-        {{ isId ? 'Belum ada konten published.' : 'No published content yet.' }}
-      </div>
-      <div v-else class="cards">
-        <article v-for="item in items" :key="item.id" class="card">
-          <h2>{{ isId ? item.translations.id.title : item.translations.en.title }}</h2>
-          <p>{{ isId ? item.translations.id.description : item.translations.en.description }}</p>
-          <RouterLink
-            :to="`/${locale}/${catTranslation?.slug}/${isId ? item.translations.id.slug : item.translations.en.slug}/`"
-            class="read-more"
-          >
-            {{ isId ? 'Baca Selengkapnya →' : 'Read Detail →' }}
-          </RouterLink>
-        </article>
-      </div>
+      <header class="cat-header" v-if="catTranslation">
+        <span class="cat-tag">{{ isId ? 'Kategori Eksplorasi' : 'Discovery Category' }}</span>
+        <h1>{{ catTranslation.name }}</h1>
+        <p>{{ catTranslation.description }}</p>
+      </header>
+
+      <section class="item-list">
+        <div v-if="items.length === 0" class="empty">
+          <p>{{ isId ? 'Belum ada konten published pada kategori ini.' : 'No published content yet in this category.' }}</p>
+        </div>
+
+        <div v-else class="content-grid">
+          <article v-for="item in items" :key="item.id" class="content-card">
+            <div class="card-thumb">
+              <div class="photo-placeholder">🏔️ Foto Terverifikasi</div>
+            </div>
+            <div class="card-content">
+              <h3 class="card-title">{{ item.translations[locale].title }}</h3>
+              <p class="card-desc">{{ item.translations[locale].description }}</p>
+              <RouterLink
+                :to="`/${locale}/${catTranslation?.slug}/${item.translations[locale].slug}/`"
+                class="card-link"
+              >
+                {{ isId ? 'Baca Selengkapnya →' : 'Read Discovery →' }}
+              </RouterLink>
+            </div>
+          </article>
+        </div>
+      </section>
     </main>
+
+    <SiteFooter />
   </div>
 </template>
 
 <style scoped>
-.page-container {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 1.5rem;
-  font-family: system-ui, -apple-system, sans-serif;
-  color: #1f2937;
-}
-.breadcrumb {
-  margin-bottom: 1.5rem;
-  font-size: 0.9rem;
-  color: #6b7280;
-}
-.breadcrumb a {
-  color: #065f46;
-  text-decoration: none;
-}
-.cat-header {
-  margin-bottom: 2rem;
-  border-bottom: 1px solid #e5e7eb;
-  padding-bottom: 1rem;
-}
-.cat-header h1 {
-  font-size: 2rem;
-  color: #111827;
-  margin-bottom: 0.5rem;
-}
-.cat-header p {
-  font-size: 1.1rem;
-  color: #4b5563;
-}
-.cards {
+.site-layout {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
+  background: #fdfdfd;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #1e293b;
+}
+
+.page-container {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem;
+  flex: 1;
+}
+
+.breadcrumb {
+  margin-bottom: 1.5rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.breadcrumb a {
+  color: #064e3b;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.cat-header {
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.cat-tag {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #059669;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.35rem;
+}
+
+.cat-header h1 {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 0.5rem 0;
+  letter-spacing: -0.02em;
+}
+
+.cat-header p {
+  font-size: 1.05rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.content-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1.5rem;
 }
-.card {
-  padding: 1.5rem;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+
+.content-card {
   background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
-.card h2 {
-  font-size: 1.35rem;
-  margin-bottom: 0.5rem;
-  color: #065f46;
+
+.card-thumb {
+  height: 180px;
+  background: linear-gradient(135deg, #064e3b 0%, #10b981 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.card p {
-  color: #4b5563;
-  margin-bottom: 1rem;
+
+.photo-placeholder {
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.25);
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+}
+
+.card-content {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.5rem 0;
+  line-height: 1.35;
+}
+
+.card-desc {
+  font-size: 0.875rem;
   line-height: 1.5;
+  color: #64748b;
+  margin: 0 0 1.25rem 0;
+  flex: 1;
 }
-.read-more {
-  color: #047857;
+
+.card-link {
+  color: #059669;
   font-weight: 600;
   text-decoration: none;
+  font-size: 0.875rem;
+}
+
+.card-link:hover {
+  text-decoration: underline;
+}
+
+.empty {
+  padding: 4rem 1rem;
+  text-align: center;
+  color: #64748b;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
 }
 </style>

@@ -2,6 +2,7 @@ import type { RouteRecordRaw } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import CategoryView from '../views/CategoryView.vue'
 import DetailView from '../views/DetailView.vue'
+import SearchView from '../views/SearchView.vue'
 
 export const routes: RouteRecordRaw[] = [
   {
@@ -17,6 +18,16 @@ export const routes: RouteRecordRaw[] = [
     path: '/en/',
     name: 'home-en',
     component: HomeView,
+  },
+  {
+    path: '/id/search/',
+    name: 'search-id',
+    component: SearchView,
+  },
+  {
+    path: '/en/search/',
+    name: 'search-en',
+    component: SearchView,
   },
   {
     path: '/id/:categorySlug/',
