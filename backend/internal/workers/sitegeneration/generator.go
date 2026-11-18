@@ -344,10 +344,393 @@ func (g *Generator) renderLocaleSite(
 
 	siteName := sc.SiteNameID
 	tagline := sc.TaglineID
+	backHomeText := "&larr; Kembali ke Beranda"
+	sectionTitle := "Destinasi & Kebudayaan Pidie"
+	heroSubtitle := "Jelajahi keindahan alam, kekayaan budaya, dan kuliner khas Kabupaten Pidie, Aceh."
+	readMoreText := "Selengkapnya &rarr;"
+	locationLabel := "Lokasi"
+	sourcesHeader := "Sumber & Referensi Terverifikasi:"
+	footerText := "&copy; PidieKab — Inisiatif Platform Digital Independen Masyarakat Pidie. Bukan website resmi pemerintah."
+
+	idClass := "active"
+	enClass := ""
 	if locale == "en" {
 		siteName = sc.SiteNameEN
 		tagline = sc.TaglineEN
+		backHomeText = "&larr; Back to Home"
+		sectionTitle = "Pidie Destinations & Culture"
+		heroSubtitle = "Discover the natural splendor, culinary treasures, and cultural heritage of Pidie, Aceh."
+		readMoreText = "Explore &rarr;"
+		locationLabel = "Location"
+		sourcesHeader = "Verified Editorial Sources & Citations:"
+		footerText = "&copy; PidieKab — Independent Regional Promotion & Visitor Discovery Platform. Not an official government website."
+		idClass = ""
+		enClass = "active"
 	}
+
+	commonCSS := `
+*, *::before, *::after { box-sizing: border-box; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+    color: #1e293b;
+    background-color: #f8fafc;
+    -webkit-font-smoothing: antialiased;
+}
+.site-wrapper {
+    width: 100%;
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+@media (min-width: 640px) {
+    .site-wrapper { padding: 0 1.5rem; }
+}
+.site-header {
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+.header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    gap: 0.75rem;
+}
+.brand-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    min-width: 0;
+}
+.brand-logo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #047857;
+    text-decoration: none;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+}
+.brand-logo-badge {
+    background: #047857;
+    color: #ffffff;
+    font-size: 0.75rem;
+    font-weight: 800;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    letter-spacing: 0.05em;
+}
+.brand-tagline {
+    display: none;
+    font-size: 0.8125rem;
+    color: #64748b;
+    border-left: 1px solid #cbd5e1;
+    padding-left: 0.5rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+@media (min-width: 768px) {
+    .brand-tagline { display: inline-block; }
+    .brand-logo { font-size: 1.35rem; }
+}
+
+/* Language Switcher */
+.lang-switcher {
+    display: inline-flex;
+    align-items: center;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 9999px;
+    padding: 3px;
+    flex-shrink: 0;
+}
+.lang-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-radius: 9999px;
+    color: #64748b;
+    text-decoration: none;
+    transition: all 0.15s ease-in-out;
+    min-width: 36px;
+    line-height: 1;
+}
+@media (min-width: 640px) {
+    .lang-btn {
+        padding: 0.4rem 0.85rem;
+        font-size: 0.8125rem;
+    }
+}
+.lang-btn.active {
+    background: #047857;
+    color: #ffffff !important;
+    box-shadow: 0 1px 2px rgba(4, 120, 87, 0.2);
+}
+.lang-btn:hover:not(.active) {
+    color: #0f172a;
+    background: #e2e8f0;
+}
+.lang-short { display: inline; }
+.lang-long { display: none; }
+@media (min-width: 640px) {
+    .lang-short { display: none; }
+    .lang-long { display: inline; }
+}
+
+/* Hero Section */
+.hero {
+    background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+    border: 1px solid #d1fae5;
+    border-left: 4px solid #059669;
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin: 1.25rem 0 1.75rem;
+}
+@media (min-width: 640px) {
+    .hero { padding: 1.75rem 2rem; margin: 2rem 0; border-radius: 16px; }
+}
+.hero h2 {
+    font-size: clamp(1.2rem, 3.5vw, 1.75rem);
+    font-weight: 800;
+    color: #064e3b;
+    margin: 0 0 0.5rem;
+    line-height: 1.3;
+}
+.hero p {
+    font-size: 0.9375rem;
+    color: #334155;
+    margin: 0;
+    line-height: 1.5;
+}
+@media (min-width: 640px) {
+    .hero p { font-size: 1.05rem; }
+}
+
+/* Card Grid */
+.section-title {
+    font-size: 1.25rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 1.25rem;
+    letter-spacing: -0.01em;
+}
+.card-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+@media (min-width: 640px) {
+    .card-grid { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
+}
+@media (min-width: 1024px) {
+    .card-grid { grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+}
+.card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    border-color: #cbd5e1;
+}
+.badge {
+    display: inline-block;
+    align-self: flex-start;
+    background: #e0e7ff;
+    color: #3730a3;
+    padding: 0.25rem 0.55rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    margin-bottom: 0.5rem;
+}
+.card h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.05rem;
+    line-height: 1.4;
+    color: #065f46;
+}
+.card h3 a {
+    color: inherit;
+    text-decoration: none;
+}
+.card h3 a:hover {
+    color: #047857;
+    text-decoration: underline;
+}
+.card p {
+    margin: 0 0 1rem;
+    font-size: 0.875rem;
+    color: #475569;
+    line-height: 1.55;
+    flex-grow: 1;
+}
+.card-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #047857;
+    text-decoration: none;
+}
+.card-action:hover {
+    color: #065f46;
+    text-decoration: underline;
+}
+
+/* Detail page */
+.back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.45rem 0.85rem;
+    background: #f1f5f9;
+    color: #334155;
+    border-radius: 8px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    margin-bottom: 1.25rem;
+    transition: background 0.15s;
+}
+.back-btn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+.article-header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid #e2e8f0;
+}
+.article-title {
+    font-size: clamp(1.35rem, 4vw, 2.1rem);
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.25;
+    margin: 0.6rem 0 0.75rem;
+}
+.article-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    color: #64748b;
+}
+.article-body {
+    font-size: 1rem;
+    line-height: 1.75;
+    color: #334155;
+}
+.article-body p {
+    margin: 0 0 1.25rem;
+}
+.article-body h2 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 2rem 0 0.75rem;
+}
+.article-body h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 1.5rem 0 0.5rem;
+}
+.article-body img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+}
+.source-box {
+    margin-top: 2.5rem;
+    padding: 1.25rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #047857;
+    border-radius: 8px;
+    font-size: 0.875rem;
+}
+.source-box strong {
+    color: #0f172a;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+.source-list {
+    margin: 0;
+    padding-left: 1.25rem;
+}
+.source-list li {
+    margin-bottom: 0.35rem;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+.source-list a {
+    color: #047857;
+    text-decoration: underline;
+}
+
+/* Footer */
+.site-footer {
+    margin-top: 3.5rem;
+    padding: 2rem 0;
+    border-top: 1px solid #e2e8f0;
+    color: #64748b;
+    font-size: 0.8125rem;
+    text-align: center;
+    line-height: 1.6;
+}
+`
+
+	headerHTML := fmt.Sprintf(`
+    <header class="site-header">
+        <div class="site-wrapper">
+            <div class="header-inner">
+                <a href="/%s/" class="brand-group">
+                    <span class="brand-logo"><span class="brand-logo-badge">PK</span>PidieKab</span>
+                    <span class="brand-tagline">%s</span>
+                </a>
+                <nav class="lang-switcher" aria-label="Language selector">
+                    <a href="/id/" class="lang-btn %s"><span class="lang-short">ID</span><span class="lang-long">Bahasa Indonesia</span></a>
+                    <a href="/en/" class="lang-btn %s"><span class="lang-short">EN</span><span class="lang-long">English</span></a>
+                </nav>
+            </div>
+        </div>
+    </header>
+`, locale, template.HTMLEscapeString(siteName), idClass, enClass)
+
+	footerHTML := fmt.Sprintf(`
+    <footer class="site-footer">
+        <div class="site-wrapper">
+            <p>%s</p>
+        </div>
+    </footer>
+`, footerText)
 
 	// 1. Render Homepage: <locale>/index.html
 	homeHTML := fmt.Sprintf(`<!DOCTYPE html>
@@ -361,65 +744,62 @@ func (g *Generator) renderLocaleSite(
     <link rel="alternate" hreflang="id" href="%s/id/">
     <link rel="alternate" hreflang="en" href="%s/en/">
     <link rel="alternate" hreflang="x-default" href="%s/id/">
-    <style>
-        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; max-width: 1024px; margin: 0 auto; padding: 1.5rem; color: #1a1a1a; }
-        header { border-bottom: 2px solid #047857; padding-bottom: 1rem; margin-bottom: 2rem; }
-        .hero { background: #f0fdf4; padding: 2rem; border-radius: 8px; margin-bottom: 2rem; border-left: 4px solid #059669; }
-        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.5rem; }
-        .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1.25rem; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .card h3 { margin-top: 0; color: #065f46; }
-        .badge { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: bold; }
-        footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #e5e7eb; font-size: 0.875rem; color: #6b7280; }
-        a { color: #047857; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-    </style>
+    <style>%s</style>
 </head>
 <body>
-    <header>
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <h1><a href="/%s/">%s</a></h1>
-            <nav>
-                <a href="/id/">Bahasa Indonesia</a> | <a href="/en/">English</a>
-            </nav>
-        </div>
-    </header>
-    <main>
+%s
+    <main class="site-wrapper">
         <section class="hero">
             <h2>%s</h2>
-            <p>Jelajahi keindahan alam, kekayaan budaya, dan kuliner khas Kabupaten Pidie, Aceh.</p>
+            <p>%s</p>
         </section>
         <section>
-            <h2>Destinasi & Budaya</h2>
+            <h2 class="section-title">%s</h2>
             <div class="card-grid">
-`, locale, template.HTMLEscapeString(siteName), template.HTMLEscapeString(tagline), template.HTMLEscapeString(tagline), g.baseURL, locale, g.baseURL, g.baseURL, g.baseURL, locale, template.HTMLEscapeString(siteName), template.HTMLEscapeString(tagline))
+`,
+		locale,
+		template.HTMLEscapeString(siteName),
+		template.HTMLEscapeString(tagline),
+		template.HTMLEscapeString(tagline),
+		g.baseURL, locale,
+		g.baseURL, g.baseURL, g.baseURL,
+		commonCSS,
+		headerHTML,
+		template.HTMLEscapeString(tagline),
+		template.HTMLEscapeString(heroSubtitle),
+		template.HTMLEscapeString(sectionTitle),
+	)
 
 	var cardsBuilder strings.Builder
 	for _, c := range contents {
 		detailPath := fmt.Sprintf("/%s/%s/%s/", locale, c.CategorySlug, c.Slug)
 		cardsBuilder.WriteString(fmt.Sprintf(`
                 <article class="card">
-                    <span class="badge">%s</span>
-                    <h3><a href="%s">%s</a></h3>
-                    <p>%s</p>
-                    <p><a href="%s">Selengkapnya &rarr;</a></p>
+                    <div>
+                        <span class="badge">%s</span>
+                        <h3><a href="%s">%s</a></h3>
+                        <p>%s</p>
+                    </div>
+                    <div>
+                        <a href="%s" class="card-action">%s</a>
+                    </div>
                 </article>`,
 			template.HTMLEscapeString(c.CategoryName),
 			detailPath,
 			template.HTMLEscapeString(c.Title),
 			template.HTMLEscapeString(c.Summary),
 			detailPath,
+			readMoreText,
 		))
 	}
 
-	homeHTML += cardsBuilder.String() + `
+	homeHTML += cardsBuilder.String() + fmt.Sprintf(`
             </div>
         </section>
     </main>
-    <footer>
-        <p>&copy; PidieKab — Inisiatif Platform Digital Independen Masyarakat Pidie. Bukan website resmi pemerintah.</p>
-    </footer>
+%s
 </body>
-</html>`
+</html>`, footerHTML)
 
 	if err := os.WriteFile(filepath.Join(localeDir, "index.html"), []byte(homeHTML), 0644); err != nil {
 		return err
@@ -432,6 +812,22 @@ func (g *Generator) renderLocaleSite(
 			return err
 		}
 
+		var sourcesHTML strings.Builder
+		if len(c.Sources) > 0 {
+			sourcesHTML.WriteString(fmt.Sprintf(`
+        <div class="source-box">
+            <strong>%s</strong>
+            <ul class="source-list">`, sourcesHeader))
+			for _, src := range c.Sources {
+				if src.URL != "" {
+					sourcesHTML.WriteString(fmt.Sprintf(`<li>%s — <a href="%s" target="_blank" rel="noopener noreferrer">%s</a></li>`, template.HTMLEscapeString(src.Name), template.HTMLEscapeString(src.URL), template.HTMLEscapeString(src.URL)))
+				} else {
+					sourcesHTML.WriteString(fmt.Sprintf(`<li>%s</li>`, template.HTMLEscapeString(src.Name)))
+				}
+			}
+			sourcesHTML.WriteString(`</ul></div>`)
+		}
+
 		canonical := fmt.Sprintf("%s/%s/%s/%s/", g.baseURL, locale, c.CategorySlug, c.Slug)
 		detailHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
@@ -441,31 +837,23 @@ func (g *Generator) renderLocaleSite(
     <title>%s — %s</title>
     <meta name="description" content="%s">
     <link rel="canonical" href="%s">
-    <style>
-        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 1.5rem; color: #1a1a1a; }
-        header { border-bottom: 2px solid #047857; padding-bottom: 1rem; margin-bottom: 2rem; }
-        .meta { color: #4b5563; font-size: 0.9rem; margin-bottom: 1.5rem; }
-        .badge { background: #e0e7ff; color: #3730a3; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
-        footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #e5e7eb; font-size: 0.875rem; color: #6b7280; }
-        a { color: #047857; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-    </style>
+    <style>%s</style>
 </head>
 <body>
-    <header>
-        <p><a href="/%s/">&larr; Kembali ke Beranda</a></p>
-        <span class="badge">%s</span>
-        <h1>%s</h1>
-        <div class="meta">Lokasi: %s</div>
-    </header>
-    <main>
-        <article>
+%s
+    <main class="site-wrapper" style="max-width: 800px; padding-top: 1.5rem;">
+        <p><a href="/%s/" class="back-btn">%s</a></p>
+        <article class="article-header">
+            <span class="badge">%s</span>
+            <h1 class="article-title">%s</h1>
+            <div class="article-meta">📍 %s: %s</div>
+        </article>
+        <article class="article-body">
+            %s
             %s
         </article>
     </main>
-    <footer>
-        <p>&copy; PidieKab — Independent Regional Promotion & Visitor Discovery Platform. Not an official government website.</p>
-    </footer>
+%s
 </body>
 </html>`,
 			locale,
@@ -473,11 +861,17 @@ func (g *Generator) renderLocaleSite(
 			template.HTMLEscapeString(siteName),
 			template.HTMLEscapeString(c.Summary),
 			canonical,
+			commonCSS,
+			headerHTML,
 			locale,
+			backHomeText,
 			template.HTMLEscapeString(c.CategoryName),
 			template.HTMLEscapeString(c.Title),
+			locationLabel,
 			template.HTMLEscapeString(c.Address),
 			string(c.BodyHTML),
+			sourcesHTML.String(),
+			footerHTML,
 		)
 
 		if err := os.WriteFile(filepath.Join(contentDir, "index.html"), []byte(detailHTML), 0644); err != nil {
@@ -501,19 +895,20 @@ func (g *Generator) renderLocaleSite(
     <title>%s — %s</title>
     <meta name="description" content="%s">
     <link rel="canonical" href="%s">
-    <style>
-        body { font-family: system-ui, -apple-system, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 1.5rem; }
-        a { color: #047857; text-decoration: none; }
-    </style>
+    <style>%s</style>
 </head>
 <body>
-    <header>
-        <p><a href="/%s/">&larr; Kembali ke Beranda</a></p>
-        <h1>%s</h1>
-    </header>
-    <main>
-        <article>%s</article>
+%s
+    <main class="site-wrapper" style="max-width: 800px; padding-top: 1.5rem;">
+        <p><a href="/%s/" class="back-btn">%s</a></p>
+        <article class="article-header">
+            <h1 class="article-title">%s</h1>
+        </article>
+        <article class="article-body">
+            %s
+        </article>
     </main>
+%s
 </body>
 </html>`,
 			locale,
@@ -521,9 +916,13 @@ func (g *Generator) renderLocaleSite(
 			template.HTMLEscapeString(siteName),
 			template.HTMLEscapeString(p.SeoDesc),
 			canonical,
+			commonCSS,
+			headerHTML,
 			locale,
+			backHomeText,
 			template.HTMLEscapeString(p.Title),
 			string(p.BodyHTML),
+			footerHTML,
 		)
 
 		if err := os.WriteFile(filepath.Join(pageDir, "index.html"), []byte(pageHTML), 0644); err != nil {
