@@ -113,7 +113,7 @@ func seedDefaultAdmin(ctx context.Context, pool *pgxpool.Pool, logger *slog.Logg
 		logger,
 	)
 
-	admin, err := authService.BootstrapAdmin(ctx, "admin@pidiekab.go.id", "Super Administrator", "AdminPidie123!")
+	admin, err := authService.BootstrapAdmin(ctx, "admin@pidiekab.web.id", "Super Administrator", "AdminPidie123!")
 	if err != nil {
 		logger.Error("failed to create default admin", "error", err)
 		os.Exit(1)
@@ -421,7 +421,7 @@ func seedContents(ctx context.Context, pool *pgxpool.Pool, adminID int64, catMap
 			enBody:     "Tangse is a serene mountainous haven in the southern highlands of Pidie. Positioned over 600 meters above sea level, it enjoys cool temperatures and verdant scenery year-round. Its crystal-clear mountain streams offer ideal spots for eco-tourism and outdoor relaxation. Tangse's distinctive Robusta coffee, cultivated across misty hillside slopes, is famed for its rich aroma and earthy spice notes.",
 			sourceType: "official",
 			sourceName: "Dinas Pertanian dan Perkebunan Kabupaten Pidie",
-			sourceURL:  "https://pidiekab.go.id/",
+			sourceURL:  "https://pidiekab.web.id/",
 			sourceNote: "Laporan Tahunan Sentra Agrowisata dan Komoditas Kopi Pegunungan Pidie.",
 		},
 		{
@@ -440,7 +440,7 @@ func seedContents(ctx context.Context, pool *pgxpool.Pool, adminID int64, catMap
 			enBody:     "Kerupuk Mulieng (melinjo crisps) is Pidie's signature gastronomic treasure. Centered in Beureunuen marketplace, skilled local artisans sand-roast premium melinjo seeds before flattening them with hand hammers into delicate, golden wafers. Noted for its crisp texture and authentic bittersweet flavor, Pidie melinjo crackers are revered across the Indonesian archipelago and international diaspora as an indispensable delicacy.",
 			sourceType: "official",
 			sourceName: "Dewan Kerajinan Nasional Daerah (Dekranasda) Pidie",
-			sourceURL:  "https://pidiekab.go.id/dekranasda",
+			sourceURL:  "https://pidiekab.web.id/dekranasda",
 			sourceNote: "Inventarisasi Warisan Kuliner Tradisional dan Produk Unggulan UMKM Daerah.",
 		},
 		{
@@ -478,7 +478,7 @@ func seedContents(ctx context.Context, pool *pgxpool.Pool, adminID int64, catMap
 			enBody:     "Pantai Pelangi (Rainbow Beach), located along the waterfront of downtown Sigli, serves as the bustling civic and leisure center for Pidie residents. Lined with pedestrian walkways, coastal flora, and historic harbor jetties, the promenade is especially vibrant at sunset. Visitors can savor refreshing green coconuts, regional Rujak U-Groe (coconut husk salad with spiced palm nectar), and iconic Mie Caluk noodles along the serene shores of the Malacca Strait.",
 			sourceType: "official",
 			sourceName: "Bappeda dan Disparpora Kabupaten Pidie",
-			sourceURL:  "https://pidiekab.go.id/",
+			sourceURL:  "https://pidiekab.web.id/",
 			sourceNote: "Rencana Induk Pembangunan Kepariwisataan Kabupaten (RIPARKAB) Pidie.",
 		},
 	}

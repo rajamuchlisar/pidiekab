@@ -268,7 +268,7 @@ func TestHTTPToHTTPSRedirectServer(t *testing.T) {
 	redirectSrv := httpserver.NewHTTPToHTTPSRedirectServer(":80", logger)
 
 	req := httptest.NewRequest(http.MethodGet, "/id/wisata-destinasi?page=1", nil)
-	req.Host = "pidiekab.go.id:80"
+	req.Host = "pidiekab.web.id:80"
 	rec := httptest.NewRecorder()
 	redirectSrv.Handler.ServeHTTP(rec, req)
 
@@ -277,7 +277,7 @@ func TestHTTPToHTTPSRedirectServer(t *testing.T) {
 	}
 
 	location := rec.Header().Get("Location")
-	expected := "https://pidiekab.go.id/id/wisata-destinasi?page=1"
+	expected := "https://pidiekab.web.id/id/wisata-destinasi?page=1"
 	if location != expected {
 		t.Errorf("expected redirect location %q, got %q", expected, location)
 	}

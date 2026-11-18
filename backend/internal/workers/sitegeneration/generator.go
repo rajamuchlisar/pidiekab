@@ -19,7 +19,7 @@ type Generator struct {
 
 func NewGenerator(pool *pgxpool.Pool, baseURL string) *Generator {
 	if baseURL == "" {
-		baseURL = "https://pidiekab.go.id"
+		baseURL = "https://pidiekab.web.id"
 	}
 	baseURL = strings.TrimRight(baseURL, "/")
 	return &Generator{pool: pool, baseURL: baseURL}

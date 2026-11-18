@@ -27,6 +27,7 @@ type Config struct {
 	DatabaseHealthCheckPeriod time.Duration
 	PublicStaticDir           string
 	CMSStaticDir              string
+	PublicBaseURL             string
 	StoragePath               string
 	SSGOutputRoot             string
 	SSGReleasesToKeep         int
@@ -148,6 +149,7 @@ func Load() (Config, error) {
 
 	publicStaticDir := env("PIDIEKAB_PUBLIC_STATIC_DIR", "frontend/public-site/dist")
 	cmsStaticDir := env("PIDIEKAB_CMS_STATIC_DIR", "frontend/admin-cms/dist")
+	publicBaseURL := strings.TrimRight(env("PIDIEKAB_BASE_URL", env("PIDIEKAB_PUBLIC_BASE_URL", "https://pidiekab.web.id")), "/")
 	storagePath := env("PIDIEKAB_STORAGE_PATH", "data/media")
 	ssgOutputRoot := env("PIDIEKAB_SSG_OUTPUT_ROOT", "data/ssg")
 
@@ -194,6 +196,7 @@ func Load() (Config, error) {
 		DatabaseHealthCheckPeriod: healthCheckPeriod,
 		PublicStaticDir:           publicStaticDir,
 		CMSStaticDir:              cmsStaticDir,
+		PublicBaseURL:             publicBaseURL,
 		StoragePath:               storagePath,
 		SSGOutputRoot:             ssgOutputRoot,
 		SSGReleasesToKeep:         ssgReleasesToKeep,

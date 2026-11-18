@@ -139,7 +139,7 @@ func handleSSGBuildCLI(cfg config.Config, logger *slog.Logger) {
 		os.Exit(1)
 	}
 
-	generator := sitegeneration.NewGenerator(dbPool, "https://pidiekab.go.id")
+	generator := sitegeneration.NewGenerator(dbPool, cfg.PublicBaseURL)
 
 	startTime := time.Now()
 	fmt.Println("--> Creating atomic staging release directory...")
@@ -167,6 +167,6 @@ func handleSSGBuildCLI(cfg config.Config, logger *slog.Logger) {
 	fmt.Printf("SSG Build SUCCESSFUL in %v\n", duration)
 	fmt.Printf("Release Tag:    %s\n", releaseID)
 	fmt.Printf("Active Path:    %s\n", activePath)
-	fmt.Printf("Public URL:     https://pidiekab.go.id/\n")
+	fmt.Printf("Public URL:     %s/\n", cfg.PublicBaseURL)
 	fmt.Println("==================================================")
 }

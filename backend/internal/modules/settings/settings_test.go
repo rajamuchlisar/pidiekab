@@ -29,7 +29,7 @@ func TestSettingsValidation(t *testing.T) {
 	if err := settingsDomain.ValidateContactEmail("invalid-email"); err == nil {
 		t.Error("expected error for invalid contact email")
 	}
-	if err := settingsDomain.ValidateContactEmail("info@pidiekab.go.id"); err != nil {
+	if err := settingsDomain.ValidateContactEmail("info@pidiekab.web.id"); err != nil {
 		t.Errorf("expected valid email, got: %v", err)
 	}
 
@@ -40,7 +40,7 @@ func TestSettingsValidation(t *testing.T) {
 		t.Error("expected error for phone with letters")
 	}
 
-	validSocial := json.RawMessage(`{"instagram": "@pesonapidie", "website": "https://pidiekab.go.id"}`)
+	validSocial := json.RawMessage(`{"instagram": "@pesonapidie", "website": "https://pidiekab.web.id"}`)
 	if err := settingsDomain.ValidateSocialLinks(validSocial); err != nil {
 		t.Errorf("expected valid social links, got: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestSettingsLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to update translation ID: %v", err)
 	}
-	if transID.SiteName != "Pidie Tourism Portal" {
+	if transID.SiteName != "PidieKab" {
 		t.Errorf("expected site name updated, got %s", transID.SiteName)
 	}
 

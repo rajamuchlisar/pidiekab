@@ -94,7 +94,7 @@ func TestSSGJobLifecycleAndGeneration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	generator := sitegeneration.NewGenerator(pool, "https://pidiekab.go.id")
+	generator := sitegeneration.NewGenerator(pool, "https://pidiekab.web.id")
 	worker := sitegeneration.NewWorker(jobRepo, generator, releaseMgr, 1*time.Second, 3, logger)
 
 	// 1. Enqueue job
@@ -135,7 +135,7 @@ func TestSSGJobLifecycleAndGeneration(t *testing.T) {
 
 	checkFile("id/index.html", "Bahasa Indonesia")
 	checkFile("en/index.html", "English")
-	checkFile("sitemap.xml", "https://pidiekab.go.id/id/")
-	checkFile("robots.txt", "Sitemap: https://pidiekab.go.id/sitemap.xml")
+	checkFile("sitemap.xml", "https://pidiekab.web.id/id/")
+	checkFile("robots.txt", "Sitemap: https://pidiekab.web.id/sitemap.xml")
 	checkFile("index.html", "content=\"0;url=/id/\"")
 }
