@@ -52,11 +52,16 @@ async function handleLogin() {
           <label for="email">Alamat Email</label>
           <input
             id="email"
+            name="email"
             v-model="email"
             type="email"
+            inputmode="email"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
             required
-            placeholder="admin@pidiekab.id"
-            autocomplete="email"
+            placeholder="admin@pidiekab.web.id"
+            autocomplete="username email"
             class="input-control"
           />
         </div>
@@ -66,11 +71,15 @@ async function handleLogin() {
           <div class="password-wrapper">
             <input
               id="password"
+              name="password"
               v-model="password"
               :type="showPassword ? 'text' : 'password'"
               required
               placeholder="••••••••"
               autocomplete="current-password"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
               class="input-control"
             />
             <button
@@ -100,21 +109,32 @@ async function handleLogin() {
 <style scoped>
 .login-page {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
   padding: 1rem;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .login-card {
   width: 100%;
   max-width: 420px;
   background: #ffffff;
-  border-radius: 12px;
+  border-radius: 14px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.1);
   padding: 2.25rem 2rem;
+  margin: auto;
+}
+
+@media (max-width: 480px) {
+  .login-card {
+    padding: 1.75rem 1.25rem;
+    border-radius: 12px;
+  }
 }
 
 .card-header {
@@ -175,15 +195,26 @@ async function handleLogin() {
   font-size: 0.85rem;
   font-weight: 600;
   color: #334155;
+  cursor: pointer;
+  user-select: none;
 }
 
 .input-control {
-  padding: 0.65rem 0.85rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 0.95rem;
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  padding: 0.75rem 0.95rem;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 16px; /* CRITICAL: Minimum 16px prevents mobile browser auto-zoom and enables touch keyboard trigger */
+  line-height: 1.5;
   color: #0f172a;
-  transition: border-color 0.15s;
+  background-color: #ffffff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
+  touch-action: manipulation;
 }
 
 .input-control:focus {
@@ -195,6 +226,7 @@ async function handleLogin() {
 .password-wrapper {
   position: relative;
   display: flex;
+  width: 100%;
 }
 
 .password-wrapper .input-control {
@@ -209,11 +241,13 @@ async function handleLogin() {
   transform: translateY(-50%);
   background: none;
   border: none;
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: #059669;
   font-weight: 600;
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
+  padding: 0.35rem 0.6rem;
+  touch-action: manipulation;
+  z-index: 2;
 }
 
 .btn-submit {
@@ -221,12 +255,13 @@ async function handleLogin() {
   background: #059669;
   color: #ffffff;
   border: none;
-  padding: 0.75rem;
-  font-size: 0.95rem;
+  padding: 0.85rem;
+  font-size: 16px;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background 0.15s ease;
+  touch-action: manipulation;
 }
 
 .btn-submit:hover:not(:disabled) {
