@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
@@ -105,39 +106,16 @@ func (r *RemoteExecutor) Sudo(script string) (string, error) {
 }
 
 func (r *RemoteExecutor) UploadTarGz(tarGzData []byte, remoteDir string) error {
-	// Ensure directory exists with sudo
-	_, err := r.Sudo(fmt.Sprintf("mkdir -p %s && chown pidiekab:pidiekab %s", remoteDir, remoteDir))
-	if err != nil {
-		return fmt.Errorf("failed to create remote dir %s: %w", remoteDir, err)
-	}
+	b64 := base64.StdEncoding.EncodeToString(tarGzData)
+	script := fmt.Sprintf(`
+mkdir -p %s
+cat << 'EOF_B64_DATA' | base64 -d | tar -xzf - -C %s
+%s
+EOF_B64_DATA
+`, remoteDir, remoteDir, b64)
 
-	session, err := r.client.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.Close()
-
-	stdin, err := session.StdinPipe()
-	if err != nil {
-		return err
-	}
-
-	var stdout bytes.Buffer
-	session.Stdout = &stdout
-	session.Stderr = &stdout
-
-	extractCmd := fmt.Sprintf("sudo -S -p 'PIDIE_SUDO_PROMPT:' tar -xzf - -C %s", remoteDir)
-	if err := session.Start(extractCmd); err != nil {
-		return err
-	}
-
-	go func() {
-		defer stdin.Close()
-		fmt.Fprintf(stdin, "%s\n", r.pass)
-		stdin.Write(tarGzData)
-	}()
-
-	return session.Wait()
+	_, err := r.Sudo(script)
+	return err
 }
 
 func createTarGz(srcDir string) ([]byte, error) {
@@ -156,7 +134,6 @@ func createTarGz(srcDir string) ([]byte, error) {
 		if relPath == "." {
 			return nil
 		}
-		// normalized path with forward slashes
 		headerName := filepath.ToSlash(relPath)
 
 		header, err := tar.FileInfoHeader(info, "")
