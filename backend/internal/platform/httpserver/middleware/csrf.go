@@ -39,7 +39,7 @@ func CSRFProtection(next http.Handler) http.Handler {
 			originHost := parsedOrigin.Hostname()
 			reqHost := r.Host
 			if strings.Contains(reqHost, ":") {
-				if h, _, err := strings.Cut(reqHost, ":"); err == nil && h != "" {
+				if h, _, found := strings.Cut(reqHost, ":"); found && h != "" {
 					reqHost = h
 				}
 			}

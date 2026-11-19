@@ -116,14 +116,14 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 			"id":          result.Admin.ID,
 			"email":       result.Admin.Email,
 			"displayName": result.Admin.DisplayName,
-			"role":        result.Admin.Role,
+			"role":        "admin",
 		},
 		"data": map[string]any{
 			"id":          strconv.FormatInt(result.Admin.ID, 10),
 			"email":       result.Admin.Email,
 			"displayName": result.Admin.DisplayName,
 			"name":        result.Admin.DisplayName,
-			"role":        result.Admin.Role,
+			"role":        "admin",
 		},
 	})
 }
@@ -175,14 +175,14 @@ func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
 			"id":          admin.ID,
 			"email":       admin.Email,
 			"displayName": admin.DisplayName,
-			"role":        admin.Role,
+			"role":        "admin",
 		},
 		"data": map[string]any{
 			"id":          strconv.FormatInt(admin.ID, 10),
 			"email":       admin.Email,
 			"displayName": admin.DisplayName,
 			"name":        admin.DisplayName,
-			"role":        admin.Role,
+			"role":        "admin",
 		},
 	})
 }
