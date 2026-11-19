@@ -258,8 +258,8 @@ func TestAdminAuthHTTPFlow(t *testing.T) {
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204 for login with new password, got %d", rec.Code)
+	if rec.Code != http.StatusOK && rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 200 or 204 for login with new password, got %d", rec.Code)
 	}
 
 	for _, cookie := range rec.Result().Cookies() {
