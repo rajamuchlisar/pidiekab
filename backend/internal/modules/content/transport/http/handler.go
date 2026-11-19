@@ -218,7 +218,17 @@ func (h *Handler) handleGetContent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": detail,
+		"data":                  detail,
+		"id":                    detail.ID,
+		"category_id":           detail.CategoryID,
+		"location_kecamatan_id": detail.LocationKecamatanID,
+		"address":               detail.Address,
+		"latitude":              detail.Latitude,
+		"longitude":             detail.Longitude,
+		"main_photo_id":         detail.MainPhotoID,
+		"main_photo_url":        detail.MainPhotoURL,
+		"translations":          detail.Translations,
+		"sources":               detail.Sources,
 	})
 }
 

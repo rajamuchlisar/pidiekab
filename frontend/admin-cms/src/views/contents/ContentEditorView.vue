@@ -68,17 +68,36 @@ const newSource = reactive({
 
 async function loadMasterData() {
   try {
-    const [catRes, locRes, mediaRes] = await Promise.all([
-      api.get<{ categories: any[] }>('/api/v1/admin/categories'),
-      api.get<{ locations: any[] }>('/api/v1/admin/locations'),
-      api.get<{ items: any[] }>('/api/v1/admin/media?per_page=50'),
-    ])
-
-    if (catRes?.categories) categories.value = catRes.categories
-    if (locRes?.locations) locations.value = locRes.locations.filter((l) => l.type === 'kecamatan')
-    if (mediaRes?.items) mediaList.value = mediaRes.items
+    const catRes = await api.get<any>('/api/v1/admin/categories').catch(() => null)
+    if (catRes?.categories || catRes?.data) {
+      categories.value = catRes.categories || catRes.data
+    }
   } catch (err) {
-    console.error('Failed to load master data', err)
+    console.error('Failed to load categories', err)
+  }
+
+  try {
+    const locRes = await api.get<any>('/api/v1/admin/locations').catch(() => null)
+    const locs = locRes?.locations || locRes?.districts || locRes?.data || []
+    if (Array.isArray(locs)) {
+      locations.value = locs.map((l: any) => ({
+        id: l.id,
+        name: l.name,
+        type: l.type || 'kecamatan',
+        kemendagriCode: l.kemendagriCode || l.code || '',
+      }))
+    }
+  } catch (err) {
+    console.error('Failed to load locations', err)
+  }
+
+  try {
+    const mediaRes = await api.get<any>('/api/v1/admin/media?per_page=50').catch(() => null)
+    if (mediaRes?.items || mediaRes?.data) {
+      mediaList.value = mediaRes.items || mediaRes.data
+    }
+  } catch (err) {
+    console.error('Failed to load media', err)
   }
 }
 
@@ -88,26 +107,41 @@ async function loadContent() {
   isLoading.value = true
   try {
     const res = await api.get<any>(`/api/v1/admin/contents/${contentId.value}`)
-    if (res) {
-      form.categoryId = res.categoryId || res.category_id
-      form.locationKecamatanId = res.locationKecamatanId || res.location_kecamatan_id
-      form.address = res.address || ''
-      form.latitude = res.latitude
-      form.longitude = res.longitude
-      form.mainPhotoId = res.mainPhotoId || res.main_photo_id
-      form.mainPhotoUrl = res.mainPhotoUrl || res.main_photo_url || ''
+    const data = res?.data || res
+    if (data) {
+      form.categoryId = data.categoryId || data.category_id || data.CategoryID
+      form.locationKecamatanId = data.locationKecamatanId || data.location_kecamatan_id || data.LocationKecamatanID || null
+      form.address = data.address || data.Address || ''
+      form.latitude = data.latitude || data.Latitude
+      form.longitude = data.longitude || data.Longitude
+      form.mainPhotoId = data.mainPhotoId || data.main_photo_id || data.MainPhotoID || null
+      form.mainPhotoUrl = data.mainPhotoUrl || data.main_photo_url || data.MainPhotoURL || ''
 
-      if (res.sources) {
-        form.sources = res.sources
+      const sources = data.sources || data.Sources
+      if (Array.isArray(sources)) {
+        form.sources = sources.map((s: any) => ({
+          id: s.id || s.ID,
+          sourceName: s.sourceName || s.source_name || s.SourceName || '',
+          sourceType: s.sourceType || s.source_type || s.SourceType || 'official_gov',
+          sourceUrl: s.sourceUrl || s.source_url || s.SourceURL || '',
+          notes: s.notes || s.Notes || '',
+        }))
       }
 
-      if (res.translations) {
-        if (res.translations.id) {
-          form.translations.id = { ...form.translations.id, ...res.translations.id }
-        }
-        if (res.translations.en) {
-          form.translations.en = { ...form.translations.en, ...res.translations.en }
-        }
+      const translations = data.translations || data.Translations
+      if (translations) {
+        ;(['id', 'en'] as const).forEach((loc) => {
+          const t = translations[loc]
+          if (t) {
+            form.translations[loc] = {
+              title: t.title || t.Title || '',
+              slug: t.slug || t.Slug || '',
+              summary: t.summary || t.Summary || '',
+              body: t.body || t.Body || '',
+              status: t.status || t.Status || 'draft',
+            }
+          }
+        })
       }
     }
   } catch (err: any) {

@@ -29,8 +29,35 @@ func NewHandler(repo *postgres.Repository, authService *application.AuthService)
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	authMiddleware := middleware.RequireAdminSession(h.authService)
 
+	mux.Handle("GET /api/v1/admin/locations", authMiddleware(http.HandlerFunc(h.handleListLocations)))
 	mux.Handle("GET /api/v1/admin/locations/districts", authMiddleware(http.HandlerFunc(h.handleListDistricts)))
 	mux.Handle("GET /api/v1/admin/locations/villages", authMiddleware(http.HandlerFunc(h.handleListVillages)))
+}
+
+func (h *Handler) handleListLocations(w http.ResponseWriter, r *http.Request) {
+	districts, err := h.repo.ListDistricts(r.Context())
+	if err != nil {
+		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve locations.")
+		return
+	}
+
+	locations := make([]map[string]any, 0, len(districts))
+	for _, d := range districts {
+		locations = append(locations, map[string]any{
+			"id":             d.ID,
+			"kemendagriCode": d.KemendagriCode,
+			"code":           d.KemendagriCode,
+			"name":           d.Name,
+			"type":           "kecamatan",
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"locations": locations,
+		"data":      locations,
+	})
 }
 
 func (h *Handler) handleListDistricts(w http.ResponseWriter, r *http.Request) {
@@ -43,7 +70,8 @@ func (h *Handler) handleListDistricts(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": districts,
+		"districts": districts,
+		"data":      districts,
 	})
 }
 
