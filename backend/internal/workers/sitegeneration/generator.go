@@ -109,12 +109,12 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	}
 
 	// 5. Render Indonesian site
-	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, contentsID, pagesID); err != nil {
+	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, pagesID); err != nil {
 		return fmt.Errorf("failed to render ID site: %w", err)
 	}
 
 	// 6. Render English site
-	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, contentsEN, pagesEN); err != nil {
+	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, pagesEN); err != nil {
 		return fmt.Errorf("failed to render EN site: %w", err)
 	}
 
@@ -394,6 +394,7 @@ func (g *Generator) renderLocaleSite(
 	targetDir, locale string,
 	sc *SiteContext,
 	cats map[int64]CategoryRender,
+	altCats map[int64]CategoryRender,
 	contents []ContentRender,
 	pages []StaticPageRender,
 ) error {
@@ -939,7 +940,8 @@ body {
 		brandLogoHTML = fmt.Sprintf(`<span class="brand-logo"><img src="%s" alt="%s" class="brand-logo-img" /></span>`, template.HTMLEscapeString(sc.LogoURL), template.HTMLEscapeString(siteName))
 	}
 
-	headerHTML := fmt.Sprintf(`
+	buildHeader := func(idURL, enURL string) string {
+		return fmt.Sprintf(`
     <header class="site-header">
         <div class="site-wrapper">
             <div class="header-inner">
@@ -948,13 +950,16 @@ body {
                     <span class="brand-tagline">%s</span>
                 </a>
                 <nav class="lang-switcher" aria-label="Language selector">
-                    <a href="/id/" class="lang-btn %s"><span class="lang-short">ID</span><span class="lang-long">Bahasa Indonesia</span></a>
-                    <a href="/en/" class="lang-btn %s"><span class="lang-short">EN</span><span class="lang-long">English</span></a>
+                    <a href="%s" class="lang-btn %s"><span class="lang-short">ID</span><span class="lang-long">Bahasa Indonesia</span></a>
+                    <a href="%s" class="lang-btn %s"><span class="lang-short">EN</span><span class="lang-long">English</span></a>
                 </nav>
             </div>
         </div>
     </header>
-`, locale, brandLogoHTML, template.HTMLEscapeString(siteName), idClass, enClass)
+`, locale, brandLogoHTML, template.HTMLEscapeString(siteName), idURL, idClass, enURL, enClass)
+	}
+
+	headerHTML := buildHeader("/id/", "/en/")
 
 	quickLinksTitle := "Kategori Pilihan"
 	legalTitle := "Informasi & Legal"
@@ -1199,7 +1204,165 @@ body {
 		return err
 	}
 
-	// 2. Render Detail Pages: <locale>/<cat-slug>/<content-slug>/index.html
+	// 2. Render Category Archive Pages: <locale>/<cat-slug>/index.html
+	for _, cat := range cats {
+		catDir := filepath.Join(localeDir, cat.Slug)
+		if err := os.MkdirAll(catDir, 0755); err != nil {
+			return err
+		}
+
+		var catContents []ContentRender
+		for _, c := range contents {
+			if c.CategorySlug == cat.Slug {
+				catContents = append(catContents, c)
+			}
+		}
+
+		altSlug := ""
+		if altCat, ok := altCats[cat.ID]; ok && altCat.Slug != "" {
+			altSlug = altCat.Slug
+		}
+
+		catIDURL := fmt.Sprintf("/id/%s/", cat.Slug)
+		catENURL := fmt.Sprintf("/en/%s/", cat.Slug)
+		if locale == "id" {
+			if altSlug != "" {
+				catENURL = fmt.Sprintf("/en/%s/", altSlug)
+			} else {
+				catENURL = "/en/"
+			}
+		} else {
+			catENURL = fmt.Sprintf("/en/%s/", cat.Slug)
+			if altSlug != "" {
+				catIDURL = fmt.Sprintf("/id/%s/", altSlug)
+			} else {
+				catIDURL = "/id/"
+			}
+		}
+
+		catHeaderHTML := buildHeader(catIDURL, catENURL)
+
+		catCanonical := fmt.Sprintf("%s/%s/%s/", g.baseURL, locale, cat.Slug)
+		catAlternateID := fmt.Sprintf("%s/id/%s/", g.baseURL, cat.Slug)
+		catAlternateEN := fmt.Sprintf("%s/en/%s/", g.baseURL, cat.Slug)
+		if locale == "id" && altSlug != "" {
+			catAlternateEN = fmt.Sprintf("%s/en/%s/", g.baseURL, altSlug)
+		} else if locale == "en" && altSlug != "" {
+			catAlternateID = fmt.Sprintf("%s/id/%s/", g.baseURL, altSlug)
+		}
+
+		catDesc := cat.Description
+		if catDesc == "" {
+			catDesc = tagline
+		}
+
+		categoryBadgeLabel := "Kategori"
+		articlesSectionTitle := "Daftar Artikel & Panduan Destinasi"
+		emptyTitle := "Belum Ada Artikel dalam Kategori Ini"
+		emptyDesc := "Konten editorial dan panduan terverifikasi untuk kategori ini sedang disiapkan oleh tim redaksi."
+		if locale == "en" {
+			categoryBadgeLabel = "Category"
+			articlesSectionTitle = "Articles & Discovery Guides"
+			emptyTitle = "No Articles in This Category Yet"
+			emptyDesc = "Verified editorial guides and articles for this category are currently being curated."
+		}
+
+		var catCardsBuilder strings.Builder
+		if len(catContents) > 0 {
+			catCardsBuilder.WriteString(`<div class="card-grid">`)
+			for _, c := range catContents {
+				detailPath := fmt.Sprintf("/%s/%s/%s/", locale, c.CategorySlug, c.Slug)
+				catCardsBuilder.WriteString(fmt.Sprintf(`
+                <article class="card">
+                    <div>
+                        <span class="badge">%s</span>
+                        <h3><a href="%s">%s</a></h3>
+                        <p>%s</p>
+                    </div>
+                    <div>
+                        <a href="%s" class="card-action">%s</a>
+                    </div>
+                </article>`,
+					template.HTMLEscapeString(c.CategoryName),
+					detailPath,
+					template.HTMLEscapeString(c.Title),
+					template.HTMLEscapeString(c.Summary),
+					detailPath,
+					readMoreText,
+				))
+			}
+			catCardsBuilder.WriteString(`</div>`)
+		} else {
+			catCardsBuilder.WriteString(fmt.Sprintf(`
+            <div style="background:#ffffff;border:1px dashed #cbd5e1;border-radius:12px;padding:3rem 1.5rem;text-align:center;color:#64748b;">
+                <svg style="width:48px;height:48px;margin:0 auto 1rem;color:#94a3b8;display:block;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <h3 style="font-size:1.1rem;font-weight:700;color:#334155;margin:0 0 0.5rem;">%s</h3>
+                <p style="font-size:0.9rem;margin:0;max-width:480px;margin-left:auto;margin-right:auto;">%s</p>
+            </div>`,
+				template.HTMLEscapeString(emptyTitle),
+				template.HTMLEscapeString(emptyDesc),
+			))
+		}
+
+		categoryHTML := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="%s">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>%s — %s</title>
+    <meta name="description" content="%s">%s
+    <link rel="canonical" href="%s">
+    <link rel="alternate" hreflang="id" href="%s">
+    <link rel="alternate" hreflang="en" href="%s">
+    <link rel="alternate" hreflang="x-default" href="%s">
+    <style>%s</style>
+</head>
+<body>
+%s
+    <main class="site-wrapper" style="padding-top: 1.5rem;">
+        <p><a href="/%s/" class="back-btn">%s</a></p>
+        <section class="hero" style="margin-top: 0.5rem;">
+            <span class="badge" style="background: rgba(5,150,105,0.15); color: #047857;">%s</span>
+            <h2>%s</h2>
+            <p>%s</p>
+        </section>
+        <section style="margin-top: 2rem;">
+            <h2 class="section-title">%s</h2>
+            %s
+        </section>
+    </main>
+%s
+</body>
+</html>`,
+			locale,
+			template.HTMLEscapeString(cat.Name),
+			template.HTMLEscapeString(siteName),
+			template.HTMLEscapeString(catDesc),
+			faviconTag,
+			catCanonical,
+			catAlternateID,
+			catAlternateEN,
+			catAlternateID,
+			commonCSS,
+			catHeaderHTML,
+			locale,
+			backHomeText,
+			categoryBadgeLabel,
+			template.HTMLEscapeString(cat.Name),
+			template.HTMLEscapeString(catDesc),
+			template.HTMLEscapeString(articlesSectionTitle),
+			catCardsBuilder.String(),
+			footerHTML,
+		)
+
+		if err := os.WriteFile(filepath.Join(catDir, "index.html"), []byte(categoryHTML), 0644); err != nil {
+			return err
+		}
+	}
+
+	// 3. Render Detail Pages: <locale>/<cat-slug>/<content-slug>/index.html
 	for _, c := range contents {
 		contentDir := filepath.Join(localeDir, c.CategorySlug, c.Slug)
 		if err := os.MkdirAll(contentDir, 0755); err != nil {
@@ -1236,7 +1399,11 @@ body {
 <body>
 %s
     <main class="site-wrapper" style="max-width: 800px; padding-top: 1.5rem;">
-        <p><a href="/%s/" class="back-btn">%s</a></p>
+        <p style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;font-size:0.85rem;margin-bottom:1.25rem;">
+            <a href="/%s/" class="back-btn" style="margin-bottom:0;">%s</a>
+            <span style="color:#94a3b8;">/</span>
+            <a href="/%s/%s/" class="back-btn" style="margin-bottom:0;">%s</a>
+        </p>
         <article class="article-header">
             <span class="badge">%s</span>
             <h1 class="article-title">%s</h1>
@@ -1260,6 +1427,9 @@ body {
 			headerHTML,
 			locale,
 			backHomeText,
+			locale,
+			c.CategorySlug,
+			template.HTMLEscapeString(c.CategoryName),
 			template.HTMLEscapeString(c.CategoryName),
 			template.HTMLEscapeString(c.Title),
 			locationLabel,
@@ -1274,7 +1444,7 @@ body {
 		}
 	}
 
-	// 3. Render Static Pages: <locale>/<page-slug>/index.html
+	// 4. Render Static Pages: <locale>/<page-slug>/index.html
 	for _, p := range pages {
 		pageDir := filepath.Join(localeDir, p.Slug)
 		if err := os.MkdirAll(pageDir, 0755); err != nil {
@@ -1357,6 +1527,48 @@ func (g *Generator) renderSitemap(
     <priority>1.0</priority>
   </url>
 `, g.baseURL, g.baseURL, g.baseURL, g.baseURL, g.baseURL, g.baseURL))
+
+	// Categories ID
+	for catID, c := range catsID {
+		url := fmt.Sprintf("%s/id/%s/", g.baseURL, c.Slug)
+		altURL := ""
+		if alt, ok := catsEN[catID]; ok && alt.Slug != "" {
+			altURL = fmt.Sprintf("%s/en/%s/", g.baseURL, alt.Slug)
+		}
+		sb.WriteString(fmt.Sprintf(`  <url>
+    <loc>%s</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="%s"/>`, url, url))
+		if altURL != "" {
+			sb.WriteString(fmt.Sprintf(`
+    <xhtml:link rel="alternate" hreflang="en" href="%s"/>`, altURL))
+		}
+		sb.WriteString(`
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+`)
+	}
+
+	// Categories EN
+	for catID, c := range catsEN {
+		url := fmt.Sprintf("%s/en/%s/", g.baseURL, c.Slug)
+		altURL := ""
+		if alt, ok := catsID[catID]; ok && alt.Slug != "" {
+			altURL = fmt.Sprintf("%s/id/%s/", g.baseURL, alt.Slug)
+		}
+		sb.WriteString(fmt.Sprintf(`  <url>
+    <loc>%s</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="%s"/>`, url, url))
+		if altURL != "" {
+			sb.WriteString(fmt.Sprintf(`
+    <xhtml:link rel="alternate" hreflang="id" href="%s"/>`, altURL))
+		}
+		sb.WriteString(`
+    <changefreq>daily</changefreq>
+    <priority>0.9</priority>
+  </url>
+`)
+	}
 
 	// Contents ID
 	for _, c := range contentsID {
