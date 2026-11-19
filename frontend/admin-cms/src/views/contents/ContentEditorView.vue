@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { api } from '../../api/client'
 import { useNotificationStore } from '../../stores/notification'
 import AppLayout from '../../components/layout/AppLayout.vue'
+import RichTextEditor from '../../components/common/RichTextEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -474,14 +475,12 @@ onMounted(async () => {
             </div>
 
             <div class="form-group">
-              <label>Isi Konten Artikel (HTML / Markdown) *</label>
-              <textarea
+              <label>Isi Konten Artikel (WYSIWYG Editor) *</label>
+              <RichTextEditor
                 v-model="form.translations[activeTab].bodyHtml"
-                rows="14"
-                class="textarea-control font-mono"
-                placeholder="<p>Tuliskan narasi lengkap mengenai objek wisata atau sejarah...</p>"
-                @input="markUnsaved"
-              ></textarea>
+                placeholder="Tuliskan narasi lengkap artikel di sini (format visual, judul sub-bab, poin butir, tautan, dan gambar)..."
+                @change="markUnsaved"
+              />
             </div>
 
             <div class="seo-section">
