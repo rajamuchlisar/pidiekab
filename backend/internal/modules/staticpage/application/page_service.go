@@ -50,10 +50,41 @@ func (s *PageService) CreatePage(ctx context.Context, adminID int64, pageKey str
 		return nil, err
 	}
 
-	page, err := s.repo.CreatePage(ctx, strings.TrimSpace(pageKey))
+	cleanKey := strings.TrimSpace(pageKey)
+	page, err := s.repo.CreatePage(ctx, cleanKey)
 	if err != nil {
 		return nil, err
 	}
+
+	// Initialize default draft translations for ID and EN so editing works immediately
+	words := strings.Split(cleanKey, "-")
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	humanTitle := strings.Join(words, " ")
+	emptyBody, _ := json.Marshal(map[string]string{
+		"html":     "<p></p>",
+		"markdown": "",
+	})
+
+	_, _ = s.repo.UpsertTranslation(ctx, postgres.UpsertTranslationParams{
+		StaticPageID: page.ID,
+		Locale:       domain.LocaleID,
+		Title:        humanTitle,
+		Slug:         cleanKey,
+		Body:         emptyBody,
+		AdminID:      adminID,
+	})
+	_, _ = s.repo.UpsertTranslation(ctx, postgres.UpsertTranslationParams{
+		StaticPageID: page.ID,
+		Locale:       domain.LocaleEN,
+		Title:        humanTitle,
+		Slug:         cleanKey,
+		Body:         emptyBody,
+		AdminID:      adminID,
+	})
 
 	s.recordAudit(ctx, &adminID, "static_page.create", "static_page", &page.ID, map[string]any{
 		"page_key": page.PageKey,

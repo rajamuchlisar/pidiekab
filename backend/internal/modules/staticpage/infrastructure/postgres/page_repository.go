@@ -55,7 +55,7 @@ func (r *PageRepository) GetPageByID(ctx context.Context, id int64) (*domain.Sta
 	queryTrans := `
 		SELECT
 			id, static_page_id, locale, title, slug, body,
-			seo_title, seo_description, status, published_at,
+			COALESCE(seo_title, ''), COALESCE(seo_description, ''), status, published_at,
 			created_by, updated_by, published_by, created_at, updated_at
 		FROM static_page_translations
 		WHERE static_page_id = $1
@@ -116,7 +116,7 @@ func (r *PageRepository) ListPages(ctx context.Context) ([]domain.StaticPageDeta
 	tRows, err := r.pool.Query(ctx, `
 		SELECT
 			id, static_page_id, locale, title, slug, body,
-			seo_title, seo_description, status, published_at,
+			COALESCE(seo_title, ''), COALESCE(seo_description, ''), status, published_at,
 			created_by, updated_by, published_by, created_at, updated_at
 		FROM static_page_translations
 	`)
@@ -183,7 +183,7 @@ func (r *PageRepository) UpsertTranslation(ctx context.Context, params UpsertTra
 			updated_at = NOW()
 		RETURNING
 			id, static_page_id, locale, title, slug, body,
-			seo_title, seo_description, status, published_at,
+			COALESCE(seo_title, ''), COALESCE(seo_description, ''), status, published_at,
 			created_by, updated_by, published_by, created_at, updated_at
 	`
 	var t domain.StaticPageTranslation
