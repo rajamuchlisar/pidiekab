@@ -2,6 +2,7 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/base64"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +24,39 @@ type RemoteExecutor struct {
 	pass   string
 }
 
+func dialWithProxyFallback(targetHost string, timeout time.Duration) (net.Conn, error) {
+	// First try direct
+	conn, err := net.DialTimeout("tcp", targetHost, 3*time.Second)
+	if err == nil {
+		return conn, nil
+	}
+
+	// Try via local office proxy (10.15.3.20:80)
+	proxyAddr := "10.15.3.20:80"
+	pConn, pErr := net.DialTimeout("tcp", proxyAddr, timeout)
+	if pErr != nil {
+		return nil, fmt.Errorf("direct connect failed (%v) and proxy connect failed: %w", err, pErr)
+	}
+
+	req := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Connection: Keep-Alive\r\n\r\n", targetHost, targetHost)
+	if _, err := pConn.Write([]byte(req)); err != nil {
+		pConn.Close()
+		return nil, fmt.Errorf("proxy write failed: %w", err)
+	}
+
+	br := bufio.NewReader(pConn)
+	resp, err := http.ReadResponse(br, nil)
+	if err != nil {
+		pConn.Close()
+		return nil, fmt.Errorf("failed reading proxy response: %w", err)
+	}
+	if resp.StatusCode != 200 {
+		pConn.Close()
+		return nil, fmt.Errorf("proxy CONNECT rejected with status: %s", resp.Status)
+	}
+	return pConn, nil
+}
+
 func NewRemoteExecutor(host, user, pass string) (*RemoteExecutor, error) {
 	config := &ssh.ClientConfig{
 		User: user,
@@ -32,7 +67,7 @@ func NewRemoteExecutor(host, user, pass string) (*RemoteExecutor, error) {
 		Timeout:         20 * time.Second,
 	}
 
-	conn, err := net.DialTimeout("tcp", host, 20*time.Second)
+	conn, err := dialWithProxyFallback(host, 15*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("failed to reach host %s: %w", host, err)
 	}
