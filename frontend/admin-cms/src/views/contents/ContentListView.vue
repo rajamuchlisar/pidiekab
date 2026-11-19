@@ -28,6 +28,12 @@ async function loadCategories() {
   }
 }
 
+function getCategoryName(id: number | null | undefined): string {
+  if (!id) return 'Umum'
+  const cat = categories.value.find((c) => c.id === id)
+  return cat?.names?.id || cat?.names?.en || cat?.code || 'Umum'
+}
+
 async function loadContents() {
   isLoading.value = true
   try {
@@ -44,10 +50,11 @@ async function loadContents() {
       params.set('q', searchQuery.value)
     }
 
-    const res = await api.get<{ items: any[]; total: number }>(`/api/v1/admin/contents?${params.toString()}`)
-    if (res && res.items) {
-      items.value = res.items
-      totalItems.value = res.total || res.items.length
+    const res = await api.get<any>(`/api/v1/admin/contents?${params.toString()}`)
+    const list = res?.items || res?.data || []
+    if (Array.isArray(list)) {
+      items.value = list
+      totalItems.value = res?.total || res?.meta?.total_items || list.length
     } else {
       items.value = []
       totalItems.value = 0
@@ -169,7 +176,7 @@ onMounted(() => {
                   </div>
                 </td>
                 <td>
-                  <span class="badge badge-category">{{ item.categoryName || 'Umum' }}</span>
+                  <span class="badge badge-category">{{ item.categoryName || getCategoryName(item.category_id || item.categoryId) || 'Umum' }}</span>
                 </td>
                 <td>
                   <span
@@ -188,7 +195,7 @@ onMounted(() => {
                   </span>
                 </td>
                 <td class="text-muted">
-                  {{ new Date(item.updatedAt || item.createdAt).toLocaleDateString('id-ID') }}
+                  {{ new Date(item.updatedAt || item.updated_at || item.createdAt || item.created_at).toLocaleDateString('id-ID') }}
                 </td>
                 <td class="text-right">
                   <div class="action-buttons">

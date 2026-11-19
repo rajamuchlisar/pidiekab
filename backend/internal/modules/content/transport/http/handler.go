@@ -117,7 +117,10 @@ func (h *Handler) handleListContents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": items,
+		"data":        items,
+		"items":       items,
+		"total":       total,
+		"total_items": total,
 		"meta": map[string]any{
 			"page":        page,
 			"per_page":    perPage,

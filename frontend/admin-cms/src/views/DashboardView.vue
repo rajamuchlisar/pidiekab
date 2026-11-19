@@ -19,15 +19,16 @@ async function loadDashboardData() {
   isLoading.value = true
   try {
     // 1. Fetch contents
-    const contentsRes = await api.get<{ items: any[]; total: number }>('/api/v1/admin/contents?per_page=5')
-    if (contentsRes && contentsRes.items) {
-      recentContents.value = contentsRes.items
-      stats.value.totalContents = contentsRes.total || contentsRes.items.length
+    const contentsRes = await api.get<any>('/api/v1/admin/contents?per_page=5')
+    const cItems = contentsRes?.items || contentsRes?.data || []
+    if (Array.isArray(cItems)) {
+      recentContents.value = cItems
+      stats.value.totalContents = contentsRes.total || contentsRes.meta?.total_items || cItems.length
       
       let pubId = 0
       let pubEn = 0
       let drafts = 0
-      contentsRes.items.forEach((c: any) => {
+      cItems.forEach((c: any) => {
         if (c.translations?.id?.status === 'published') pubId++
         if (c.translations?.en?.status === 'published') pubEn++
         if (c.translations?.id?.status === 'draft' || c.translations?.en?.status === 'draft') drafts++

@@ -138,7 +138,10 @@ func (h *MediaHandler) HandleListMedia(w http.ResponseWriter, r *http.Request) {
 	totalPages := (total + perPage - 1) / perPage
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": assets,
+		"data":        assets,
+		"items":       assets,
+		"total":       total,
+		"total_items": total,
 		"meta": map[string]any{
 			"page":        page,
 			"per_page":    perPage,

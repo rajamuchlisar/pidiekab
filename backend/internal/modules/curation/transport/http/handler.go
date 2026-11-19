@@ -35,10 +35,70 @@ func (h *CurationHandler) RegisterRoutes(mux *http.ServeMux) {
 		return authMiddleware(handler)
 	}
 
+	mux.Handle("GET /api/v1/admin/curation/featured", wrapGet(h.HandleGetFeatured))
+	mux.Handle("GET /api/v1/admin/curation/stories", wrapGet(h.HandleGetStories))
 	mux.Handle("GET /api/v1/admin/curation/{locale}", wrapGet(h.HandleGetCuratedHomepage))
 	mux.Handle("PUT /api/v1/admin/curation/featured", wrapProtected(h.HandleSetFeatured))
 	mux.Handle("PUT /api/v1/admin/curation/{locale}/lead", wrapProtected(h.HandleSetLeadStory))
 	mux.Handle("PUT /api/v1/admin/curation/{locale}/supporting", wrapProtected(h.HandleSetSupportingStories))
+}
+
+func (h *CurationHandler) HandleGetFeatured(w http.ResponseWriter, r *http.Request) {
+	curated, err := h.service.GetCuratedHomepage(r.Context(), "id")
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get featured")
+		return
+	}
+	items := make([]map[string]any, 0, len(curated.Featured))
+	for _, f := range curated.Featured {
+		items = append(items, map[string]any{
+			"contentId":    f.ContentID,
+			"position":     f.Position,
+			"title":        f.Title,
+			"categoryName": f.Category,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"items": items,
+		"data":  items,
+	})
+}
+
+func (h *CurationHandler) HandleGetStories(w http.ResponseWriter, r *http.Request) {
+	idCurated, _ := h.service.GetCuratedHomepage(r.Context(), "id")
+	enCurated, _ := h.service.GetCuratedHomepage(r.Context(), "en")
+	formatStories := func(c *domain.HomepageCuration) map[string]any {
+		if c == nil {
+			return map[string]any{"lead": nil, "supporting": []any{}}
+		}
+		var lead any
+		if c.LeadStory != nil {
+			lead = map[string]any{
+				"contentId":    c.LeadStory.ContentID,
+				"title":        c.LeadStory.Title,
+				"categoryName": c.LeadStory.Category,
+			}
+		}
+		supporting := make([]map[string]any, 0, len(c.SupportingStories))
+		for _, s := range c.SupportingStories {
+			supporting = append(supporting, map[string]any{
+				"contentId":    s.ContentID,
+				"position":     s.Position,
+				"title":        s.Title,
+				"categoryName": s.Category,
+			})
+		}
+		return map[string]any{
+			"lead":       lead,
+			"supporting": supporting,
+		}
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"id": formatStories(idCurated),
+		"en": formatStories(enCurated),
+	})
 }
 
 func (h *CurationHandler) HandleGetCuratedHomepage(w http.ResponseWriter, r *http.Request) {
