@@ -98,10 +98,16 @@ async function loadMasterData() {
   }
 
   try {
-    const mediaRes = await api.get<any>('/api/v1/admin/media?per_page=50').catch(() => null)
+    const mediaRes = await api.get<any>('/api/v1/admin/media?per_page=100').catch(() => null)
     const media = mediaRes?.items || mediaRes?.data || []
     if (Array.isArray(media)) {
-      mediaList.value = media
+      mediaList.value = media.map((m: any) => ({
+        id: m.id,
+        storageKey: m.storage_key || m.storageKey,
+        url: m.url || (m.storage_key ? `/media/${m.storage_key}` : (m.storageKey ? `/media/${m.storageKey}` : '')),
+        title: m.title || m.original_filename || m.originalFilename || `Foto #${m.id}`,
+        fileName: m.original_filename || m.originalFilename || `media-${m.id}`,
+      }))
     }
   } catch (err) {
     console.error('Failed to load media', err)

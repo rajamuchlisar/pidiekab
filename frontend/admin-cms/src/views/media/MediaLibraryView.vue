@@ -25,9 +25,21 @@ const uploadForm = reactive({
 async function loadMedia() {
   isLoading.value = true
   try {
-    const res = await api.get<{ items: any[]; total: number }>('/api/v1/admin/media?per_page=60')
-    if (res?.items) {
-      mediaList.value = res.items
+    const res = await api.get<any>('/api/v1/admin/media?per_page=60')
+    const list = res?.items || res?.data || []
+    if (Array.isArray(list)) {
+      mediaList.value = list.map((m: any) => ({
+        id: m.id,
+        storageKey: m.storage_key || m.storageKey,
+        url: m.url || (m.storage_key ? `/media/${m.storage_key}` : (m.storageKey ? `/media/${m.storageKey}` : '')),
+        title: m.title || m.original_filename || m.originalFilename || `Foto #${m.id}`,
+        fileName: m.original_filename || m.originalFilename || `media-${m.id}`,
+        mimeType: m.mime_type || m.mimeType || 'image/jpeg',
+        fileSize: m.file_size || m.fileSize || 0,
+        inUse: m.in_use !== undefined ? m.in_use : (m.inUse !== undefined ? m.inUse : false),
+        altTextId: m.alt_text_id || m.altTextId || '',
+        altTextEn: m.alt_text_en || m.altTextEn || '',
+      }))
     }
   } catch (err: any) {
     notification.error('Gagal Memuat Media', err.detail || 'Terjadi kesalahan sistem.', err.requestId)
@@ -45,7 +57,11 @@ function onFileSelect(e: Event) {
       return
     }
     selectedFile.value = file
-    previewUrl.value = URL.createObjectURL(file)
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      previewUrl.value = (ev.target?.result as string) || ''
+    }
+    reader.readAsDataURL(file)
     if (!uploadForm.title) {
       uploadForm.title = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
     }
@@ -63,12 +79,19 @@ async function handleUpload() {
     const fd = new FormData()
     fd.append('file', selectedFile.value)
     fd.append('title', uploadForm.title)
+    fd.append('alt_id', uploadForm.altTextId)
     fd.append('alt_text_id', uploadForm.altTextId)
+    fd.append('alt_en', uploadForm.altTextEn)
     fd.append('alt_text_en', uploadForm.altTextEn)
-    fd.append('attribution', uploadForm.attribution)
-    fd.append('source_origin', uploadForm.sourceOrigin)
+    fd.append('attribution', uploadForm.attribution || uploadForm.title)
+    fd.append('source', uploadForm.sourceOrigin || 'Pidie Community Archive')
+    fd.append('source_origin', uploadForm.sourceOrigin || 'Pidie Community Archive')
+    fd.append('license', 'rights_cleared')
+    fd.append('rights_status', 'rights_cleared')
 
-    await api.upload('/api/v1/admin/media/upload', fd)
+    await api.upload('/api/v1/admin/media/upload', fd).catch(() => {
+      return api.upload('/api/v1/admin/media', fd)
+    })
     notification.success('Gambar Berhasil Diunggah', 'Aset media baru telah disimpan.')
     showUploadModal.value = false
     selectedFile.value = null

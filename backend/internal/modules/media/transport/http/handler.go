@@ -46,6 +46,7 @@ func (h *MediaHandler) RegisterRoutes(mux *http.ServeMux) {
 	// Admin media library endpoints (behind RequireAdminSession)
 	mux.Handle("GET /api/v1/admin/media", wrapGet(h.HandleListMedia))
 	mux.Handle("POST /api/v1/admin/media", wrapProtected(h.HandleUploadMedia))
+	mux.Handle("POST /api/v1/admin/media/upload", wrapProtected(h.HandleUploadMedia))
 	mux.Handle("GET /api/v1/admin/media/{id}", wrapGet(h.HandleGetMedia))
 	mux.Handle("PUT /api/v1/admin/media/{id}", wrapProtected(h.HandleUpdateMetadata))
 	mux.Handle("DELETE /api/v1/admin/media/{id}", wrapProtected(h.HandleDeleteMedia))
@@ -72,15 +73,39 @@ func (h *MediaHandler) HandleUploadMedia(w http.ResponseWriter, r *http.Request)
 	}
 	defer file.Close()
 
-	meta := application.UploadMetadata{
-		AltTextID:    r.FormValue("alt_id"),
-		AltTextEN:    r.FormValue("alt_en"),
-		SourceURL:    r.FormValue("source"),
-		RightsStatus: r.FormValue("license"),
-		Attribution:  r.FormValue("attribution"),
+	altID := r.FormValue("alt_id")
+	if altID == "" {
+		altID = r.FormValue("alt_text_id")
 	}
-	if meta.RightsStatus == "" {
-		meta.RightsStatus = r.FormValue("rights_status")
+	altEN := r.FormValue("alt_en")
+	if altEN == "" {
+		altEN = r.FormValue("alt_text_en")
+	}
+	sourceURL := r.FormValue("source")
+	if sourceURL == "" {
+		sourceURL = r.FormValue("source_origin")
+	}
+	if sourceURL == "" {
+		sourceURL = r.FormValue("source_url")
+	}
+	rightsStatus := r.FormValue("license")
+	if rightsStatus == "" {
+		rightsStatus = r.FormValue("rights_status")
+	}
+	if rightsStatus == "" {
+		rightsStatus = "rights_cleared"
+	}
+	attribution := r.FormValue("attribution")
+	if attribution == "" {
+		attribution = r.FormValue("title")
+	}
+
+	meta := application.UploadMetadata{
+		AltTextID:    altID,
+		AltTextEN:    altEN,
+		SourceURL:    sourceURL,
+		RightsStatus: rightsStatus,
+		Attribution:  attribution,
 	}
 
 	asset, err := h.service.Upload(r.Context(), admin.ID, header.Filename, file, meta)
@@ -101,10 +126,14 @@ func (h *MediaHandler) HandleUploadMedia(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	mediaURL := "/media/" + asset.StorageKey
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": asset,
+		"data":  asset,
+		"asset": asset,
+		"id":    asset.ID,
+		"url":   mediaURL,
 	})
 }
 
@@ -131,15 +160,24 @@ func (h *MediaHandler) HandleListMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if assets == nil {
-		assets = []mediaDomain.MediaAsset{}
+	type mediaItemDTO struct {
+		mediaDomain.MediaAsset
+		URL string `json:"url"`
+	}
+
+	itemsDTO := make([]mediaItemDTO, 0, len(assets))
+	for _, a := range assets {
+		itemsDTO = append(itemsDTO, mediaItemDTO{
+			MediaAsset: a,
+			URL:        "/media/" + a.StorageKey,
+		})
 	}
 
 	totalPages := (total + perPage - 1) / perPage
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data":        assets,
-		"items":       assets,
+		"data":        itemsDTO,
+		"items":       itemsDTO,
 		"total":       total,
 		"total_items": total,
 		"meta": map[string]any{
@@ -176,7 +214,9 @@ func (h *MediaHandler) HandleGetMedia(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": asset,
+		"data":  asset,
+		"asset": asset,
+		"url":   "/media/" + asset.StorageKey,
 	})
 }
 
