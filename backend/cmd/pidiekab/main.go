@@ -76,6 +76,9 @@ func main() {
 		case "seed":
 			handleSeedCLI(cfg, logger)
 			return
+		case "seed-drafts":
+			handleSeedDraftsCLI(cfg, logger)
+			return
 		case "db":
 			if len(os.Args) > 2 && os.Args[2] == "status" {
 				handleDBStatusCLI(cfg, logger)

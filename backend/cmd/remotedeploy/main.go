@@ -267,7 +267,15 @@ chmod +x /opt/pidiekab/current/bin/pidiekab
 	exec.Sudo("chown -R pidiekab:pidiekab /opt/pidiekab/current/frontend/admin-cms/dist")
 	fmt.Println("CMS dist successfully synced to production locations.")
 
-	fmt.Println("\n=== 4. Executing SSG Build on Server ===")
+	fmt.Println("\n=== 4. Seeding Authentic Draft Contents on Server ===")
+	seedDraftsCmd := `
+cd /opt/pidiekab/current
+su -s /bin/bash pidiekab -c 'PIDIEKAB_DATABASE_URL="postgres://pidiekab:pidiekab_strong_pass_2026!@127.0.0.1:5432/pidiekab_production?sslmode=disable" /opt/pidiekab/current/bin/pidiekab seed-drafts'
+`
+	out, err = exec.Sudo(seedDraftsCmd)
+	fmt.Printf("Seed drafts output:\n%s\n", out)
+
+	fmt.Println("\n=== 5. Executing SSG Build on Server ===")
 	ssgBuildCmd := `
 cd /opt/pidiekab/current
 su -s /bin/bash pidiekab -c 'PIDIEKAB_DATABASE_URL="postgres://pidiekab:pidiekab_strong_pass_2026!@127.0.0.1:5432/pidiekab_production?sslmode=disable" PIDIEKAB_SSG_OUTPUT_ROOT="/var/lib/pidiekab/ssg" PIDIEKAB_BASE_URL="https://pidiekab.web.id" /opt/pidiekab/current/bin/pidiekab ssg build'
@@ -275,11 +283,11 @@ su -s /bin/bash pidiekab -c 'PIDIEKAB_DATABASE_URL="postgres://pidiekab:pidiekab
 	out, err = exec.Sudo(ssgBuildCmd)
 	fmt.Printf("SSG build output:\n%s\n", out)
 
-	fmt.Println("\n=== 5. Restarting pidiekab.service ===")
+	fmt.Println("\n=== 6. Restarting pidiekab.service ===")
 	exec.Sudo("systemctl restart pidiekab.service")
 	time.Sleep(2 * time.Second)
 
-	fmt.Println("\n=== 6. Verifying CMS index.html in Production ===")
+	fmt.Println("\n=== 7. Verifying CMS index.html in Production ===")
 	snippet, _ := exec.Run("curl -s -k https://127.0.0.1/cms/ | grep -i 'interactive-widget'")
 	fmt.Printf("CMS Viewport check:\n%s\n", snippet)
 	loginSnippet, _ := exec.Run("curl -s -k https://127.0.0.1/cms/ | head -n 15")
