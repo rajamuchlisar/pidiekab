@@ -137,8 +137,10 @@ async function loadContent() {
               title: t.title || t.Title || '',
               slug: t.slug || t.Slug || '',
               summary: t.summary || t.Summary || '',
-              body: t.body || t.Body || '',
-              status: t.status || t.Status || 'draft',
+              bodyHtml: t.bodyHtml || t.body_html || t.body || t.Body || '',
+              seoTitle: t.seoTitle || t.seo_title || t.SEOTitle || '',
+              seoDescription: t.seoDescription || t.seo_description || t.SEODescription || '',
+              status: (t.status || t.Status || 'draft') as 'draft' | 'published' | 'archived',
             }
           }
         })
