@@ -62,9 +62,22 @@ onMounted(() => {
 
 function onEditorInput() {
   if (!editorRef.value) return
+  enforceNofollowInEditor()
   const html = editorRef.value.innerHTML
   emit('update:modelValue', html)
   emit('change', html)
+}
+
+function enforceNofollowInEditor() {
+  if (!editorRef.value) return
+  const links = editorRef.value.querySelectorAll('a')
+  links.forEach((a) => {
+    const href = a.getAttribute('href') || ''
+    if (/^https?:\/\//i.test(href) && !href.includes('pidiekab.web.id')) {
+      a.setAttribute('target', '_blank')
+      a.setAttribute('rel', 'nofollow noopener noreferrer')
+    }
+  })
 }
 
 function onSourceInput(e: Event) {
@@ -73,6 +86,7 @@ function onSourceInput(e: Event) {
   emit('change', val)
   if (editorRef.value) {
     editorRef.value.innerHTML = val
+    enforceNofollowInEditor()
   }
 }
 
@@ -99,6 +113,7 @@ function toggleSourceMode() {
     nextTick(() => {
       if (editorRef.value) {
         editorRef.value.innerHTML = props.modelValue || ''
+        enforceNofollowInEditor()
         editorRef.value.focus()
       }
     })
@@ -132,16 +147,21 @@ function applyLink() {
     sel?.addRange(savedSelection)
   }
 
+  const isExternal = /^https?:\/\//i.test(linkUrl.value) && !linkUrl.value.includes('pidiekab.web.id')
+
   if (linkText.value && (!savedSelection || savedSelection.collapsed)) {
     // Insert new link with custom text
     const a = document.createElement('a')
     a.href = linkUrl.value
     a.textContent = linkText.value
-    a.target = '_blank'
-    a.rel = 'noopener noreferrer'
+    if (isExternal) {
+      a.target = '_blank'
+      a.rel = 'nofollow noopener noreferrer'
+    }
     savedSelection?.insertNode(a)
   } else {
     document.execCommand('createLink', false, linkUrl.value)
+    enforceNofollowInEditor()
   }
 
   showLinkModal.value = false

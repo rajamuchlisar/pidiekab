@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -279,6 +280,45 @@ func (g *Generator) fetchPublishedPages(ctx context.Context) ([]StaticPageRender
 	return pagesID, pagesEN, nil
 }
 
+var (
+	linkTagRegex    = regexp.MustCompile(`(?i)<a\s+([^>]+)>`)
+	hrefAttrRegex   = regexp.MustCompile(`(?i)\bhref\s*=\s*["']([^"']+)["']`)
+	relAttrRegex    = regexp.MustCompile(`(?i)\brel\s*=\s*["'][^"']*["']`)
+	targetAttrRegex = regexp.MustCompile(`(?i)\btarget\s*=\s*["'][^"']*["']`)
+)
+
+// enforceNofollow ensures all external outbound links strictly carry rel="nofollow noopener noreferrer" and target="_blank".
+func enforceNofollow(htmlStr string) string {
+	if htmlStr == "" {
+		return ""
+	}
+
+	return linkTagRegex.ReplaceAllStringFunc(htmlStr, func(fullTag string) string {
+		hrefMatches := hrefAttrRegex.FindStringSubmatch(fullTag)
+		if len(hrefMatches) < 2 {
+			return fullTag
+		}
+
+		href := strings.TrimSpace(hrefMatches[1])
+		// External links start with http://, https://, or //, and do NOT point to internal pidiekab.web.id
+		isExternal := (strings.HasPrefix(strings.ToLower(href), "http://") ||
+			strings.HasPrefix(strings.ToLower(href), "https://") ||
+			strings.HasPrefix(href, "//")) &&
+			!strings.Contains(strings.ToLower(href), "pidiekab.web.id")
+
+		if !isExternal {
+			return fullTag
+		}
+
+		// Remove existing rel and target attributes
+		cleaned := relAttrRegex.ReplaceAllString(fullTag, "")
+		cleaned = targetAttrRegex.ReplaceAllString(cleaned, "")
+		cleaned = strings.TrimSuffix(strings.TrimSpace(cleaned), ">")
+
+		return fmt.Sprintf(`%s rel="nofollow noopener noreferrer" target="_blank">`, cleaned)
+	})
+}
+
 func renderBodyBlocksToHTML(bodyBytes []byte) template.HTML {
 	if len(bodyBytes) == 0 {
 		return ""
@@ -286,17 +326,17 @@ func renderBodyBlocksToHTML(bodyBytes []byte) template.HTML {
 
 	var parsed map[string]any
 	if err := json.Unmarshal(bodyBytes, &parsed); err != nil {
-		return template.HTML("<p>" + template.HTMLEscapeString(string(bodyBytes)) + "</p>")
+		return template.HTML(enforceNofollow("<p>" + template.HTMLEscapeString(string(bodyBytes)) + "</p>"))
 	}
 
 	if htmlStr, ok := parsed["html"].(string); ok && htmlStr != "" {
-		return template.HTML(htmlStr)
+		return template.HTML(enforceNofollow(htmlStr))
 	}
 
 	blocks, ok := parsed["blocks"].([]any)
 	if !ok {
 		if mdStr, ok := parsed["markdown"].(string); ok && mdStr != "" {
-			return template.HTML("<p>" + template.HTMLEscapeString(mdStr) + "</p>")
+			return template.HTML(enforceNofollow("<p>" + template.HTMLEscapeString(mdStr) + "</p>"))
 		}
 		return ""
 	}
@@ -327,7 +367,7 @@ func renderBodyBlocksToHTML(bodyBytes []byte) template.HTML {
 		}
 	}
 
-	return template.HTML(sb.String())
+	return template.HTML(enforceNofollow(sb.String()))
 }
 
 func (g *Generator) renderLocaleSite(
@@ -820,7 +860,7 @@ body {
             <ul class="source-list">`, sourcesHeader))
 			for _, src := range c.Sources {
 				if src.URL != "" {
-					sourcesHTML.WriteString(fmt.Sprintf(`<li>%s — <a href="%s" target="_blank" rel="noopener noreferrer">%s</a></li>`, template.HTMLEscapeString(src.Name), template.HTMLEscapeString(src.URL), template.HTMLEscapeString(src.URL)))
+					sourcesHTML.WriteString(fmt.Sprintf(`<li>%s — <a href="%s" target="_blank" rel="nofollow noopener noreferrer">%s</a></li>`, template.HTMLEscapeString(src.Name), template.HTMLEscapeString(src.URL), template.HTMLEscapeString(src.URL)))
 				} else {
 					sourcesHTML.WriteString(fmt.Sprintf(`<li>%s</li>`, template.HTMLEscapeString(src.Name)))
 				}
