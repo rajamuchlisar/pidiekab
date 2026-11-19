@@ -422,6 +422,18 @@ func handleSeedDraftsCLI(cfg config.Config, logger *slog.Logger) {
 		err := dbPool.QueryRow(ctx, "SELECT content_id FROM content_translations WHERE locale = 'id' AND slug = $1", it.idSlug).Scan(&existingID)
 		if err == nil && existingID > 0 {
 			skippedCount++
+			var srcCount int
+			_ = dbPool.QueryRow(ctx, "SELECT COUNT(*) FROM content_sources WHERE content_id = $1", existingID).Scan(&srcCount)
+			if srcCount == 0 {
+				st := strings.ToLower(it.sourceType)
+				if st != "research" && st != "visit" && st != "official" && st != "social" {
+					st = "research"
+				}
+				_, _ = dbPool.Exec(ctx, `
+					INSERT INTO content_sources (content_id, source_name, source_type, source_url, notes, created_by)
+					VALUES ($1, $2, $3, $4, $5, $6)
+				`, existingID, it.sourceName, st, it.sourceURL, it.sourceNote, adminID)
+			}
 			continue
 		}
 
@@ -466,10 +478,14 @@ func handleSeedDraftsCLI(cfg config.Config, logger *slog.Logger) {
 		}
 
 		// Insert verified content source citation
+		st := strings.ToLower(it.sourceType)
+		if st != "research" && st != "visit" && st != "official" && st != "social" {
+			st = "research"
+		}
 		_, err = dbPool.Exec(ctx, `
 			INSERT INTO content_sources (content_id, source_name, source_type, source_url, notes, created_by)
 			VALUES ($1, $2, $3, $4, $5, $6)
-		`, contentID, it.sourceName, it.sourceType, it.sourceURL, it.sourceNote, adminID)
+		`, contentID, it.sourceName, st, it.sourceURL, it.sourceNote, adminID)
 		if err != nil {
 			logger.Error("failed to insert content source", "contentID", contentID, "error", err)
 		}
