@@ -61,13 +61,16 @@ func (s *MediaService) Upload(ctx context.Context, adminID int64, filename strin
 		return nil, err
 	}
 
+	// Compress and optimize image to web standards (max 1920px Full HD, quality 82)
+	buf, width, height, mimeType = OptimizeImage(buf, mimeType, width, height)
+
 	// Compute SHA-256 for integrity check
 	hasher := sha256.New()
 	hasher.Write(buf)
 	checksum := hex.EncodeToString(hasher.Sum(nil))
 
 	ext := filepath.Ext(filename)
-	if ext == "" {
+	if ext == "" || (mimeType == domain.MimeJPEG && ext != ".jpg" && ext != ".jpeg") {
 		switch mimeType {
 		case domain.MimeJPEG:
 			ext = ".jpg"

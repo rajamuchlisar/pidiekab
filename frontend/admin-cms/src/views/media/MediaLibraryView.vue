@@ -14,6 +14,115 @@ const isUploading = ref(false)
 const selectedFile = ref<File | null>(null)
 const previewUrl = ref('')
 
+// Compression state
+interface CompressionStats {
+  originalSize: number
+  compressedSize: number
+  reductionPercent: number
+  dimensions: { width: number; height: number }
+}
+
+const isCompressing = ref(false)
+const compressionStats = ref<CompressionStats | null>(null)
+const enableCompression = ref(true)
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
+}
+
+async function compressImageFile(file: File, maxDimension = 1920, quality = 0.82): Promise<{ file: File; stats: CompressionStats }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const reader = new FileReader()
+
+    reader.onload = (e) => {
+      img.src = e.target?.result as string
+    }
+    reader.onerror = reject
+
+    img.onload = () => {
+      const width = img.naturalWidth || img.width
+      const height = img.naturalHeight || img.height
+
+      let targetWidth = width
+      let targetHeight = height
+
+      if (width > maxDimension || height > maxDimension) {
+        if (width > height) {
+          targetWidth = maxDimension
+          targetHeight = Math.round((height * maxDimension) / width)
+        } else {
+          targetHeight = maxDimension
+          targetWidth = Math.round((width * maxDimension) / height)
+        }
+      }
+
+      const canvas = document.createElement('canvas')
+      canvas.width = targetWidth
+      canvas.height = targetHeight
+
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        resolve({
+          file,
+          stats: {
+            originalSize: file.size,
+            compressedSize: file.size,
+            reductionPercent: 0,
+            dimensions: { width, height },
+          },
+        })
+        return
+      }
+
+      ctx.imageSmoothingEnabled = true
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(img, 0, 0, targetWidth, targetHeight)
+
+      const outputType = 'image/webp'
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            resolve({
+              file,
+              stats: {
+                originalSize: file.size,
+                compressedSize: file.size,
+                reductionPercent: 0,
+                dimensions: { width, height },
+              },
+            })
+            return
+          }
+
+          const originalBaseName = file.name.replace(/\.[^/.]+$/, '')
+          const newFileName = `${originalBaseName}.webp`
+          const compressedFile = new File([blob], newFileName, { type: outputType })
+
+          const reduction = Math.max(0, Math.round(((file.size - blob.size) / file.size) * 100))
+
+          resolve({
+            file: compressedFile,
+            stats: {
+              originalSize: file.size,
+              compressedSize: blob.size,
+              reductionPercent: reduction,
+              dimensions: { width: targetWidth, height: targetHeight },
+            },
+          })
+        },
+        outputType,
+        quality
+      )
+    }
+
+    img.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
 const uploadForm = reactive({
   title: '',
   altTextId: '',
@@ -48,22 +157,51 @@ async function loadMedia() {
   }
 }
 
-function onFileSelect(e: Event) {
+async function onFileSelect(e: Event) {
   const target = e.target as HTMLInputElement
   if (target.files && target.files[0]) {
-    const file = target.files[0]
-    if (file.size > 10 * 1024 * 1024) {
-      alert('Ukuran file maksimal 10MB.')
+    const rawFile = target.files[0]
+    if (rawFile.size > 20 * 1024 * 1024) {
+      alert('Ukuran file maksimal 20MB.')
       return
     }
-    selectedFile.value = file
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      previewUrl.value = (ev.target?.result as string) || ''
-    }
-    reader.readAsDataURL(file)
+
     if (!uploadForm.title) {
-      uploadForm.title = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
+      uploadForm.title = rawFile.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ')
+    }
+
+    isCompressing.value = true
+    try {
+      if (enableCompression.value) {
+        const result = await compressImageFile(rawFile, 1920, 0.82)
+        selectedFile.value = result.file
+        compressionStats.value = result.stats
+
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          previewUrl.value = (ev.target?.result as string) || ''
+        }
+        reader.readAsDataURL(result.file)
+      } else {
+        selectedFile.value = rawFile
+        compressionStats.value = null
+        const reader = new FileReader()
+        reader.onload = (ev) => {
+          previewUrl.value = (ev.target?.result as string) || ''
+        }
+        reader.readAsDataURL(rawFile)
+      }
+    } catch (err) {
+      console.warn('Compression error, fallback to original', err)
+      selectedFile.value = rawFile
+      compressionStats.value = null
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        previewUrl.value = (ev.target?.result as string) || ''
+      }
+      reader.readAsDataURL(rawFile)
+    } finally {
+      isCompressing.value = false
     }
   }
 }
@@ -218,8 +356,37 @@ onMounted(() => {
                 <div v-else class="dropzone-placeholder">
                   <span class="upload-icon"><BladeIcon name="folder" size="36" /></span>
                   <strong>Pilih Berkas Foto</strong>
-                  <span class="drop-hint">Maksimal 10MB (JPEG, PNG, WebP). SVG/Executable ditolak.</span>
+                  <span class="drop-hint">Maksimal 20MB (JPEG, PNG, WebP). Kompresi cerdas aktif otomatis.</span>
                 </div>
+              </label>
+            </div>
+
+            <!-- Compression Feedback -->
+            <div v-if="isCompressing" class="compression-loading">
+              <BladeIcon name="arrow-path" size="16" class="spin-icon" />
+              <span>Mengompresi dan mengoptimalkan gambar...</span>
+            </div>
+
+            <div v-else-if="compressionStats" class="compression-stats-card">
+              <div class="comp-header">
+                <span class="comp-badge">
+                  <BladeIcon name="sparkles" size="14" />
+                  Hemat {{ compressionStats.reductionPercent }}%
+                </span>
+                <span class="comp-label">Kompresi Cerdas Berhasil</span>
+              </div>
+              <div class="comp-details">
+                <span class="comp-size-orig">{{ formatBytes(compressionStats.originalSize) }}</span>
+                <span class="comp-arrow">&rarr;</span>
+                <span class="comp-size-new">{{ formatBytes(compressionStats.compressedSize) }}</span>
+                <span class="comp-dims">({{ compressionStats.dimensions.width }}&times;{{ compressionStats.dimensions.height }}px &bull; WebP)</span>
+              </div>
+            </div>
+
+            <div class="compression-toggle-row">
+              <label class="toggle-container">
+                <input type="checkbox" v-model="enableCompression" />
+                <span class="toggle-text">Kompresi Cerdas Otomatis (WebP kualitas tinggi & maks 1920px)</span>
               </label>
             </div>
 
@@ -519,4 +686,106 @@ onMounted(() => {
 }
 
 .empty-icon { font-size: 2.5rem; display: block; margin-bottom: 0.5rem; }
+
+/* Compression info & styles */
+.compression-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: #f0fdf4;
+  border: 1px dashed #86efac;
+  color: #166534;
+  padding: 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.compression-stats-card {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.comp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.comp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #059669;
+  color: #ffffff;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.comp-label {
+  font-size: 0.75rem;
+  color: #047857;
+  font-weight: 600;
+}
+
+.comp-details {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.comp-size-orig {
+  color: #64748b;
+  text-decoration: line-through;
+}
+
+.comp-arrow {
+  color: #059669;
+}
+
+.comp-size-new {
+  color: #065f46;
+  font-weight: 700;
+}
+
+.comp-dims {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.compression-toggle-row {
+  display: flex;
+  align-items: center;
+}
+
+.toggle-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.toggle-text {
+  font-size: 0.8rem;
+  color: #334155;
+  font-weight: 500;
+}
 </style>
