@@ -11,9 +11,16 @@ export const useAuthStore = defineStore('auth', () => {
   async function checkSession(): Promise<boolean> {
     isChecking.value = true
     try {
-      const res = await api.get<{ admin: AdminUser }>('/api/v1/admin/auth/me')
-      if (res && res.admin) {
-        user.value = res.admin
+      const res = await api.get<any>('/api/v1/admin/auth/me')
+      const adminData = res?.admin || res?.data
+      if (adminData && (adminData.email || adminData.id)) {
+        user.value = {
+          id: Number(adminData.id),
+          email: adminData.email,
+          displayName: adminData.displayName || adminData.name || adminData.email,
+          isActive: adminData.isActive !== false,
+          createdAt: adminData.createdAt,
+        }
         isAuthenticated.value = true
         return true
       }
@@ -30,13 +37,23 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function login(email: string, password: string): Promise<void> {
-    const res = await api.post<{ admin: AdminUser }>('/api/v1/admin/auth/login', {
+    const res = await api.post<any>('/api/v1/admin/auth/login', {
       email,
       password,
     })
-    if (res && res.admin) {
-      user.value = res.admin
+    const adminData = res?.admin || res?.data
+    if (adminData && (adminData.email || adminData.id)) {
+      user.value = {
+        id: Number(adminData.id),
+        email: adminData.email,
+        displayName: adminData.displayName || adminData.name || adminData.email,
+        isActive: adminData.isActive !== false,
+        createdAt: adminData.createdAt,
+      }
       isAuthenticated.value = true
+    } else {
+      // Re-check session in case cookies were established
+      await checkSession()
     }
   }
 

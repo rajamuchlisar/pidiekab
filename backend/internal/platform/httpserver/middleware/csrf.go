@@ -32,12 +32,19 @@ func CSRFProtection(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if origin != "" {
 			parsedOrigin, err := url.Parse(origin)
-			if err != nil || parsedOrigin.Host == "" {
+			if err != nil || parsedOrigin.Hostname() == "" {
 				writeForbidden(w, r, "Invalid Origin header.")
 				return
 			}
-			// Compare origin host to request Host
-			if !strings.EqualFold(parsedOrigin.Host, r.Host) {
+			originHost := parsedOrigin.Hostname()
+			reqHost := r.Host
+			if strings.Contains(reqHost, ":") {
+				if h, _, err := strings.Cut(reqHost, ":"); err == nil && h != "" {
+					reqHost = h
+				}
+			}
+			// Compare origin hostname to request hostname (case-insensitive)
+			if !strings.EqualFold(originHost, reqHost) {
 				writeForbidden(w, r, "Cross-origin request rejected.")
 				return
 			}

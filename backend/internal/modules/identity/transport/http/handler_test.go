@@ -176,8 +176,8 @@ func TestAdminAuthHTTPFlow(t *testing.T) {
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusNoContent {
-		t.Fatalf("expected 204 No Content for login, got %d", rec.Code)
+	if rec.Code != http.StatusOK && rec.Code != http.StatusNoContent {
+		t.Fatalf("expected 200 OK or 204 No Content for login, got %d", rec.Code)
 	}
 
 	var sessionCookie *http.Cookie

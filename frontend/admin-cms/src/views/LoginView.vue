@@ -24,8 +24,12 @@ async function handleLogin() {
   isLoading.value = true
   try {
     await authStore.login(email.value, password.value)
-    notificationStore.success('Login Berhasil', `Selamat datang kembali, ${authStore.user?.displayName}!`)
-    router.push('/dashboard')
+    if (authStore.isAuthenticated) {
+      notificationStore.success('Login Berhasil', `Selamat datang kembali, ${authStore.user?.displayName}!`)
+      await router.push('/dashboard')
+    } else {
+      errorMessage.value = 'Email atau kata sandi tidak valid.'
+    }
   } catch (err: any) {
     errorMessage.value = err.detail || 'Email atau kata sandi tidak valid.'
   } finally {

@@ -109,7 +109,23 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"admin": map[string]any{
+			"id":          result.Admin.ID,
+			"email":       result.Admin.Email,
+			"displayName": result.Admin.DisplayName,
+			"role":        result.Admin.Role,
+		},
+		"data": map[string]any{
+			"id":          strconv.FormatInt(result.Admin.ID, 10),
+			"email":       result.Admin.Email,
+			"displayName": result.Admin.DisplayName,
+			"name":        result.Admin.DisplayName,
+			"role":        result.Admin.Role,
+		},
+	})
 }
 
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -155,10 +171,18 @@ func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
+		"admin": map[string]any{
+			"id":          admin.ID,
+			"email":       admin.Email,
+			"displayName": admin.DisplayName,
+			"role":        admin.Role,
+		},
 		"data": map[string]any{
-			"id":    strconv.FormatInt(admin.ID, 10),
-			"email": admin.Email,
-			"name":  admin.DisplayName,
+			"id":          strconv.FormatInt(admin.ID, 10),
+			"email":       admin.Email,
+			"displayName": admin.DisplayName,
+			"name":        admin.DisplayName,
+			"role":        admin.Role,
 		},
 	})
 }
