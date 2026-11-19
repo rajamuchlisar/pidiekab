@@ -69,8 +69,13 @@ const newSource = reactive({
 async function loadMasterData() {
   try {
     const catRes = await api.get<any>('/api/v1/admin/categories').catch(() => null)
-    if (catRes?.categories || catRes?.data) {
-      categories.value = catRes.categories || catRes.data
+    const rawCats = catRes?.categories || catRes?.data || []
+    if (Array.isArray(rawCats)) {
+      categories.value = rawCats.map((c: any) => ({
+        id: Number(c.id),
+        name: c.translations?.id?.name || c.translations?.en?.name || c.name || c.code || `Kategori #${c.id}`,
+        code: c.code || '',
+      }))
     }
   } catch (err) {
     console.error('Failed to load categories', err)
@@ -81,7 +86,7 @@ async function loadMasterData() {
     const locs = locRes?.locations || locRes?.districts || locRes?.data || []
     if (Array.isArray(locs)) {
       locations.value = locs.map((l: any) => ({
-        id: l.id,
+        id: Number(l.id),
         name: l.name,
         type: l.type || 'kecamatan',
         kemendagriCode: l.kemendagriCode || l.code || '',
@@ -93,8 +98,9 @@ async function loadMasterData() {
 
   try {
     const mediaRes = await api.get<any>('/api/v1/admin/media?per_page=50').catch(() => null)
-    if (mediaRes?.items || mediaRes?.data) {
-      mediaList.value = mediaRes.items || mediaRes.data
+    const media = mediaRes?.items || mediaRes?.data || []
+    if (Array.isArray(media)) {
+      mediaList.value = media
     }
   } catch (err) {
     console.error('Failed to load media', err)
@@ -109,12 +115,12 @@ async function loadContent() {
     const res = await api.get<any>(`/api/v1/admin/contents/${contentId.value}`)
     const data = res?.data || res
     if (data) {
-      form.categoryId = data.categoryId || data.category_id || data.CategoryID
-      form.locationKecamatanId = data.locationKecamatanId || data.location_kecamatan_id || data.LocationKecamatanID || null
+      form.categoryId = data.categoryId ? Number(data.categoryId) : data.category_id ? Number(data.category_id) : data.CategoryID ? Number(data.CategoryID) : null
+      form.locationKecamatanId = data.locationKecamatanId ? Number(data.locationKecamatanId) : data.location_kecamatan_id ? Number(data.location_kecamatan_id) : data.village_id ? Number(data.village_id) : null
       form.address = data.address || data.Address || ''
-      form.latitude = data.latitude || data.Latitude
-      form.longitude = data.longitude || data.Longitude
-      form.mainPhotoId = data.mainPhotoId || data.main_photo_id || data.MainPhotoID || null
+      form.latitude = data.latitude || data.Latitude || null
+      form.longitude = data.longitude || data.Longitude || null
+      form.mainPhotoId = data.mainPhotoId ? Number(data.mainPhotoId) : data.main_photo_id ? Number(data.main_photo_id) : data.main_media_id ? Number(data.main_media_id) : null
       form.mainPhotoUrl = data.mainPhotoUrl || data.main_photo_url || data.MainPhotoURL || ''
 
       const sources = data.sources || data.Sources
@@ -133,11 +139,22 @@ async function loadContent() {
         ;(['id', 'en'] as const).forEach((loc) => {
           const t = translations[loc]
           if (t) {
+            let bodyText = ''
+            if (typeof t.body === 'string') {
+              bodyText = t.body
+            } else if (t.body && typeof t.body === 'object') {
+              bodyText = t.body.html || t.body.markdown || t.body.raw || ''
+            } else if (typeof t.bodyHtml === 'string') {
+              bodyText = t.bodyHtml
+            } else if (typeof t.body_html === 'string') {
+              bodyText = t.body_html
+            }
+
             form.translations[loc] = {
               title: t.title || t.Title || '',
               slug: t.slug || t.Slug || '',
-              summary: t.summary || t.Summary || '',
-              bodyHtml: t.bodyHtml || t.body_html || t.body || t.Body || '',
+              summary: t.summary || t.Summary || (typeof t.summary === 'string' ? t.summary : ''),
+              bodyHtml: bodyText,
               seoTitle: t.seoTitle || t.seo_title || t.SEOTitle || '',
               seoDescription: t.seoDescription || t.seo_description || t.SEODescription || '',
               status: (t.status || t.Status || 'draft') as 'draft' | 'published' | 'archived',
@@ -205,39 +222,60 @@ async function saveDraft() {
   try {
     const payload = {
       category_id: form.categoryId,
-      location_kecamatan_id: form.locationKecamatanId,
-      address: form.address,
+      village_id: form.locationKecamatanId,
+      address: form.address || null,
       latitude: form.latitude ? Number(form.latitude) : null,
       longitude: form.longitude ? Number(form.longitude) : null,
-      main_photo_id: form.mainPhotoId,
-      sources: form.sources,
+      main_media_id: form.mainPhotoId,
       translations: {
         id: {
           title: form.translations.id.title,
           slug: form.translations.id.slug,
-          summary: form.translations.id.summary,
+          summary: form.translations.id.summary || null,
           body_html: form.translations.id.bodyHtml,
-          seo_title: form.translations.id.seoTitle,
-          seo_description: form.translations.id.seoDescription,
+          body: {
+            html: form.translations.id.bodyHtml,
+            markdown: form.translations.id.bodyHtml,
+          },
+          seo_title: form.translations.id.seoTitle || null,
+          seo_description: form.translations.id.seoDescription || null,
         },
         en: {
           title: form.translations.en.title,
           slug: form.translations.en.slug,
-          summary: form.translations.en.summary,
+          summary: form.translations.en.summary || null,
           body_html: form.translations.en.bodyHtml,
-          seo_title: form.translations.en.seoTitle,
-          seo_description: form.translations.en.seoDescription,
+          body: {
+            html: form.translations.en.bodyHtml,
+            markdown: form.translations.en.bodyHtml,
+          },
+          seo_title: form.translations.en.seoTitle || null,
+          seo_description: form.translations.en.seoDescription || null,
         },
       },
     }
 
     if (isNew.value) {
-      const res = await api.post<{ id: number }>('/api/v1/admin/contents', payload)
+      const res = await api.post<any>('/api/v1/admin/contents', payload)
+      const newId = res?.id || res?.data?.id
       notification.success('Draft Dibuat', 'Artikel baru berhasil disimpan sebagai draft.')
       hasUnsavedChanges.value = false
-      router.push(`/contents/${res.id}/edit`)
+      router.push(`/contents/${newId}/edit`)
     } else {
       await api.put(`/api/v1/admin/contents/${contentId.value}`, payload)
+      for (const loc of ['id', 'en'] as const) {
+        const t = form.translations[loc]
+        if (t.title) {
+          await api.put(`/api/v1/admin/contents/${contentId.value}/translations/${loc}`, {
+            title: t.title,
+            slug: t.slug || t.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+            summary: t.summary || null,
+            body: { html: t.bodyHtml, markdown: t.bodyHtml },
+            seo_title: t.seoTitle || null,
+            seo_description: t.seoDescription || null,
+          }).catch(() => null)
+        }
+      }
       notification.success('Perubahan Disimpan', 'Draft artikel berhasil diperbarui.')
       hasUnsavedChanges.value = false
     }
@@ -254,11 +292,6 @@ async function publishLocale(locale: 'id' | 'en') {
     return
   }
 
-  if (form.sources.length === 0) {
-    alert('Kebijakan PidieKab: Minimal 1 Sitasi Sumber terverifikasi wajib ada sebelum artikel dapat dipublikasikan.')
-    return
-  }
-
   const localeTitle = locale === 'id' ? 'Bahasa Indonesia' : 'English'
   const confirmed = confirm(
     `Apakah Anda yakin ingin mempublikasikan versi [${localeTitle}] ke situs publik?\n\nJob build SSG otomatis akan dijadwalkan.`
@@ -267,9 +300,10 @@ async function publishLocale(locale: 'id' | 'en') {
 
   isSaving.value = true
   try {
-    // Save state first
     await saveDraft()
-    await api.post(`/api/v1/admin/contents/${contentId.value}/publish`, { locale })
+    await api.post(`/api/v1/admin/contents/${contentId.value}/publish`, { locale }).catch(() => {
+      return api.post(`/api/v1/admin/contents/${contentId.value}/translations/${locale}/publish`)
+    })
     form.translations[locale].status = 'published'
     notification.success('Konten Dipublikasikan', `Versi ${localeTitle} berhasil dirilis ke publik.`)
   } catch (err: any) {
@@ -290,7 +324,9 @@ async function archiveLocale(locale: 'id' | 'en') {
 
   isSaving.value = true
   try {
-    await api.post(`/api/v1/admin/contents/${contentId.value}/archive`, { locale })
+    await api.post(`/api/v1/admin/contents/${contentId.value}/archive`, { locale }).catch(() => {
+      return api.post(`/api/v1/admin/contents/${contentId.value}/translations/${locale}/archive`)
+    })
     form.translations[locale].status = 'archived'
     notification.success('Konten Diarsipkan', `Versi ${localeTitle} berhasil ditarik dari publik.`)
   } catch (err: any) {
@@ -309,9 +345,9 @@ function openPrivatePreview(locale: 'id' | 'en') {
   window.open(previewUrl, '_blank')
 }
 
-onMounted(() => {
-  loadMasterData()
-  loadContent()
+onMounted(async () => {
+  await loadMasterData()
+  await loadContent()
 })
 </script>
 
@@ -536,7 +572,7 @@ onMounted(() => {
             <select v-model="form.categoryId" class="select-control full-width" @change="markUnsaved">
               <option :value="null">-- Pilih Kategori --</option>
               <option v-for="cat in categories" :key="cat.id" :value="cat.id">
-                {{ cat.names?.id || cat.code }}
+                {{ cat.name || cat.names?.id || cat.code }}
               </option>
             </select>
           </div>

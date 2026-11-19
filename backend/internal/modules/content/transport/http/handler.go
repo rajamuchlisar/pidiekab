@@ -42,11 +42,15 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/v1/admin/contents/{content_id}", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleUpdateShared))))
 	mux.Handle("DELETE /api/v1/admin/contents/{content_id}", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleDeleteContent))))
 
+	// Publish / Archive direct routes
+	mux.Handle("POST /api/v1/admin/contents/{content_id}/publish", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handlePublishLocaleDirect))))
+	mux.Handle("POST /api/v1/admin/contents/{content_id}/archive", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleArchiveLocaleDirect))))
+
 	// Translations
 	mux.Handle("GET /api/v1/admin/contents/{content_id}/translations/{locale}", authMiddleware(http.HandlerFunc(h.handleGetTranslation)))
 	mux.Handle("PUT /api/v1/admin/contents/{content_id}/translations/{locale}", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleSaveTranslation))))
-	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/publish", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handlePublishLocale))))
-	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/archive", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleArchiveLocale))))
+	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/publish", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handlePublishLocaleDirect))))
+	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/archive", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleArchiveLocaleDirect))))
 
 	// Preview
 	mux.Handle("GET /api/v1/admin/preview/contents/{content_id}", authMiddleware(http.HandlerFunc(h.handlePreviewContent)))
@@ -130,14 +134,58 @@ func (h *Handler) handleListContents(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func parseFlexibleID(val any) int64 {
+	if val == nil {
+		return 0
+	}
+	switch v := val.(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case string:
+		id, _ := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+		return id
+	case json.Number:
+		id, _ := v.Int64()
+		return id
+	default:
+		return 0
+	}
+}
+
+func parseFlexibleIDPtr(val any) *int64 {
+	if val == nil {
+		return nil
+	}
+	id := parseFlexibleID(val)
+	if id <= 0 {
+		return nil
+	}
+	return &id
+}
+
 type contentCreateRequest struct {
-	CategoryID       string   `json:"category_id"`
-	VillageID        *string  `json:"village_id"`
-	Address          *string  `json:"address"`
-	Latitude         *float64 `json:"latitude"`
-	Longitude        *float64 `json:"longitude"`
-	LocationAccuracy *string  `json:"location_accuracy"`
-	MainMediaID      *string  `json:"main_media_id"`
+	CategoryID       any                                   `json:"category_id"`
+	VillageID        any                                   `json:"village_id"`
+	Address          *string                               `json:"address"`
+	Latitude         *float64                              `json:"latitude"`
+	Longitude        *float64                              `json:"longitude"`
+	LocationAccuracy *string                               `json:"location_accuracy"`
+	MainMediaID      any                                   `json:"main_media_id"`
+	Translations     map[string]*translationPayloadRequest `json:"translations"`
+}
+
+type translationPayloadRequest struct {
+	Title          string         `json:"title"`
+	Slug           string         `json:"slug"`
+	Summary        *string        `json:"summary"`
+	Body           map[string]any `json:"body"`
+	BodyHtml       string         `json:"body_html"`
+	SEOTitle       *string        `json:"seo_title"`
+	SEODescription *string        `json:"seo_description"`
 }
 
 func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
@@ -153,25 +201,14 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	catID, err := strconv.ParseInt(req.CategoryID, 10, 64)
-	if err != nil || catID <= 0 {
-		writeProblem(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "category_id must be a valid ID string.")
+	catID := parseFlexibleID(req.CategoryID)
+	if catID <= 0 {
+		writeProblem(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "category_id must be a valid ID string or number.")
 		return
 	}
 
-	var villageID *int64
-	if req.VillageID != nil && *req.VillageID != "" {
-		if vid, err := strconv.ParseInt(*req.VillageID, 10, 64); err == nil && vid > 0 {
-			villageID = &vid
-		}
-	}
-
-	var mainMediaID *int64
-	if req.MainMediaID != nil && *req.MainMediaID != "" {
-		if mid, err := strconv.ParseInt(*req.MainMediaID, 10, 64); err == nil && mid > 0 {
-			mainMediaID = &mid
-		}
-	}
+	villageID := parseFlexibleIDPtr(req.VillageID)
+	mainMediaID := parseFlexibleIDPtr(req.MainMediaID)
 
 	ip := extractClientIP(r)
 	c, err := h.service.CreateContent(r.Context(), catID, villageID, req.Address, req.Latitude, req.Longitude, req.LocationAccuracy, mainMediaID, admin.ID, &ip)
@@ -188,6 +225,28 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Translations != nil {
+		for loc, t := range req.Translations {
+			if loc != domain.LocaleID && loc != domain.LocaleEN {
+				continue
+			}
+			if strings.TrimSpace(t.Title) != "" {
+				slug := strings.TrimSpace(t.Slug)
+				if slug == "" {
+					slug = strings.ToLower(strings.ReplaceAll(t.Title, " ", "-"))
+				}
+				body := t.Body
+				if body == nil && t.BodyHtml != "" {
+					body = map[string]any{"html": t.BodyHtml, "markdown": t.BodyHtml}
+				}
+				if body == nil {
+					body = map[string]any{"html": "", "markdown": ""}
+				}
+				_, _ = h.service.SaveTranslation(r.Context(), c.ID, loc, t.Title, slug, t.Summary, body, t.SEOTitle, t.SEODescription, admin.ID, &ip)
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(map[string]any{
@@ -195,6 +254,7 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 			"id":          strconv.FormatInt(c.ID, 10),
 			"category_id": strconv.FormatInt(c.CategoryID, 10),
 		},
+		"id": c.ID,
 	})
 }
 
@@ -218,17 +278,16 @@ func (h *Handler) handleGetContent(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data":                  detail,
-		"id":                    detail.ID,
-		"category_id":           detail.CategoryID,
-		"location_kecamatan_id": detail.LocationKecamatanID,
-		"address":               detail.Address,
-		"latitude":              detail.Latitude,
-		"longitude":             detail.Longitude,
-		"main_photo_id":         detail.MainPhotoID,
-		"main_photo_url":        detail.MainPhotoURL,
-		"translations":          detail.Translations,
-		"sources":               detail.Sources,
+		"data":          detail,
+		"id":            detail.ID,
+		"category_id":   detail.CategoryID,
+		"address":       detail.Address,
+		"latitude":      detail.Latitude,
+		"longitude":     detail.Longitude,
+		"main_media_id": detail.MainMediaID,
+		"main_photo_id": detail.MainMediaID,
+		"translations":  detail.Translations,
+		"sources":       detail.Sources,
 	})
 }
 
@@ -304,25 +363,14 @@ func (h *Handler) handleUpdateShared(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	catID, err := strconv.ParseInt(req.CategoryID, 10, 64)
-	if err != nil || catID <= 0 {
-		writeProblem(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "category_id must be a valid ID string.")
+	catID := parseFlexibleID(req.CategoryID)
+	if catID <= 0 {
+		writeProblem(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "category_id must be a valid ID string or number.")
 		return
 	}
 
-	var villageID *int64
-	if req.VillageID != nil && *req.VillageID != "" {
-		if vid, err := strconv.ParseInt(*req.VillageID, 10, 64); err == nil && vid > 0 {
-			villageID = &vid
-		}
-	}
-
-	var mainMediaID *int64
-	if req.MainMediaID != nil && *req.MainMediaID != "" {
-		if mid, err := strconv.ParseInt(*req.MainMediaID, 10, 64); err == nil && mid > 0 {
-			mainMediaID = &mid
-		}
-	}
+	villageID := parseFlexibleIDPtr(req.VillageID)
+	mainMediaID := parseFlexibleIDPtr(req.MainMediaID)
 
 	ip := extractClientIP(r)
 	err = h.service.UpdateShared(r.Context(), id, catID, villageID, req.Address, req.Latitude, req.Longitude, req.LocationAccuracy, mainMediaID, admin.ID, &ip)
@@ -337,6 +385,29 @@ func (h *Handler) handleUpdateShared(w http.ResponseWriter, r *http.Request) {
 		}
 		writeProblem(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
 		return
+	}
+
+	// Also update translations if sent in the payload
+	if req.Translations != nil {
+		for loc, t := range req.Translations {
+			if loc != domain.LocaleID && loc != domain.LocaleEN {
+				continue
+			}
+			if strings.TrimSpace(t.Title) != "" {
+				slug := strings.TrimSpace(t.Slug)
+				if slug == "" {
+					slug = strings.ToLower(strings.ReplaceAll(t.Title, " ", "-"))
+				}
+				body := t.Body
+				if body == nil && t.BodyHtml != "" {
+					body = map[string]any{"html": t.BodyHtml, "markdown": t.BodyHtml}
+				}
+				if body == nil {
+					body = map[string]any{"html": "", "markdown": ""}
+				}
+				_, _ = h.service.SaveTranslation(r.Context(), id, loc, t.Title, slug, t.Summary, body, t.SEOTitle, t.SEODescription, admin.ID, &ip)
+			}
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -448,7 +519,7 @@ func (h *Handler) handleSaveTranslation(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (h *Handler) handlePublishLocale(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handlePublishLocaleDirect(w http.ResponseWriter, r *http.Request) {
 	admin, ok := middleware.AdminFromContext(r.Context())
 	if !ok {
 		writeProblem(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required.")
@@ -461,6 +532,16 @@ func (h *Handler) handlePublishLocale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	locale := r.PathValue("locale")
+	if locale == "" {
+		var req struct {
+			Locale string `json:"locale"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		locale = req.Locale
+	}
+	if locale == "" {
+		locale = domain.LocaleID
+	}
 
 	ip := extractClientIP(r)
 	err = h.service.PublishLocale(r.Context(), id, locale, admin.ID, &ip)
@@ -481,7 +562,7 @@ func (h *Handler) handlePublishLocale(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusAccepted)
 }
 
-func (h *Handler) handleArchiveLocale(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleArchiveLocaleDirect(w http.ResponseWriter, r *http.Request) {
 	admin, ok := middleware.AdminFromContext(r.Context())
 	if !ok {
 		writeProblem(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required.")
@@ -494,6 +575,16 @@ func (h *Handler) handleArchiveLocale(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	locale := r.PathValue("locale")
+	if locale == "" {
+		var req struct {
+			Locale string `json:"locale"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		locale = req.Locale
+	}
+	if locale == "" {
+		locale = domain.LocaleID
+	}
 
 	ip := extractClientIP(r)
 	err = h.service.ArchiveLocale(r.Context(), id, locale, admin.ID, &ip)

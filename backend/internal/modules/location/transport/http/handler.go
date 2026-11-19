@@ -43,10 +43,14 @@ func (h *Handler) handleListLocations(w http.ResponseWriter, r *http.Request) {
 
 	locations := make([]map[string]any, 0, len(districts))
 	for _, d := range districts {
+		code := ""
+		if d.Code != nil {
+			code = *d.Code
+		}
 		locations = append(locations, map[string]any{
 			"id":             d.ID,
-			"kemendagriCode": d.KemendagriCode,
-			"code":           d.KemendagriCode,
+			"kemendagriCode": code,
+			"code":           code,
 			"name":           d.Name,
 			"type":           "kecamatan",
 		})
