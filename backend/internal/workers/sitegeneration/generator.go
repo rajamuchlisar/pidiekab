@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -39,6 +41,7 @@ type SiteContext struct {
 	ContactAddress string
 	LogoURL        string
 	FaviconURL     string
+	SocialLinks    map[string]string
 }
 
 type CategoryRender struct {
@@ -146,13 +149,19 @@ func (g *Generator) fetchSiteContext(ctx context.Context) (*SiteContext, error) 
 		SELECT
 			COALESCE(s.contact_email, ''), COALESCE(s.contact_phone, ''), COALESCE(s.contact_address, ''),
 			COALESCE(s.logo_url, CASE WHEN m_logo.storage_key IS NOT NULL THEN '/media/' || m_logo.storage_key ELSE '' END, ''),
-			COALESCE(s.favicon_url, CASE WHEN m_fav.storage_key IS NOT NULL THEN '/media/' || m_fav.storage_key ELSE '' END, '')
+			COALESCE(s.favicon_url, CASE WHEN m_fav.storage_key IS NOT NULL THEN '/media/' || m_fav.storage_key ELSE '' END, ''),
+			COALESCE(s.social_links::text, '{}')
 		FROM site_settings s
 		LEFT JOIN media_assets m_logo ON s.logo_media_id = m_logo.id
 		LEFT JOIN media_assets m_fav ON s.favicon_media_id = m_fav.id
 		WHERE s.id = 1
 	`
-	_ = g.pool.QueryRow(ctx, query).Scan(&sc.ContactEmail, &sc.ContactPhone, &sc.ContactAddress, &sc.LogoURL, &sc.FaviconURL)
+	var socialStr string
+	_ = g.pool.QueryRow(ctx, query).Scan(&sc.ContactEmail, &sc.ContactPhone, &sc.ContactAddress, &sc.LogoURL, &sc.FaviconURL, &socialStr)
+	sc.SocialLinks = make(map[string]string)
+	if socialStr != "" {
+		_ = json.Unmarshal([]byte(socialStr), &sc.SocialLinks)
+	}
 
 	tRows, err := g.pool.Query(ctx, `SELECT locale, site_name, COALESCE(tagline, ''), COALESCE(default_seo_title, '') FROM site_setting_translations WHERE site_settings_id = 1`)
 	if err == nil {
@@ -401,7 +410,6 @@ func (g *Generator) renderLocaleSite(
 	readMoreText := "Selengkapnya &rarr;"
 	locationLabel := "Lokasi"
 	sourcesHeader := "Sumber & Referensi Terverifikasi:"
-	footerText := "&copy; PidieKab — Inisiatif Platform Digital Independen Masyarakat Pidie. Bukan website resmi pemerintah."
 
 	idClass := "active"
 	enClass := ""
@@ -414,7 +422,6 @@ func (g *Generator) renderLocaleSite(
 		readMoreText = "Explore &rarr;"
 		locationLabel = "Location"
 		sourcesHeader = "Verified Editorial Sources & Citations:"
-		footerText = "&copy; PidieKab — Independent Regional Promotion & Visitor Discovery Platform. Not an official government website."
 		idClass = ""
 		enClass = "active"
 	}
@@ -755,13 +762,175 @@ body {
 
 /* Footer */
 .site-footer {
-    margin-top: 3.5rem;
-    padding: 2rem 0;
-    border-top: 1px solid #e2e8f0;
-    color: #64748b;
-    font-size: 0.8125rem;
-    text-align: center;
+    margin-top: 4.5rem;
+    background: #0f172a;
+    color: #94a3b8;
+    font-size: 0.875rem;
+    border-top: 1px solid #1e293b;
+    padding-top: 3.5rem;
+}
+.footer-grid {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 1.2fr;
+    gap: 2.5rem;
+    padding-bottom: 2.5rem;
+    text-align: left;
+}
+@media (max-width: 900px) {
+    .footer-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 2rem;
+    }
+}
+@media (max-width: 600px) {
+    .footer-grid {
+        grid-template-columns: 1fr;
+        gap: 2rem;
+    }
+}
+.footer-col h4 {
+    color: #f8fafc;
+    font-size: 0.875rem;
+    font-weight: 700;
+    margin: 0 0 1.25rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid #059669;
+    padding-bottom: 0.4rem;
+    display: inline-block;
+}
+.footer-brand .brand-logo {
+    color: #10b981;
+    margin-bottom: 0.75rem;
+}
+.footer-brand p {
+    margin: 0.75rem 0;
     line-height: 1.6;
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+.footer-badge-disclaimer {
+    display: inline-block;
+    margin-top: 0.5rem;
+    padding: 0.3rem 0.65rem;
+    background: rgba(16, 185, 129, 0.1);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+.footer-links {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+.footer-links li a {
+    color: #cbd5e1;
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: all 0.15s ease;
+    display: inline-block;
+}
+.footer-links li a:hover {
+    color: #34d399;
+    padding-left: 4px;
+}
+.footer-contact {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1.5rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.footer-contact-item {
+    display: flex;
+    gap: 0.65rem;
+    align-items: flex-start;
+    color: #cbd5e1;
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+.footer-contact-item a {
+    color: #cbd5e1;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+.footer-contact-item a:hover {
+    color: #34d399;
+}
+.footer-icon {
+    width: 17px;
+    height: 17px;
+    min-width: 17px;
+    margin-top: 2px;
+    color: #10b981;
+}
+.social-section {
+    margin-top: 1rem;
+}
+.social-section h4 {
+    margin-bottom: 0.75rem;
+}
+.social-links {
+    display: flex;
+    gap: 0.65rem;
+    align-items: center;
+}
+.social-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: #1e293b;
+    color: #cbd5e1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    border: 1px solid #334155;
+    text-decoration: none;
+}
+.social-btn svg {
+    width: 18px;
+    height: 18px;
+}
+.social-btn:hover {
+    background: #059669;
+    color: #ffffff;
+    border-color: #059669;
+    transform: translateY(-2px);
+}
+.footer-bottom {
+    border-top: 1px solid #1e293b;
+    padding: 1.5rem 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+    font-size: 0.8rem;
+    color: #64748b;
+    text-align: left;
+}
+.footer-bottom p {
+    margin: 0;
+}
+.footer-bottom-links {
+    display: flex;
+    gap: 1.25rem;
+}
+.footer-bottom-links a {
+    color: #94a3b8;
+    text-decoration: none;
+    font-size: 0.8rem;
+}
+.footer-bottom-links a:hover {
+    color: #34d399;
 }
 `
 
@@ -787,13 +956,169 @@ body {
     </header>
 `, locale, brandLogoHTML, template.HTMLEscapeString(siteName), idClass, enClass)
 
+	quickLinksTitle := "Kategori Pilihan"
+	legalTitle := "Informasi & Legal"
+	contactTitle := "Kontak & Alamat"
+	socialTitle := "Media Sosial Resmi"
+	communityDisclaimer := "Platform independen promosi potensi daerah & direktori informasi Kabupaten Pidie, Aceh. Bukan website resmi pemerintah."
+	allRightsReserved := "Hak Cipta Dilindungi."
+	homeNavText := "Beranda"
+	if locale == "en" {
+		quickLinksTitle = "Featured Categories"
+		legalTitle = "Information & Legal"
+		contactTitle = "Contact & Secretariat"
+		socialTitle = "Official Social Media"
+		communityDisclaimer = "Independent regional promotion & digital visitor guide for Pidie Regency, Aceh. Not an official government website."
+		allRightsReserved = "All Rights Reserved."
+		homeNavText = "Home"
+	}
+
+	var catLinksHTML strings.Builder
+	var sortedCats []CategoryRender
+	for _, c := range cats {
+		sortedCats = append(sortedCats, c)
+	}
+	sort.Slice(sortedCats, func(i, j int) bool {
+		return sortedCats[i].ID < sortedCats[j].ID
+	})
+	for _, c := range sortedCats {
+		catLinksHTML.WriteString(fmt.Sprintf(`<li><a href="/%s/%s/">%s</a></li>`, locale, c.Slug, template.HTMLEscapeString(c.Name)))
+	}
+
+	var pageLinksHTML strings.Builder
+	if len(pages) > 0 {
+		for _, p := range pages {
+			pageLinksHTML.WriteString(fmt.Sprintf(`<li><a href="/%s/%s/">%s</a></li>`, locale, p.Slug, template.HTMLEscapeString(p.Title)))
+		}
+	} else {
+		if locale == "en" {
+			pageLinksHTML.WriteString(fmt.Sprintf(`<li><a href="/%s/privacy-policy/">Privacy Policy</a></li>`, locale))
+			pageLinksHTML.WriteString(fmt.Sprintf(`<li><a href="/%s/terms-and-conditions/">Terms and Conditions</a></li>`, locale))
+			pageLinksHTML.WriteString(fmt.Sprintf(`<li><a href="/%s/about-us/">About Us</a></li>`, locale))
+		} else {
+			pageLinksHTML.WriteString(fmt.Sprintf(`<li><a href="/%s/kebijakan-privasi/">Kebijakan Privasi</a></li>`, locale))
+			pageLinksHTML.WriteString(fmt.Sprintf(`<li><a href="/%s/syarat-dan-ketentuan/">Syarat dan Ketentuan</a></li>`, locale))
+			pageLinksHTML.WriteString(fmt.Sprintf(`<li><a href="/%s/tentang-kami/">Tentang Kami</a></li>`, locale))
+		}
+	}
+
+	var contactHTML strings.Builder
+	if sc.ContactAddress != "" {
+		contactHTML.WriteString(fmt.Sprintf(`<li class="footer-contact-item"><svg class="footer-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.69 18.933l.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 00.281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 103 9c0 3.492 1.698 5.988 3.36 7.587a15.42 15.42 0 002.273 1.765 11.75 11.75 0 001.04.573l.018.008.006.003zM10 11.25a2.25 2.25 0 100-4.5 2.25 2.25 0 000 4.5z" clip-rule="evenodd"/></svg><span>%s</span></li>`, template.HTMLEscapeString(sc.ContactAddress)))
+	}
+	if sc.ContactEmail != "" {
+		contactHTML.WriteString(fmt.Sprintf(`<li class="footer-contact-item"><svg class="footer-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z"/><path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z"/></svg><a href="mailto:%s">%s</a></li>`, template.HTMLEscapeString(sc.ContactEmail), template.HTMLEscapeString(sc.ContactEmail)))
+	}
+	if sc.ContactPhone != "" {
+		contactHTML.WriteString(fmt.Sprintf(`<li class="footer-contact-item"><svg class="footer-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c-.41.117-.643.555-.48.95a11.542 11.542 0 006.254 6.254c.395.163.833-.07.95-.48l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z" clip-rule="evenodd"/></svg><a href="tel:%s">%s</a></li>`, template.HTMLEscapeString(sc.ContactPhone), template.HTMLEscapeString(sc.ContactPhone)))
+	}
+	if contactHTML.Len() == 0 {
+		contactHTML.WriteString(`<li class="footer-contact-item"><svg class="footer-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.69 18.933l.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 00.281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 103 9c0 3.492 1.698 5.988 3.36 7.587a15.42 15.42 0 002.273 1.765 11.75 11.75 0 001.04.573l.018.008.006.003zM10 11.25a2.25 2.25 0 100-4.5 2.25 2.25 0 000 4.5z" clip-rule="evenodd"/></svg><span>Sigli, Kabupaten Pidie, Aceh, Indonesia</span></li><li class="footer-contact-item"><svg class="footer-icon" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a2 2 0 00-2 2v1.161l8.441 4.221a1.25 1.25 0 001.118 0L19 7.162V6a2 2 0 00-2-2H3z"/><path d="M19 8.839l-7.77 3.885a2.75 2.75 0 01-2.46 0L1 8.839V14a2 2 0 002 2h14a2 2 0 002-2V8.839z"/></svg><a href="mailto:kontak@pidiekab.id">kontak@pidiekab.id</a></li>`)
+	}
+
+	var socialLinksHTML strings.Builder
+	if ig, ok := sc.SocialLinks["instagram"]; ok && strings.TrimSpace(ig) != "" {
+		igURL := strings.TrimSpace(ig)
+		if !strings.HasPrefix(igURL, "http") {
+			igURL = "https://instagram.com/" + strings.TrimPrefix(igURL, "@")
+		}
+		socialLinksHTML.WriteString(fmt.Sprintf(`<a href="%s" target="_blank" rel="nofollow noopener noreferrer" class="social-btn" title="Instagram" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>`, template.HTMLEscapeString(igURL)))
+	}
+	if fb, ok := sc.SocialLinks["facebook"]; ok && strings.TrimSpace(fb) != "" {
+		fbURL := strings.TrimSpace(fb)
+		if !strings.HasPrefix(fbURL, "http") {
+			fbURL = "https://" + fbURL
+		}
+		socialLinksHTML.WriteString(fmt.Sprintf(`<a href="%s" target="_blank" rel="nofollow noopener noreferrer" class="social-btn" title="Facebook" aria-label="Facebook"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>`, template.HTMLEscapeString(fbURL)))
+	}
+	if yt, ok := sc.SocialLinks["youtube"]; ok && strings.TrimSpace(yt) != "" {
+		ytURL := strings.TrimSpace(yt)
+		if !strings.HasPrefix(ytURL, "http") {
+			ytURL = "https://" + ytURL
+		}
+		socialLinksHTML.WriteString(fmt.Sprintf(`<a href="%s" target="_blank" rel="nofollow noopener noreferrer" class="social-btn" title="YouTube" aria-label="YouTube"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></a>`, template.HTMLEscapeString(ytURL)))
+	}
+	if tw, ok := sc.SocialLinks["twitter"]; ok && strings.TrimSpace(tw) != "" {
+		twURL := strings.TrimSpace(tw)
+		if !strings.HasPrefix(twURL, "http") {
+			twURL = "https://x.com/" + strings.TrimPrefix(twURL, "@")
+		}
+		socialLinksHTML.WriteString(fmt.Sprintf(`<a href="%s" target="_blank" rel="nofollow noopener noreferrer" class="social-btn" title="X / Twitter" aria-label="X"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>`, template.HTMLEscapeString(twURL)))
+	}
+	if socialLinksHTML.Len() == 0 {
+		socialLinksHTML.WriteString(`<a href="https://instagram.com" target="_blank" rel="nofollow noopener noreferrer" class="social-btn" title="Instagram" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>`)
+	}
+
 	footerHTML := fmt.Sprintf(`
     <footer class="site-footer">
         <div class="site-wrapper">
-            <p>%s</p>
+            <div class="footer-grid">
+                <!-- Column 1: Brand & Disclaimer -->
+                <div class="footer-col footer-brand">
+                    <div class="brand-group">
+                        %s
+                    </div>
+                    <p>%s</p>
+                    <span class="footer-badge-disclaimer">%s</span>
+                </div>
+
+                <!-- Column 2: Quicklinks (Categories) -->
+                <div class="footer-col">
+                    <h4>%s</h4>
+                    <ul class="footer-links">
+                        %s
+                    </ul>
+                </div>
+
+                <!-- Column 3: Legal & Static Pages -->
+                <div class="footer-col">
+                    <h4>%s</h4>
+                    <ul class="footer-links">
+                        %s
+                    </ul>
+                </div>
+
+                <!-- Column 4: Contact & Social Media -->
+                <div class="footer-col">
+                    <h4>%s</h4>
+                    <ul class="footer-contact">
+                        %s
+                    </ul>
+                    <div class="social-section">
+                        <h4>%s</h4>
+                        <div class="social-links">
+                            %s
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer-bottom">
+                <p>&copy; %d PidieKab. %s</p>
+                <div class="footer-bottom-links">
+                    <a href="/%s/">%s</a>
+                    <a href="/sitemap.xml">Sitemap</a>
+                </div>
+            </div>
         </div>
     </footer>
-`, footerText)
+`,
+		brandLogoHTML,
+		template.HTMLEscapeString(tagline),
+		communityDisclaimer,
+		quickLinksTitle,
+		catLinksHTML.String(),
+		legalTitle,
+		pageLinksHTML.String(),
+		contactTitle,
+		contactHTML.String(),
+		socialTitle,
+		socialLinksHTML.String(),
+		time.Now().Year(),
+		allRightsReserved,
+		locale,
+		homeNavText,
+	)
 
 	faviconTag := ""
 	if sc.FaviconURL != "" {
