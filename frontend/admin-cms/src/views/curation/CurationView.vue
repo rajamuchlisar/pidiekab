@@ -154,14 +154,16 @@ onMounted(() => {
           :class="{ active: activeTab === 'featured' }"
           @click="activeTab = 'featured'"
         >
-          ⭐ Artikel Unggulan (Featured)
+          <BladeIcon name="star" size="18" />
+          <span>Artikel Unggulan (Featured)</span>
         </button>
         <button
           class="tab-btn"
           :class="{ active: activeTab === 'stories' }"
           @click="activeTab = 'stories'"
         >
-          📖 Cerita tentang Pidie (Stories)
+          <BladeIcon name="book-open" size="18" />
+          <span>Cerita tentang Pidie (Stories)</span>
         </button>
       </div>
 
@@ -227,14 +229,16 @@ onMounted(() => {
             :class="{ active: activeLocale === 'id' }"
             @click="activeLocale = 'id'; loadData()"
           >
-            🇮🇩 Cerita Pidie (Bahasa Indonesia)
+            <BladeIcon name="language" size="16" />
+            <span>Cerita Pidie (Bahasa Indonesia)</span>
           </button>
           <button
             class="sub-tab"
             :class="{ active: activeLocale === 'en' }"
             @click="activeLocale = 'en'; loadData()"
           >
-            🇬🇧 Pidie Stories (English)
+            <BladeIcon name="globe-alt" size="16" />
+            <span>Pidie Stories (English)</span>
           </button>
         </div>
 

@@ -136,8 +136,14 @@ onMounted(() => {
           <p class="page-desc">Kelola akun administrator dengan akses penuh ke sistem PidieKab.</p>
         </div>
         <div class="header-actions">
-          <button class="btn btn-secondary" @click="showPasswordModal = true">🔑 Ganti Kata Sandi Saya</button>
-          <button class="btn btn-primary" @click="showCreateModal = true">+ Tambah Administrator</button>
+          <button class="btn btn-secondary" @click="showPasswordModal = true">
+            <BladeIcon name="key" size="16" />
+            <span>Ganti Kata Sandi Saya</span>
+          </button>
+          <button class="btn btn-primary" @click="showCreateModal = true">
+            <BladeIcon name="plus" size="16" />
+            <span>Tambah Administrator</span>
+          </button>
         </div>
       </div>
 
@@ -193,7 +199,9 @@ onMounted(() => {
         <div class="modal-card">
           <div class="modal-header">
             <h3>Tambah Administrator Baru</h3>
-            <button class="modal-close" @click="showCreateModal = false">&times;</button>
+            <button class="modal-close" @click="showCreateModal = false" title="Tutup">
+              <BladeIcon name="x-mark" size="20" />
+            </button>
           </div>
           <form @submit.prevent="handleCreateAdmin" class="modal-form">
             <div class="form-group">
@@ -226,7 +234,9 @@ onMounted(() => {
         <div class="modal-card">
           <div class="modal-header">
             <h3>Ganti Kata Sandi Saya</h3>
-            <button class="modal-close" @click="showPasswordModal = false">&times;</button>
+            <button class="modal-close" @click="showPasswordModal = false" title="Tutup">
+              <BladeIcon name="x-mark" size="20" />
+            </button>
           </div>
           <form @submit.prevent="handleChangePassword" class="modal-form">
             <div class="form-group">

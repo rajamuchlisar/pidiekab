@@ -82,7 +82,10 @@ onMounted(() => {
         <h1>URL Redirects (301)</h1>
         <p class="subtitle">Kelola pengalihan URL permanen untuk menjaga ranking SEO dan tautan masuk lama.</p>
       </div>
-      <button class="btn btn-primary" @click="showModal = true">+ Tambah Redirect</button>
+      <button class="btn btn-primary" @click="showModal = true">
+        <BladeIcon name="plus" size="18" />
+        <span>Tambah Redirect</span>
+      </button>
     </div>
 
     <div v-if="successMsg" class="alert alert-success">{{ successMsg }}</div>
@@ -110,7 +113,10 @@ onMounted(() => {
             <td><span class="badge badge-success">{{ item.status_code }} Permanent</span></td>
             <td>{{ new Date(item.created_at).toLocaleDateString('id-ID') }}</td>
             <td>
-              <button class="btn-sm btn-danger" @click="handleDelete(item.id)">Hapus</button>
+              <button class="btn-sm btn-danger" @click="handleDelete(item.id)">
+                <BladeIcon name="trash" size="14" />
+                <span>Hapus</span>
+              </button>
             </td>
           </tr>
         </tbody>
@@ -122,7 +128,9 @@ onMounted(() => {
       <div class="modal">
         <div class="modal-header">
           <h3>Tambah URL Redirect Baru</h3>
-          <button class="btn-close" @click="showModal = false">&times;</button>
+          <button class="btn-close" @click="showModal = false" title="Tutup">
+            <BladeIcon name="x-mark" size="20" />
+          </button>
         </div>
         <div class="modal-body">
           <div class="form-group">

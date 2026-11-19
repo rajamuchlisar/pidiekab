@@ -358,7 +358,10 @@ onMounted(async () => {
       <!-- Top Action Bar -->
       <div class="editor-header">
         <div class="header-left">
-          <router-link to="/contents" class="btn-back">&larr; Kembali ke Daftar</router-link>
+          <router-link to="/contents" class="btn-back">
+            <BladeIcon name="arrow-left" size="16" />
+            <span>Kembali ke Daftar</span>
+          </router-link>
           <div class="title-wrap">
             <h2 class="page-title">{{ isNew ? 'Buat Konten Baru' : 'Edit Konten' }}</h2>
             <span v-if="hasUnsavedChanges" class="badge-unsaved">Ada Perubahan Belum Disimpan</span>
@@ -367,10 +370,12 @@ onMounted(async () => {
 
         <div class="header-right">
           <button type="button" class="btn btn-secondary" @click="openPrivatePreview(activeTab)">
-            👁️ Preview Privat ({{ activeTab.toUpperCase() }})
+            <BladeIcon name="eye" size="16" />
+            <span>Preview Privat ({{ activeTab.toUpperCase() }})</span>
           </button>
           <button type="button" class="btn btn-secondary" :disabled="isSaving" @click="saveDraft">
-            💾 Simpan Draft
+            <BladeIcon name="bookmark" size="16" />
+            <span>Simpan Draft</span>
           </button>
           <button
             v-if="form.translations[activeTab].status !== 'published'"
@@ -379,7 +384,8 @@ onMounted(async () => {
             :disabled="isSaving"
             @click="publishLocale(activeTab)"
           >
-            🚀 Publikasikan ({{ activeTab.toUpperCase() }})
+            <BladeIcon name="rocket-launch" size="16" />
+            <span>Publikasikan ({{ activeTab.toUpperCase() }})</span>
           </button>
           <button
             v-else
@@ -388,7 +394,8 @@ onMounted(async () => {
             :disabled="isSaving"
             @click="archiveLocale(activeTab)"
           >
-            📦 Tarik / Arsipkan ({{ activeTab.toUpperCase() }})
+            <BladeIcon name="archive-box" size="16" />
+            <span>Tarik / Arsipkan ({{ activeTab.toUpperCase() }})</span>
           </button>
         </div>
       </div>
@@ -407,7 +414,8 @@ onMounted(async () => {
               :class="{ active: activeTab === 'id' }"
               @click="activeTab = 'id'"
             >
-              🇮🇩 Bahasa Indonesia
+              <BladeIcon name="language" size="16" />
+              <span>Bahasa Indonesia</span>
               <span
                 class="tab-status"
                 :class="form.translations.id.status === 'published' ? 'status-pub' : 'status-draft'"
@@ -420,7 +428,8 @@ onMounted(async () => {
               :class="{ active: activeTab === 'en' }"
               @click="activeTab = 'en'"
             >
-              🇬🇧 English
+              <BladeIcon name="globe-alt" size="16" />
+              <span>English</span>
               <span
                 class="tab-status"
                 :class="form.translations.en.status === 'published' ? 'status-pub' : 'status-draft'"
@@ -448,7 +457,8 @@ onMounted(async () => {
               <div class="label-with-action">
                 <label>Slug URL ({{ activeTab.toUpperCase() }}) *</label>
                 <button type="button" class="btn-text" @click="generateSlug(activeTab)">
-                  Regenerasi Slug
+                  <BladeIcon name="arrow-path" size="14" />
+                  <span>Regenerasi Slug</span>
                 </button>
               </div>
               <input
@@ -520,7 +530,8 @@ onMounted(async () => {
             </div>
 
             <div v-if="form.sources.length === 0" class="empty-sources">
-              ⚠️ Belum ada sitasi sumber. Artikel tidak memenuhi syarat publikasi sampai sitasi ditambahkan.
+              <BladeIcon name="exclamation-triangle" size="18" class="icon-warning" />
+              <span>Belum ada sitasi sumber. Artikel tidak memenuhi syarat publikasi sampai sitasi ditambahkan.</span>
             </div>
 
             <ul v-else class="sources-list">
@@ -530,12 +541,18 @@ onMounted(async () => {
                   <a :href="src.sourceUrl" target="_blank" class="source-url">{{ src.sourceUrl }}</a>
                   <span class="source-type">Tipe: {{ src.sourceType }}</span>
                 </div>
-                <button type="button" class="btn-remove" @click="removeSource(idx)">Hapus</button>
+                <button type="button" class="btn-remove" @click="removeSource(idx)">
+                  <BladeIcon name="trash" size="14" />
+                  <span>Hapus</span>
+                </button>
               </li>
             </ul>
 
             <div class="add-source-form">
-              <h4 class="form-subtitle">+ Tambah Sitasi Baru</h4>
+              <h4 class="form-subtitle">
+                <BladeIcon name="plus" size="14" />
+                <span>Tambah Sitasi Baru</span>
+              </h4>
               <div class="source-inputs">
                 <input
                   v-model="newSource.sourceName"
@@ -556,7 +573,8 @@ onMounted(async () => {
                   <option value="field_survey">Survei Lapangan Terverifikasi</option>
                 </select>
                 <button type="button" class="btn btn-secondary" @click="addSource">
-                  Tambah Sitasi
+                  <BladeIcon name="plus" size="16" />
+                  <span>Tambah Sitasi</span>
                 </button>
               </div>
             </div>
@@ -591,7 +609,8 @@ onMounted(async () => {
               </div>
             </div>
             <button type="button" class="btn btn-secondary full-width mt-2" @click="showMediaPicker = true">
-              📷 Pilih dari Media Library
+              <BladeIcon name="photo" size="18" />
+              <span>Pilih dari Media Library</span>
             </button>
           </div>
 
@@ -653,7 +672,9 @@ onMounted(async () => {
         <div class="modal-card">
           <div class="modal-header">
             <h3>Pilih Foto dari Media Library</h3>
-            <button class="modal-close" @click="showMediaPicker = false">&times;</button>
+            <button class="modal-close" @click="showMediaPicker = false" title="Tutup">
+              <BladeIcon name="x-mark" size="20" />
+            </button>
           </div>
           <div class="modal-body">
             <div v-if="mediaList.length === 0" class="empty-media">
@@ -703,6 +724,9 @@ onMounted(async () => {
   color: #059669;
   text-decoration: none;
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .title-wrap {
@@ -839,6 +863,9 @@ onMounted(async () => {
   font-size: 0.775rem;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .input-control, .textarea-control, .select-control {
@@ -906,6 +933,14 @@ onMounted(async () => {
   border-radius: 6px;
   font-size: 0.85rem;
   margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.icon-warning {
+  color: #dc2626;
+  flex-shrink: 0;
 }
 
 .sources-list {
@@ -956,6 +991,9 @@ onMounted(async () => {
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .add-source-form {
@@ -967,6 +1005,9 @@ onMounted(async () => {
   margin: 0 0 0.75rem 0;
   font-size: 0.85rem;
   color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .source-inputs {

@@ -117,7 +117,10 @@ onMounted(() => {
               @click="selectPage(p)"
             >
               <div class="page-meta">
-                <span class="page-key">📄 {{ p.pageKey || p.page_key }}</span>
+                <span class="page-key">
+                  <BladeIcon name="document-text" size="16" />
+                  <span>{{ p.pageKey || p.page_key }}</span>
+                </span>
                 <span class="page-label">
                   ID: {{ p.translations?.id?.status || 'draft' }} &bull; EN: {{ p.translations?.en?.status || 'draft' }}
                 </span>
@@ -134,7 +137,8 @@ onMounted(() => {
               <p class="card-sub">Isi konten dan pilih status publikasi independen untuk ID dan EN.</p>
             </div>
             <button class="btn btn-primary" :disabled="isSaving" @click="savePage">
-              {{ isSaving ? 'Menyimpan...' : 'Simpan Halaman' }}
+              <BladeIcon name="bookmark" size="16" />
+              <span>{{ isSaving ? 'Menyimpan...' : 'Simpan Halaman' }}</span>
             </button>
           </div>
 
@@ -145,14 +149,16 @@ onMounted(() => {
               :class="{ active: activeLocale === 'id' }"
               @click="activeLocale = 'id'"
             >
-              🇮🇩 Bahasa Indonesia
+              <BladeIcon name="language" size="16" />
+              <span>Bahasa Indonesia</span>
             </button>
             <button
               class="tab-btn"
               :class="{ active: activeLocale === 'en' }"
               @click="activeLocale = 'en'"
             >
-              🇬🇧 English
+              <BladeIcon name="globe-alt" size="16" />
+              <span>English</span>
             </button>
           </div>
 
@@ -260,6 +266,9 @@ onMounted(() => {
   font-weight: 600;
   font-size: 0.9rem;
   color: #0f172a;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .page-label {
@@ -290,6 +299,9 @@ onMounted(() => {
   font-size: 0.85rem;
   font-weight: 600;
   color: #475569;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .tab-btn.active {

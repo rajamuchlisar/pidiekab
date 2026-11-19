@@ -91,8 +91,10 @@ async function handleLogin() {
               class="btn-toggle-pw"
               @click="showPassword = !showPassword"
               tabindex="-1"
+              :title="showPassword ? 'Sembunyikan' : 'Lihat'"
             >
-              {{ showPassword ? 'Sembunyikan' : 'Lihat' }}
+              <BladeIcon :name="showPassword ? 'eye-slash' : 'eye'" size="15" />
+              <span>{{ showPassword ? 'Sembunyikan' : 'Lihat' }}</span>
             </button>
           </div>
         </div>
@@ -252,6 +254,9 @@ async function handleLogin() {
   padding: 0.35rem 0.6rem;
   touch-action: manipulation;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .btn-submit {

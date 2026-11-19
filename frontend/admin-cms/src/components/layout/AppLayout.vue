@@ -31,61 +31,62 @@ async function handleLogout() {
 
       <nav class="nav-menu">
         <router-link to="/dashboard" class="nav-item" :class="{ active: currentRouteName === 'dashboard' }">
-          <span class="nav-icon">📊</span>
+          <span class="nav-icon"><BladeIcon name="chart-bar" size="20" /></span>
           <span class="nav-label">Dashboard</span>
         </router-link>
 
         <router-link to="/contents" class="nav-item" :class="{ active: String(currentRouteName).startsWith('content') }">
-          <span class="nav-icon">📝</span>
+          <span class="nav-icon"><BladeIcon name="document-text" size="20" /></span>
           <span class="nav-label">Kelola Konten</span>
         </router-link>
 
         <router-link to="/categories" class="nav-item" :class="{ active: currentRouteName === 'categories' }">
-          <span class="nav-icon">🏷️</span>
+          <span class="nav-icon"><BladeIcon name="tag" size="20" /></span>
           <span class="nav-label">Kategori</span>
         </router-link>
 
         <router-link to="/media" class="nav-item" :class="{ active: currentRouteName === 'media' }">
-          <span class="nav-icon">🖼️</span>
+          <span class="nav-icon"><BladeIcon name="photo" size="20" /></span>
           <span class="nav-label">Media Library</span>
         </router-link>
 
         <router-link to="/curation" class="nav-item" :class="{ active: currentRouteName === 'curation' }">
-          <span class="nav-icon">⭐</span>
+          <span class="nav-icon"><BladeIcon name="sparkles" size="20" /></span>
           <span class="nav-label">Kurasi Beranda</span>
         </router-link>
 
         <router-link to="/static-pages" class="nav-item" :class="{ active: currentRouteName === 'static-pages' }">
-          <span class="nav-icon">📄</span>
+          <span class="nav-icon"><BladeIcon name="document-duplicate" size="20" /></span>
           <span class="nav-label">Halaman Statis</span>
         </router-link>
 
         <div class="nav-divider"></div>
 
         <router-link to="/settings" class="nav-item" :class="{ active: currentRouteName === 'settings' }">
-          <span class="nav-icon">⚙️</span>
+          <span class="nav-icon"><BladeIcon name="cog-6-tooth" size="20" /></span>
           <span class="nav-label">Pengaturan Web</span>
         </router-link>
 
         <router-link to="/redirects" class="nav-item" :class="{ active: currentRouteName === 'redirects' }">
-          <span class="nav-icon">🔀</span>
+          <span class="nav-icon"><BladeIcon name="arrows-right-left" size="20" /></span>
           <span class="nav-label">URL Redirects</span>
         </router-link>
 
         <router-link to="/admins" class="nav-item" :class="{ active: currentRouteName === 'admins' }">
-          <span class="nav-icon">👥</span>
+          <span class="nav-icon"><BladeIcon name="users" size="20" /></span>
           <span class="nav-label">Administrator</span>
         </router-link>
 
         <router-link to="/audit-logs" class="nav-item" :class="{ active: currentRouteName === 'audit-logs' }">
-          <span class="nav-icon">🛡️</span>
+          <span class="nav-icon"><BladeIcon name="shield-check" size="20" /></span>
           <span class="nav-label">Audit Trail</span>
         </router-link>
       </nav>
 
       <div class="sidebar-footer">
         <a href="/" target="_blank" class="public-link">
-          <span>🌐</span> Buka Situs Publik
+          <BladeIcon name="globe-alt" size="18" />
+          <span>Buka Situs Publik</span>
         </a>
       </div>
     </aside>
@@ -106,7 +107,8 @@ async function handleLogout() {
             </div>
           </div>
           <button class="btn-logout" @click="handleLogout" title="Keluar">
-            Keluar
+            <BladeIcon name="arrow-left-on-rectangle" size="16" />
+            <span>Keluar</span>
           </button>
         </div>
       </header>
@@ -227,6 +229,9 @@ async function handleLogout() {
 
 .nav-icon {
   font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-divider {
@@ -332,6 +337,9 @@ async function handleLogout() {
   font-weight: 600;
   border-radius: 6px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   transition: all 0.15s ease;
 }
 

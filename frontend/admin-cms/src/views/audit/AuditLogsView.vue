@@ -122,7 +122,8 @@ onMounted(() => {
         <p class="subtitle">Catatan historis yang tidak dapat diubah (append-only) untuk seluruh aktivitas keamanan dan perubahan data.</p>
       </div>
       <button class="btn btn-secondary" @click="loadLogs" :disabled="loading">
-        🔄 Muat Ulang
+        <BladeIcon name="arrow-path" size="16" />
+        <span>Muat Ulang</span>
       </button>
     </div>
 
@@ -212,7 +213,8 @@ onMounted(() => {
             :disabled="page <= 1 || loading"
             @click="changePage(page - 1)"
           >
-            &laquo; Sebelumnya
+            <BladeIcon name="chevron-left" size="14" />
+            <span>Sebelumnya</span>
           </button>
           <span class="page-indicator">Halaman {{ page }}</span>
           <button
@@ -220,7 +222,8 @@ onMounted(() => {
             :disabled="page * limit >= total || loading"
             @click="changePage(page + 1)"
           >
-            Berikutnya &raquo;
+            <span>Berikutnya</span>
+            <BladeIcon name="chevron-right" size="14" />
           </button>
         </div>
       </div>
@@ -231,7 +234,9 @@ onMounted(() => {
       <div class="modal">
         <div class="modal-header">
           <h3>Detail Rekaman Audit #{{ selectedLog.id }}</h3>
-          <button class="close-btn" @click="showDetailModal = false">&times;</button>
+          <button class="close-btn" @click="showDetailModal = false" title="Tutup">
+            <BladeIcon name="x-mark" size="20" />
+          </button>
         </div>
         <div class="modal-body">
           <div class="detail-row">

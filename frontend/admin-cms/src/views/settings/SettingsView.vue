@@ -103,7 +103,8 @@ onMounted(() => {
           <p class="page-desc">Konfigurasi identitas situs, informasi kontak, media sosial, dan SEO default.</p>
         </div>
         <button class="btn btn-primary" :disabled="isSaving" @click="saveSettings">
-          {{ isSaving ? 'Menyimpan...' : 'Simpan Perubahan' }}
+          <BladeIcon name="check" size="18" />
+          <span>{{ isSaving ? 'Menyimpan...' : 'Simpan Perubahan' }}</span>
         </button>
       </div>
 

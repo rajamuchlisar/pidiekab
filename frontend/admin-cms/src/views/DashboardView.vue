@@ -71,16 +71,27 @@ onMounted(() => {
           <p class="banner-sub">Kelola publikasi dwibahasa, kurasi beranda, dan aset media daerah.</p>
         </div>
         <div class="banner-buttons">
-          <router-link to="/contents/new" class="btn btn-primary">+ Tambah Konten</router-link>
-          <router-link to="/media" class="btn btn-secondary">Upload Media</router-link>
-          <router-link to="/curation" class="btn btn-secondary">Kurasi Beranda</router-link>
+          <router-link to="/contents/new" class="btn btn-primary">
+            <BladeIcon name="plus" size="18" />
+            <span>Tambah Konten</span>
+          </router-link>
+          <router-link to="/media" class="btn btn-secondary">
+            <BladeIcon name="arrow-up-tray" size="18" />
+            <span>Upload Media</span>
+          </router-link>
+          <router-link to="/curation" class="btn btn-secondary">
+            <BladeIcon name="sparkles" size="18" />
+            <span>Kurasi Beranda</span>
+          </router-link>
         </div>
       </div>
 
       <!-- KPI Metric Cards -->
       <div class="stats-grid">
         <div class="stat-card">
-          <div class="stat-icon bg-emerald">📝</div>
+          <div class="stat-icon bg-emerald">
+            <BladeIcon name="document-text" size="24" />
+          </div>
           <div class="stat-info">
             <span class="stat-value">{{ stats.totalContents }}</span>
             <span class="stat-label">Total Konten</span>
@@ -88,7 +99,9 @@ onMounted(() => {
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon bg-blue">🇮🇩</div>
+          <div class="stat-icon bg-blue">
+            <BladeIcon name="check-circle" size="24" />
+          </div>
           <div class="stat-info">
             <span class="stat-value">{{ stats.publishedId }}</span>
             <span class="stat-label">Published (ID)</span>
@@ -96,7 +109,9 @@ onMounted(() => {
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon bg-indigo">🇬🇧</div>
+          <div class="stat-icon bg-indigo">
+            <BladeIcon name="globe-alt" size="24" />
+          </div>
           <div class="stat-info">
             <span class="stat-value">{{ stats.publishedEn }}</span>
             <span class="stat-label">Published (EN)</span>
@@ -104,7 +119,9 @@ onMounted(() => {
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon bg-amber">⏳</div>
+          <div class="stat-icon bg-amber">
+            <BladeIcon name="clock" size="24" />
+          </div>
           <div class="stat-info">
             <span class="stat-value">{{ stats.draftContents }}</span>
             <span class="stat-label">Draft / Belum Rilis</span>
@@ -112,7 +129,9 @@ onMounted(() => {
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon bg-purple">🖼️</div>
+          <div class="stat-icon bg-purple">
+            <BladeIcon name="photo" size="24" />
+          </div>
           <div class="stat-info">
             <span class="stat-value">{{ stats.totalMedia }}</span>
             <span class="stat-label">Aset Media</span>
@@ -120,7 +139,9 @@ onMounted(() => {
         </div>
 
         <div class="stat-card">
-          <div class="stat-icon bg-teal">🏷️</div>
+          <div class="stat-icon bg-teal">
+            <BladeIcon name="tag" size="24" />
+          </div>
           <div class="stat-info">
             <span class="stat-value">{{ stats.totalCategories }}</span>
             <span class="stat-label">Kategori Aktif</span>
@@ -132,7 +153,10 @@ onMounted(() => {
       <div class="section-card">
         <div class="section-header">
           <h3 class="section-title">Konten Terbaru</h3>
-          <router-link to="/contents" class="link-more">Lihat Semua Konten &rarr;</router-link>
+          <router-link to="/contents" class="link-more">
+            <span>Lihat Semua Konten</span>
+            <BladeIcon name="arrow-right" size="14" />
+          </router-link>
         </div>
 
         <div v-if="isLoading" class="loading-state">
@@ -184,7 +208,8 @@ onMounted(() => {
                 </td>
                 <td class="text-right">
                   <router-link :to="`/contents/${item.id}/edit`" class="btn-sm btn-outline">
-                    Edit
+                    <BladeIcon name="pencil-square" size="14" />
+                    <span>Edit</span>
                   </router-link>
                 </td>
               </tr>
@@ -346,6 +371,9 @@ onMounted(() => {
   color: #059669;
   font-weight: 600;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .link-more:hover {
@@ -420,7 +448,9 @@ onMounted(() => {
   font-weight: 600;
   border-radius: 4px;
   text-decoration: none;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .btn-outline {

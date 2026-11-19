@@ -260,7 +260,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="exec('insertUnorderedList')"
         >
-          ☰
+          <BladeIcon name="list-bullet" size="16" />
         </button>
         <button
           type="button"
@@ -269,7 +269,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="exec('insertOrderedList')"
         >
-          1.
+          <span style="font-size: 0.8rem; font-weight: 700;">1.</span>
         </button>
         <button
           type="button"
@@ -278,7 +278,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="exec('insertHorizontalRule')"
         >
-          —
+          <BladeIcon name="minus" size="16" />
         </button>
       </div>
 
@@ -293,7 +293,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="exec('justifyLeft')"
         >
-          ⇤
+          <BladeIcon name="bars-3-bottom-left" size="16" />
         </button>
         <button
           type="button"
@@ -302,7 +302,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="exec('justifyCenter')"
         >
-          ≡
+          <BladeIcon name="bars-3" size="16" />
         </button>
         <button
           type="button"
@@ -311,7 +311,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="exec('justifyRight')"
         >
-          ⇥
+          <BladeIcon name="bars-3-bottom-right" size="16" />
         </button>
       </div>
 
@@ -326,7 +326,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="openLinkModal"
         >
-          🔗
+          <BladeIcon name="link" size="16" />
         </button>
         <button
           type="button"
@@ -335,7 +335,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="insertImagePrompt"
         >
-          🖼️
+          <BladeIcon name="photo" size="16" />
         </button>
         <button
           type="button"
@@ -344,7 +344,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="exec('removeFormat')"
         >
-          🧹
+          <BladeIcon name="paint-brush" size="16" />
         </button>
       </div>
 
@@ -359,7 +359,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="exec('undo')"
         >
-          ↶
+          <BladeIcon name="arrow-uturn-left" size="15" />
         </button>
         <button
           type="button"
@@ -368,7 +368,7 @@ function cleanPastedHTML() {
           :disabled="isSourceMode"
           @click="exec('redo')"
         >
-          ↷
+          <BladeIcon name="arrow-uturn-right" size="15" />
         </button>
       </div>
 
@@ -383,7 +383,8 @@ function cleanPastedHTML() {
           :title="isSourceMode ? 'Kembali ke Editor Visual (WYSIWYG)' : 'Lihat / Edit Kode HTML Langsung'"
           @click="toggleSourceMode"
         >
-          {{ isSourceMode ? '👁️ Mode Visual' : '&lt;/&gt; Kode HTML' }}
+          <BladeIcon :name="isSourceMode ? 'eye' : 'code-bracket'" size="15" />
+          <span>{{ isSourceMode ? 'Mode Visual' : 'Kode HTML' }}</span>
         </button>
       </div>
     </div>

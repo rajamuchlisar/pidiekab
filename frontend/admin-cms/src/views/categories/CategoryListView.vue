@@ -165,7 +165,10 @@ onMounted(() => {
           <h2 class="page-title">Manajemen Kategori</h2>
           <p class="page-desc">Kelola kategori konten publikasi dwibahasa (ID & EN).</p>
         </div>
-        <button class="btn btn-primary" @click="openCreateModal">+ Tambah Kategori</button>
+        <button class="btn btn-primary" @click="openCreateModal">
+          <BladeIcon name="plus" size="18" />
+          <span>Tambah Kategori</span>
+        </button>
       </div>
 
       <div class="table-card">
@@ -203,8 +206,14 @@ onMounted(() => {
                 </span>
               </td>
               <td class="text-right">
-                <button class="btn-sm btn-outline" @click="openEditModal(cat)">Edit</button>
-                <button class="btn-sm btn-danger ml-1" @click="deleteCategory(cat)">Hapus</button>
+                <button class="btn-sm btn-outline" @click="openEditModal(cat)">
+                  <BladeIcon name="pencil-square" size="14" />
+                  <span>Edit</span>
+                </button>
+                <button class="btn-sm btn-danger ml-1" @click="deleteCategory(cat)">
+                  <BladeIcon name="trash" size="14" />
+                  <span>Hapus</span>
+                </button>
               </td>
             </tr>
           </tbody>
@@ -216,7 +225,9 @@ onMounted(() => {
         <div class="modal-card">
           <div class="modal-header">
             <h3>{{ isEditing ? 'Edit Kategori' : 'Tambah Kategori Baru' }}</h3>
-            <button class="modal-close" @click="showModal = false">&times;</button>
+            <button class="modal-close" @click="showModal = false" title="Tutup">
+              <BladeIcon name="x-mark" size="20" />
+            </button>
           </div>
           <form @submit.prevent="handleSubmit" class="modal-form">
             <div class="form-row">
@@ -379,6 +390,9 @@ code {
   font-weight: 600;
   border-radius: 4px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .btn-outline { border: 1px solid #cbd5e1; background: #ffffff; color: #334155; }
@@ -416,7 +430,21 @@ code {
 }
 
 .modal-header h3 { margin: 0; font-size: 1.15rem; }
-.modal-close { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: #94a3b8; }
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 4px;
+}
+.modal-close:hover {
+  color: #475569;
+  background: #f1f5f9;
+}
 
 .modal-form {
   padding: 1.25rem;

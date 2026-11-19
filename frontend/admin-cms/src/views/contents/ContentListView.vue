@@ -107,7 +107,10 @@ onMounted(() => {
           <h2 class="page-title">Manajemen Konten & Artikel</h2>
           <p class="page-desc">Kelola seluruh artikel wisata, kuliner, dan budaya Kabupaten Pidie.</p>
         </div>
-        <router-link to="/contents/new" class="btn btn-primary">+ Buat Artikel Baru</router-link>
+        <router-link to="/contents/new" class="btn btn-primary">
+          <BladeIcon name="plus" size="18" />
+          <span>Buat Artikel Baru</span>
+        </router-link>
       </div>
 
       <!-- Filters & Search Toolbar -->
@@ -119,7 +122,10 @@ onMounted(() => {
             placeholder="Cari judul artikel..."
             class="input-control search-input"
           />
-          <button type="submit" class="btn btn-secondary">Cari</button>
+          <button type="submit" class="btn btn-secondary">
+            <BladeIcon name="magnifying-glass" size="16" />
+            <span>Cari</span>
+          </button>
         </form>
 
         <div class="filter-group">
@@ -146,9 +152,12 @@ onMounted(() => {
         </div>
 
         <div v-else-if="items.length === 0" class="empty-state">
-          <span class="empty-icon">📭</span>
+          <span class="empty-icon"><BladeIcon name="inbox" size="48" /></span>
           <p>Tidak ada konten yang sesuai dengan filter atau kata kunci pencarian.</p>
-          <router-link to="/contents/new" class="btn btn-primary btn-sm">+ Buat Konten Baru</router-link>
+          <router-link to="/contents/new" class="btn btn-primary btn-sm">
+            <BladeIcon name="plus" size="16" />
+            <span>Buat Konten Baru</span>
+          </router-link>
         </div>
 
         <div v-else class="table-responsive">
@@ -171,7 +180,8 @@ onMounted(() => {
                       {{ item.translations?.id?.title || item.translations?.en?.title || 'Tanpa Judul' }}
                     </span>
                     <span v-if="item.kecamatanName" class="content-sub">
-                      📍 {{ item.kecamatanName }}
+                      <BladeIcon name="map-pin" size="14" />
+                      <span>{{ item.kecamatanName }}</span>
                     </span>
                   </div>
                 </td>
@@ -200,10 +210,12 @@ onMounted(() => {
                 <td class="text-right">
                   <div class="action-buttons">
                     <router-link :to="`/contents/${item.id}/edit`" class="btn-sm btn-outline">
-                      Edit
+                      <BladeIcon name="pencil-square" size="14" />
+                      <span>Edit</span>
                     </router-link>
                     <button @click="deleteContent(item)" class="btn-sm btn-danger">
-                      Hapus
+                      <BladeIcon name="trash" size="14" />
+                      <span>Hapus</span>
                     </button>
                   </div>
                 </td>
@@ -221,7 +233,8 @@ onMounted(() => {
               :disabled="currentPage <= 1"
               @click="currentPage--; loadContents()"
             >
-              &larr; Sebelumnya
+              <BladeIcon name="chevron-left" size="14" />
+              <span>Sebelumnya</span>
             </button>
             <span class="page-current">Halaman {{ currentPage }}</span>
             <button
@@ -229,7 +242,8 @@ onMounted(() => {
               :disabled="currentPage * perPage >= totalItems"
               @click="currentPage++; loadContents()"
             >
-              Selanjutnya &rarr;
+              <span>Selanjutnya</span>
+              <BladeIcon name="chevron-right" size="14" />
             </button>
           </div>
         </div>
@@ -379,6 +393,9 @@ onMounted(() => {
   font-size: 0.75rem;
   color: #64748b;
   margin-top: 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .badge {
@@ -425,6 +442,9 @@ onMounted(() => {
   border-radius: 4px;
   cursor: pointer;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .btn-outline {
@@ -474,6 +494,9 @@ onMounted(() => {
   cursor: pointer;
   font-size: 0.8rem;
   color: #334155;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .btn-page:disabled {

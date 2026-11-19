@@ -119,16 +119,22 @@ onMounted(() => {
           <h2 class="page-title">Media Library</h2>
           <p class="page-desc">Kelola repositori foto rights-cleared untuk artikel dan beranda (JPEG, PNG, WebP).</p>
         </div>
-        <button class="btn btn-primary" @click="showUploadModal = true">+ Unggah Foto Baru</button>
+        <button class="btn btn-primary" @click="showUploadModal = true">
+          <BladeIcon name="cloud-arrow-up" size="18" />
+          <span>Unggah Foto Baru</span>
+        </button>
       </div>
 
       <div class="media-container">
         <div v-if="isLoading" class="loading-state">Memuat galeri media...</div>
 
         <div v-else-if="mediaList.length === 0" class="empty-state">
-          <span class="empty-icon">🖼️</span>
+          <span class="empty-icon"><BladeIcon name="photo" size="48" /></span>
           <p>Belum ada media foto yang diunggah. Mulai dengan mengunggah foto rights-cleared.</p>
-          <button class="btn btn-primary btn-sm" @click="showUploadModal = true">Unggah Foto</button>
+          <button class="btn btn-primary btn-sm" @click="showUploadModal = true">
+            <BladeIcon name="cloud-arrow-up" size="16" />
+            <span>Unggah Foto</span>
+          </button>
         </div>
 
         <div v-else class="media-grid">
@@ -146,14 +152,18 @@ onMounted(() => {
                 {{ (item.fileSize / 1024).toFixed(1) }} KB
               </span>
               <div class="media-actions">
-                <button class="btn-xs btn-outline" @click="copyMediaUrl(item.url)">Salin URL</button>
+                <button class="btn-xs btn-outline" @click="copyMediaUrl(item.url)">
+                  <BladeIcon name="link" size="12" />
+                  <span>Salin URL</span>
+                </button>
                 <button
                   class="btn-xs btn-danger"
                   :disabled="item.inUse"
                   @click="deleteMedia(item)"
                   :title="item.inUse ? 'Media sedang digunakan dalam artikel' : 'Hapus media'"
                 >
-                  Hapus
+                  <BladeIcon name="trash" size="12" />
+                  <span>Hapus</span>
                 </button>
               </div>
             </div>
@@ -166,7 +176,9 @@ onMounted(() => {
         <div class="modal-card">
           <div class="modal-header">
             <h3>Unggah Foto Media</h3>
-            <button class="modal-close" @click="showUploadModal = false">&times;</button>
+            <button class="modal-close" @click="showUploadModal = false" title="Tutup">
+              <BladeIcon name="x-mark" size="20" />
+            </button>
           </div>
           <form @submit.prevent="handleUpload" class="modal-form">
             <!-- File Drop / Select -->
@@ -181,7 +193,7 @@ onMounted(() => {
               <label for="media-file-input" class="dropzone-label">
                 <img v-if="previewUrl" :src="previewUrl" alt="Preview" class="preview-img" />
                 <div v-else class="dropzone-placeholder">
-                  <span class="upload-icon">📁</span>
+                  <span class="upload-icon"><BladeIcon name="folder" size="36" /></span>
                   <strong>Pilih Berkas Foto</strong>
                   <span class="drop-hint">Maksimal 10MB (JPEG, PNG, WebP). SVG/Executable ditolak.</span>
                 </div>
