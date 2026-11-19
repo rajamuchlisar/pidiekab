@@ -54,7 +54,10 @@ func (h *SettingsHandler) HandleGetSettings(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(map[string]any{"data": settings})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data":     settings,
+		"settings": settings,
+	})
 }
 
 func (h *SettingsHandler) HandleUpdateGeneral(w http.ResponseWriter, r *http.Request) {
@@ -74,16 +77,21 @@ func (h *SettingsHandler) HandleUpdateGeneral(w http.ResponseWriter, r *http.Req
 	if err != nil {
 		if errors.Is(err, domain.ErrInvalidContactEmail) ||
 			errors.Is(err, domain.ErrInvalidContactPhone) ||
-			errors.Is(err, domain.ErrInvalidSocialURL) {
+			errors.Is(err, domain.ErrInvalidSocialURL) ||
+			errors.Is(err, domain.ErrInvalidLocale) ||
+			errors.Is(err, domain.ErrSiteNameEmpty) {
 			writeJSONError(w, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update general settings")
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update general settings: "+err.Error())
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(map[string]any{"data": res})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data":     res,
+		"settings": res,
+	})
 }
 
 func (h *SettingsHandler) HandleUpdateTranslation(w http.ResponseWriter, r *http.Request) {

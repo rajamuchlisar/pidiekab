@@ -199,6 +199,7 @@ func main() {
 		jobRepo := sitegeneration.NewJobRepository(dbPool)
 		contentService.SetJobEnqueuer(jobRepo)
 		pageService.SetJobEnqueuer(jobRepo)
+		settingsService.SetJobEnqueuer(jobRepo)
 
 		generator := sitegeneration.NewGenerator(dbPool, cfg.PublicBaseURL)
 		ssgWorker := sitegeneration.NewWorker(jobRepo, generator, releaseMgr, cfg.SSGWorkerPollInterval, cfg.SSGJobMaxAttempts, logger)

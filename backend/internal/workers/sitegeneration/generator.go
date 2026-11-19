@@ -37,6 +37,8 @@ type SiteContext struct {
 	ContactEmail   string
 	ContactPhone   string
 	ContactAddress string
+	LogoURL        string
+	FaviconURL     string
 }
 
 type CategoryRender struct {
@@ -142,10 +144,15 @@ func (g *Generator) fetchSiteContext(ctx context.Context) (*SiteContext, error) 
 
 	query := `
 		SELECT
-			COALESCE(contact_email, ''), COALESCE(contact_phone, ''), COALESCE(contact_address, '')
-		FROM site_settings WHERE id = 1
+			COALESCE(s.contact_email, ''), COALESCE(s.contact_phone, ''), COALESCE(s.contact_address, ''),
+			COALESCE(s.logo_url, CASE WHEN m_logo.storage_key IS NOT NULL THEN '/media/' || m_logo.storage_key ELSE '' END, ''),
+			COALESCE(s.favicon_url, CASE WHEN m_fav.storage_key IS NOT NULL THEN '/media/' || m_fav.storage_key ELSE '' END, '')
+		FROM site_settings s
+		LEFT JOIN media_assets m_logo ON s.logo_media_id = m_logo.id
+		LEFT JOIN media_assets m_fav ON s.favicon_media_id = m_fav.id
+		WHERE s.id = 1
 	`
-	_ = g.pool.QueryRow(ctx, query).Scan(&sc.ContactEmail, &sc.ContactPhone, &sc.ContactAddress)
+	_ = g.pool.QueryRow(ctx, query).Scan(&sc.ContactEmail, &sc.ContactPhone, &sc.ContactAddress, &sc.LogoURL, &sc.FaviconURL)
 
 	tRows, err := g.pool.Query(ctx, `SELECT locale, site_name, COALESCE(tagline, ''), COALESCE(default_seo_title, '') FROM site_setting_translations WHERE site_settings_id = 1`)
 	if err == nil {
@@ -471,6 +478,13 @@ body {
     border-radius: 6px;
     letter-spacing: 0.05em;
 }
+.brand-logo-img {
+    height: 36px;
+    width: auto;
+    max-width: 180px;
+    object-fit: contain;
+    vertical-align: middle;
+}
 .brand-tagline {
     display: none;
     font-size: 0.8125rem;
@@ -747,12 +761,17 @@ body {
 }
 `
 
+	brandLogoHTML := `<span class="brand-logo"><span class="brand-logo-badge">PK</span>PidieKab</span>`
+	if sc.LogoURL != "" {
+		brandLogoHTML = fmt.Sprintf(`<span class="brand-logo"><img src="%s" alt="%s" class="brand-logo-img" /></span>`, template.HTMLEscapeString(sc.LogoURL), template.HTMLEscapeString(siteName))
+	}
+
 	headerHTML := fmt.Sprintf(`
     <header class="site-header">
         <div class="site-wrapper">
             <div class="header-inner">
                 <a href="/%s/" class="brand-group">
-                    <span class="brand-logo"><span class="brand-logo-badge">PK</span>PidieKab</span>
+                    %s
                     <span class="brand-tagline">%s</span>
                 </a>
                 <nav class="lang-switcher" aria-label="Language selector">
@@ -762,7 +781,7 @@ body {
             </div>
         </div>
     </header>
-`, locale, template.HTMLEscapeString(siteName), idClass, enClass)
+`, locale, brandLogoHTML, template.HTMLEscapeString(siteName), idClass, enClass)
 
 	footerHTML := fmt.Sprintf(`
     <footer class="site-footer">
@@ -772,6 +791,11 @@ body {
     </footer>
 `, footerText)
 
+	faviconTag := ""
+	if sc.FaviconURL != "" {
+		faviconTag = fmt.Sprintf("\n    <link rel=\"icon\" href=\"%s\">", template.HTMLEscapeString(sc.FaviconURL))
+	}
+
 	// 1. Render Homepage: <locale>/index.html
 	homeHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
@@ -779,7 +803,7 @@ body {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>%s — %s</title>
-    <meta name="description" content="%s">
+    <meta name="description" content="%s">%s
     <link rel="canonical" href="%s/%s/">
     <link rel="alternate" hreflang="id" href="%s/id/">
     <link rel="alternate" hreflang="en" href="%s/en/">
@@ -801,6 +825,7 @@ body {
 		template.HTMLEscapeString(siteName),
 		template.HTMLEscapeString(tagline),
 		template.HTMLEscapeString(tagline),
+		faviconTag,
 		g.baseURL, locale,
 		g.baseURL, g.baseURL, g.baseURL,
 		commonCSS,
@@ -875,7 +900,7 @@ body {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>%s — %s</title>
-    <meta name="description" content="%s">
+    <meta name="description" content="%s">%s
     <link rel="canonical" href="%s">
     <style>%s</style>
 </head>
@@ -900,6 +925,7 @@ body {
 			template.HTMLEscapeString(c.Title),
 			template.HTMLEscapeString(siteName),
 			template.HTMLEscapeString(c.Summary),
+			faviconTag,
 			canonical,
 			commonCSS,
 			headerHTML,
@@ -933,7 +959,7 @@ body {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>%s — %s</title>
-    <meta name="description" content="%s">
+    <meta name="description" content="%s">%s
     <link rel="canonical" href="%s">
     <style>%s</style>
 </head>
@@ -955,6 +981,7 @@ body {
 			template.HTMLEscapeString(p.Title),
 			template.HTMLEscapeString(siteName),
 			template.HTMLEscapeString(p.SeoDesc),
+			faviconTag,
 			canonical,
 			commonCSS,
 			headerHTML,
