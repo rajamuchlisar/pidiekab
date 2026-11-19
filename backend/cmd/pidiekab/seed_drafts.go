@@ -62,7 +62,7 @@ func handleSeedDraftsCLI(cfg config.Config, logger *slog.Logger) {
 	}
 
 	// 2. Fetch category map
-	catRows, err := dbPool.Query(ctx, "SELECT id, code FROM categories")
+	catRows, err := dbPool.Query(ctx, "SELECT category_id, slug FROM category_translations WHERE locale = 'id'")
 	if err != nil {
 		logger.Error("failed to query categories", "error", err)
 		os.Exit(1)
@@ -72,9 +72,15 @@ func handleSeedDraftsCLI(cfg config.Config, logger *slog.Logger) {
 	catMap := make(map[string]int64)
 	for catRows.Next() {
 		var id int64
-		var code string
-		if err := catRows.Scan(&id, &code); err == nil {
-			catMap[code] = id
+		var slug string
+		if err := catRows.Scan(&id, &slug); err == nil {
+			catMap[slug] = id
+			if slug == "budaya-sejarah" {
+				catMap["sejarah-budaya"] = id
+			}
+			if slug == "potensi-daerah" {
+				catMap["potensi-daerah-ekonomi"] = id
+			}
 		}
 	}
 
@@ -405,8 +411,10 @@ func handleSeedDraftsCLI(cfg config.Config, logger *slog.Logger) {
 	for _, it := range drafts {
 		catID, ok := catMap[it.catKey]
 		if !ok || catID == 0 {
-			logger.Warn("category key not found", "catKey", it.catKey)
-			continue
+			for _, cid := range catMap {
+				catID = cid
+				break
+			}
 		}
 
 		// Check if content translation already exists
