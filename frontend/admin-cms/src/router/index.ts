@@ -9,6 +9,7 @@ import CategoryListView from '../views/categories/CategoryListView.vue'
 import MediaLibraryView from '../views/media/MediaLibraryView.vue'
 import CurationView from '../views/curation/CurationView.vue'
 import StaticPagesView from '../views/staticpages/StaticPagesView.vue'
+import MenuView from '../views/menus/MenuView.vue'
 import SettingsView from '../views/settings/SettingsView.vue'
 import AdminsView from '../views/admins/AdminsView.vue'
 import RedirectsView from '../views/redirects/RedirectsView.vue'
@@ -72,6 +73,12 @@ const routes: RouteRecordRaw[] = [
     name: 'static-pages',
     component: StaticPagesView,
     meta: { requiresAuth: true, title: 'Halaman Statis' },
+  },
+  {
+    path: '/menus',
+    name: 'menus',
+    component: MenuView,
+    meta: { requiresAuth: true, title: 'Navigasi Menu Header' },
   },
   {
     path: '/settings',

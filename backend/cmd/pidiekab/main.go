@@ -32,6 +32,9 @@ import (
 	mediaPostgres "pidiekab/internal/modules/media/infrastructure/postgres"
 	mediaStorage "pidiekab/internal/modules/media/infrastructure/storage"
 	mediaHttp "pidiekab/internal/modules/media/transport/http"
+	menuApp "pidiekab/internal/modules/menu/application"
+	menuPostgres "pidiekab/internal/modules/menu/infrastructure/postgres"
+	menuHttp "pidiekab/internal/modules/menu/transport/http"
 	redirectPostgres "pidiekab/internal/modules/redirect/infrastructure/postgres"
 	redirectHttp "pidiekab/internal/modules/redirect/transport/http"
 	searchApp "pidiekab/internal/modules/search/application"
@@ -188,6 +191,12 @@ func main() {
 		settingsHandler := settingsHttp.NewSettingsHandler(settingsService, authService)
 		registrars = append(registrars, settingsHandler)
 
+		// 8b. Navigation Menus
+		menuRepo := menuPostgres.NewMenuRepository(dbPool)
+		menuService := menuApp.NewMenuService(menuRepo, auditRepo)
+		menuHandler := menuHttp.NewMenuHandler(menuService, authService)
+		registrars = append(registrars, menuHandler)
+
 		// 9. Site Generation Workers & SSG Pipeline
 		releaseMgr, err := sitegeneration.NewReleaseManager(cfg.SSGOutputRoot, cfg.SSGReleasesToKeep)
 		if err != nil {
@@ -200,6 +209,7 @@ func main() {
 		contentService.SetJobEnqueuer(jobRepo)
 		pageService.SetJobEnqueuer(jobRepo)
 		settingsService.SetJobEnqueuer(jobRepo)
+		menuService.SetJobEnqueuer(jobRepo)
 
 		generator := sitegeneration.NewGenerator(dbPool, cfg.PublicBaseURL)
 		ssgWorker := sitegeneration.NewWorker(jobRepo, generator, releaseMgr, cfg.SSGWorkerPollInterval, cfg.SSGJobMaxAttempts, logger)

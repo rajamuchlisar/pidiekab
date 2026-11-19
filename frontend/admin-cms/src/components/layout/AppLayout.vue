@@ -60,6 +60,11 @@ async function handleLogout() {
           <span class="nav-label">Halaman Statis</span>
         </router-link>
 
+        <router-link to="/menus" class="nav-item" :class="{ active: currentRouteName === 'menus' }">
+          <span class="nav-icon"><BladeIcon name="bars-3" size="20" /></span>
+          <span class="nav-label">Menu Navigasi</span>
+        </router-link>
+
         <div class="nav-divider"></div>
 
         <router-link to="/settings" class="nav-item" :class="{ active: currentRouteName === 'settings' }">

@@ -83,6 +83,17 @@ type StaticPageRender struct {
 	SeoDesc  string
 }
 
+type MenuItemRender struct {
+	ID           int64
+	TitleID      string
+	TitleEN      string
+	ItemType     string // static_page, content, category, external
+	TargetID     *int64
+	ExternalURL  string
+	OpenInNewTab bool
+	SortOrder    int
+}
+
 func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	// 1. Fetch site settings
 	siteCtx, err := g.fetchSiteContext(ctx)
@@ -108,13 +119,16 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 		return fmt.Errorf("failed to load static pages: %w", err)
 	}
 
+	// 4b. Fetch navigation menu items
+	menuItems, _ := g.fetchMenuItems(ctx)
+
 	// 5. Render Indonesian site
-	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, pagesID); err != nil {
+	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, pagesID, menuItems); err != nil {
 		return fmt.Errorf("failed to render ID site: %w", err)
 	}
 
 	// 6. Render English site
-	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, pagesEN); err != nil {
+	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, pagesEN, menuItems); err != nil {
 		return fmt.Errorf("failed to render EN site: %w", err)
 	}
 
@@ -188,6 +202,32 @@ func (g *Generator) fetchSiteContext(ctx context.Context) (*SiteContext, error) 
 	}
 
 	return sc, nil
+}
+
+func (g *Generator) fetchMenuItems(ctx context.Context) ([]MenuItemRender, error) {
+	query := `
+		SELECT id, title_id, title_en, item_type, target_id, COALESCE(external_url, ''), open_in_new_tab, sort_order
+		FROM menu_items
+		WHERE is_active = TRUE
+		ORDER BY sort_order ASC, id ASC
+	`
+	rows, err := g.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []MenuItemRender
+	for rows.Next() {
+		var it MenuItemRender
+		if err := rows.Scan(
+			&it.ID, &it.TitleID, &it.TitleEN, &it.ItemType, &it.TargetID,
+			&it.ExternalURL, &it.OpenInNewTab, &it.SortOrder,
+		); err == nil {
+			items = append(items, it)
+		}
+	}
+	return items, nil
 }
 
 func (g *Generator) fetchCategories(ctx context.Context) (map[int64]CategoryRender, map[int64]CategoryRender, error) {
@@ -390,6 +430,86 @@ func renderBodyBlocksToHTML(bodyBytes []byte) template.HTML {
 	return template.HTML(enforceNofollow(sb.String()))
 }
 
+func buildHeaderNavHTML(
+	locale string,
+	menus []MenuItemRender,
+	cats map[int64]CategoryRender,
+	contents []ContentRender,
+	pages []StaticPageRender,
+) string {
+	var sb strings.Builder
+	for _, m := range menus {
+		title := m.TitleID
+		if locale == "en" && m.TitleEN != "" {
+			title = m.TitleEN
+		}
+
+		href := ""
+		switch m.ItemType {
+		case "static_page":
+			if m.TargetID != nil {
+				for _, p := range pages {
+					if p.ID == *m.TargetID {
+						href = fmt.Sprintf("/%s/%s/", locale, p.Slug)
+						break
+					}
+				}
+			}
+		case "content":
+			if m.TargetID != nil {
+				for _, c := range contents {
+					if c.ID == *m.TargetID {
+						href = fmt.Sprintf("/%s/%s/%s/", locale, c.CategorySlug, c.Slug)
+						break
+					}
+				}
+			}
+		case "category":
+			if m.TargetID != nil {
+				if cat, ok := cats[*m.TargetID]; ok {
+					href = fmt.Sprintf("/%s/%s/", locale, cat.Slug)
+				}
+			}
+		case "external":
+			href = m.ExternalURL
+			if href == "/" || href == "/id" || href == "/en" || href == "/id/" || href == "/en/" {
+				href = fmt.Sprintf("/%s/", locale)
+			}
+		}
+
+		if href == "" {
+			continue
+		}
+
+		targetAttr := ""
+		if m.OpenInNewTab {
+			targetAttr = ` target="_blank" rel="nofollow noopener noreferrer"`
+		} else if strings.HasPrefix(href, "http://") || strings.HasPrefix(href, "https://") {
+			targetAttr = ` rel="nofollow noopener noreferrer"`
+		}
+
+		sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="%s"%s>%s</a></li>`, template.HTMLEscapeString(href), targetAttr, template.HTMLEscapeString(title)))
+	}
+
+	if sb.Len() == 0 {
+		homeText := "Beranda"
+		aboutText := "Tentang Pidie"
+		if locale == "en" {
+			homeText = "Home"
+			aboutText = "About Pidie"
+		}
+		sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="/%s/">%s</a></li>`, locale, homeText))
+		for _, cat := range cats {
+			sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="/%s/%s/">%s</a></li>`, locale, cat.Slug, template.HTMLEscapeString(cat.Name)))
+		}
+		if len(pages) > 0 {
+			sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="/%s/%s/">%s</a></li>`, locale, pages[0].Slug, aboutText))
+		}
+	}
+
+	return sb.String()
+}
+
 func (g *Generator) renderLocaleSite(
 	targetDir, locale string,
 	sc *SiteContext,
@@ -397,6 +517,7 @@ func (g *Generator) renderLocaleSite(
 	altCats map[int64]CategoryRender,
 	contents []ContentRender,
 	pages []StaticPageRender,
+	menus []MenuItemRender,
 ) error {
 	localeDir := filepath.Join(targetDir, locale)
 	if err := os.MkdirAll(localeDir, 0755); err != nil {
@@ -461,7 +582,86 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 0.75rem 0;
-    gap: 0.75rem;
+    gap: 1rem;
+    position: relative;
+}
+.header-left {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex-shrink: 0;
+}
+.header-nav {
+    display: flex;
+    align-items: center;
+}
+.header-nav-list {
+    display: flex;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 1.25rem;
+    align-items: center;
+}
+.header-nav-item a {
+    color: #334155;
+    text-decoration: none;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 0.35rem 0.2rem;
+    position: relative;
+    transition: color 0.15s ease;
+    white-space: nowrap;
+}
+.header-nav-item a:hover {
+    color: #047857;
+}
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    flex-shrink: 0;
+}
+.mobile-nav-toggle {
+    display: none;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 0.35rem 0.45rem;
+    color: #1e293b;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+}
+@media (max-width: 860px) {
+    .mobile-nav-toggle {
+        display: inline-flex;
+    }
+    .header-nav {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: #ffffff;
+        border-bottom: 1px solid #e2e8f0;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08);
+        padding: 1rem 1.5rem;
+        z-index: 49;
+    }
+    .header-nav.nav-open {
+        display: block;
+    }
+    .header-nav-list {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+    .header-nav-item a {
+        font-size: 0.95rem;
+        display: block;
+        padding: 0.4rem 0;
+    }
 }
 .brand-group {
     display: flex;
@@ -940,23 +1140,37 @@ body {
 		brandLogoHTML = fmt.Sprintf(`<span class="brand-logo"><img src="%s" alt="%s" class="brand-logo-img" /></span>`, template.HTMLEscapeString(sc.LogoURL), template.HTMLEscapeString(siteName))
 	}
 
+	headerNavHTML := buildHeaderNavHTML(locale, menus, cats, contents, pages)
+
 	buildHeader := func(idURL, enURL string) string {
 		return fmt.Sprintf(`
     <header class="site-header">
         <div class="site-wrapper">
             <div class="header-inner">
-                <a href="/%s/" class="brand-group">
-                    %s
-                    <span class="brand-tagline">%s</span>
-                </a>
-                <nav class="lang-switcher" aria-label="Language selector">
-                    <a href="%s" class="lang-btn %s"><span class="lang-short">ID</span><span class="lang-long">Bahasa Indonesia</span></a>
-                    <a href="%s" class="lang-btn %s"><span class="lang-short">EN</span><span class="lang-long">English</span></a>
+                <div class="header-left">
+                    <a href="/%s/" class="brand-group">
+                        %s
+                        <span class="brand-tagline">%s</span>
+                    </a>
+                </div>
+                <nav class="header-nav" id="header-menu-nav" aria-label="Navigasi Utama">
+                    <ul class="header-nav-list">
+                        %s
+                    </ul>
                 </nav>
+                <div class="header-right">
+                    <nav class="lang-switcher" aria-label="Language selector">
+                        <a href="%s" class="lang-btn %s"><span class="lang-short">ID</span><span class="lang-long">Bahasa Indonesia</span></a>
+                        <a href="%s" class="lang-btn %s"><span class="lang-short">EN</span><span class="lang-long">English</span></a>
+                    </nav>
+                    <button type="button" class="mobile-nav-toggle" aria-label="Buka Menu" onclick="document.getElementById('header-menu-nav').classList.toggle('nav-open')">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    </button>
+                </div>
             </div>
         </div>
     </header>
-`, locale, brandLogoHTML, template.HTMLEscapeString(siteName), idURL, idClass, enURL, enClass)
+`, locale, brandLogoHTML, template.HTMLEscapeString(siteName), headerNavHTML, idURL, idClass, enURL, enClass)
 	}
 
 	headerHTML := buildHeader("/id/", "/en/")
