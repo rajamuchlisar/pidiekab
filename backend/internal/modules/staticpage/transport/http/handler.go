@@ -36,12 +36,23 @@ func (h *PageHandler) RegisterRoutes(mux *http.ServeMux) {
 		return authMiddleware(handler)
 	}
 
+	// Standard /api/v1/admin/pages routes
 	mux.Handle("GET /api/v1/admin/pages", wrapGet(h.HandleListPages))
 	mux.Handle("POST /api/v1/admin/pages", wrapProtected(h.HandleCreatePage))
 	mux.Handle("GET /api/v1/admin/pages/{id}", wrapGet(h.HandleGetPage))
+	mux.Handle("PUT /api/v1/admin/pages/{id}", wrapProtected(h.HandleUpdatePage))
 	mux.Handle("PUT /api/v1/admin/pages/{id}/translations/{locale}", wrapProtected(h.HandleSaveTranslation))
 	mux.Handle("POST /api/v1/admin/pages/{id}/translations/{locale}/publish", wrapProtected(h.HandlePublishTranslation))
 	mux.Handle("POST /api/v1/admin/pages/{id}/translations/{locale}/archive", wrapProtected(h.HandleArchiveTranslation))
+
+	// Static-pages alias routes matching frontend /api/v1/admin/static-pages
+	mux.Handle("GET /api/v1/admin/static-pages", wrapGet(h.HandleListPages))
+	mux.Handle("POST /api/v1/admin/static-pages", wrapProtected(h.HandleCreatePage))
+	mux.Handle("GET /api/v1/admin/static-pages/{id}", wrapGet(h.HandleGetPage))
+	mux.Handle("PUT /api/v1/admin/static-pages/{id}", wrapProtected(h.HandleUpdatePage))
+	mux.Handle("PUT /api/v1/admin/static-pages/{id}/translations/{locale}", wrapProtected(h.HandleSaveTranslation))
+	mux.Handle("POST /api/v1/admin/static-pages/{id}/translations/{locale}/publish", wrapProtected(h.HandlePublishTranslation))
+	mux.Handle("POST /api/v1/admin/static-pages/{id}/translations/{locale}/archive", wrapProtected(h.HandleArchiveTranslation))
 }
 
 type createPageRequest struct {
@@ -93,9 +104,27 @@ func (h *PageHandler) HandleListPages(w http.ResponseWriter, r *http.Request) {
 		pages = []domain.StaticPageDetail{}
 	}
 
+	// Populate BodyHTML helper field for each translation
+	for i := range pages {
+		for loc, trans := range pages[i].Translations {
+			if trans != nil && len(trans.Body) > 0 {
+				var bodyMap map[string]any
+				if err := json.Unmarshal(trans.Body, &bodyMap); err == nil {
+					if htmlVal, ok := bodyMap["html"].(string); ok && htmlVal != "" {
+						trans.BodyHTML = htmlVal
+					} else if mdVal, ok := bodyMap["markdown"].(string); ok && mdVal != "" {
+						trans.BodyHTML = mdVal
+					}
+				}
+				pages[i].Translations[loc] = trans
+			}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": pages,
+		"data":  pages,
+		"pages": pages,
 		"meta": map[string]any{
 			"total_items": len(pages),
 		},
@@ -125,8 +154,139 @@ func (h *PageHandler) HandleGetPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Populate BodyHTML helper field
+	for loc, trans := range page.Translations {
+		if trans != nil && len(trans.Body) > 0 {
+			var bodyMap map[string]any
+			if err := json.Unmarshal(trans.Body, &bodyMap); err == nil {
+				if htmlVal, ok := bodyMap["html"].(string); ok && htmlVal != "" {
+					trans.BodyHTML = htmlVal
+				} else if mdVal, ok := bodyMap["markdown"].(string); ok && mdVal != "" {
+					trans.BodyHTML = mdVal
+				}
+			}
+			page.Translations[loc] = trans
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	_ = json.NewEncoder(w).Encode(map[string]any{"data": page})
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": page,
+		"page": page,
+	})
+}
+
+type updatePageRequest struct {
+	PageKey      string                             `json:"page_key"`
+	Translations map[string]updatePageTransRequest `json:"translations"`
+}
+
+type updatePageTransRequest struct {
+	Title    string `json:"title"`
+	Slug     string `json:"slug"`
+	BodyHTML string `json:"body_html"`
+	Body     any    `json:"body"`
+	Status   string `json:"status"`
+}
+
+func (h *PageHandler) HandleUpdatePage(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok || admin == nil {
+		writeJSONError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Admin session required")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_ID", "Invalid static page ID")
+		return
+	}
+
+	var req updatePageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_JSON", "Malformed JSON body")
+		return
+	}
+
+	for locale, tReq := range req.Translations {
+		locale = strings.ToLower(strings.TrimSpace(locale))
+		if locale != domain.LocaleID && locale != domain.LocaleEN {
+			continue
+		}
+		if strings.TrimSpace(tReq.Title) == "" {
+			continue
+		}
+
+		bodyContent := strings.TrimSpace(tReq.BodyHTML)
+		if bodyContent == "" && tReq.Body != nil {
+			if s, ok := tReq.Body.(string); ok {
+				bodyContent = s
+			} else if m, ok := tReq.Body.(map[string]any); ok {
+				if hVal, ok := m["html"].(string); ok {
+					bodyContent = hVal
+				} else if mdVal, ok := m["markdown"].(string); ok {
+					bodyContent = mdVal
+				}
+			}
+		}
+
+		bodyJSON, _ := json.Marshal(map[string]string{
+			"html":     bodyContent,
+			"markdown": bodyContent,
+		})
+
+		slug := strings.TrimSpace(tReq.Slug)
+		if slug == "" {
+			slug = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(tReq.Title), " ", "-"))
+		}
+
+		saveInput := application.SaveTranslationInput{
+			Title: tReq.Title,
+			Slug:  slug,
+			Body:  bodyJSON,
+		}
+
+		_, err := h.service.SaveTranslation(r.Context(), admin.ID, id, locale, saveInput)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "VALIDATION_FAILED", err.Error())
+			return
+		}
+
+		status := strings.ToLower(strings.TrimSpace(tReq.Status))
+		if status == domain.StatusPublished {
+			_ = h.service.PublishTranslation(r.Context(), admin.ID, id, locale)
+		} else if status == domain.StatusArchived {
+			_ = h.service.ArchiveTranslation(r.Context(), admin.ID, id, locale)
+		}
+	}
+
+	// Fetch updated page
+	page, err := h.service.GetPage(r.Context(), id)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve updated page")
+		return
+	}
+
+	// Populate BodyHTML helper field
+	for loc, trans := range page.Translations {
+		if trans != nil && len(trans.Body) > 0 {
+			var bodyMap map[string]any
+			if err := json.Unmarshal(trans.Body, &bodyMap); err == nil {
+				if htmlVal, ok := bodyMap["html"].(string); ok && htmlVal != "" {
+					trans.BodyHTML = htmlVal
+				} else if mdVal, ok := bodyMap["markdown"].(string); ok && mdVal != "" {
+					trans.BodyHTML = mdVal
+				}
+			}
+			page.Translations[loc] = trans
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data": page,
+		"page": page,
+	})
 }
 
 func (h *PageHandler) HandleSaveTranslation(w http.ResponseWriter, r *http.Request) {

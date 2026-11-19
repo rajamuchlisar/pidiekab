@@ -49,6 +49,7 @@ type StaticPageTranslation struct {
 	Title          string          `json:"title"`
 	Slug           string          `json:"slug"`
 	Body           json.RawMessage `json:"body"`
+	BodyHTML       string          `json:"body_html,omitempty"`
 	SeoTitle       string          `json:"seo_title"`
 	SeoDescription string          `json:"seo_description"`
 	Status         string          `json:"status"`

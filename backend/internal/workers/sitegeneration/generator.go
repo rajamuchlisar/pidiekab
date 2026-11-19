@@ -160,13 +160,14 @@ func (g *Generator) fetchSiteContext(ctx context.Context) (*SiteContext, error) 
 		for tRows.Next() {
 			var loc, name, tag, seo string
 			if err := tRows.Scan(&loc, &name, &tag, &seo); err == nil {
-				if loc == "id" {
+				switch loc {
+				case "id":
 					if name != "" {
 						sc.SiteNameID = name
 					}
 					sc.TaglineID = tag
 					sc.DefaultSeoID = seo
-				} else if loc == "en" {
+				case "en":
 					if name != "" {
 						sc.SiteNameEN = name
 					}
@@ -202,9 +203,10 @@ func (g *Generator) fetchCategories(ctx context.Context) (map[int64]CategoryRend
 		if err := rows.Scan(&cr.ID, &cr.Locale, &cr.Name, &cr.Description, &cr.Slug); err != nil {
 			return nil, nil, err
 		}
-		if cr.Locale == "id" {
+		switch cr.Locale {
+		case "id":
 			catsID[cr.ID] = cr
-		} else if cr.Locale == "en" {
+		case "en":
 			catsEN[cr.ID] = cr
 		}
 	}
@@ -245,9 +247,10 @@ func (g *Generator) fetchPublishedContents(ctx context.Context) ([]ContentRender
 
 		item.BodyHTML = renderBodyBlocksToHTML(bodyBytes)
 
-		if item.Locale == "id" {
+		switch item.Locale {
+		case "id":
 			contentsID = append(contentsID, item)
-		} else if item.Locale == "en" {
+		case "en":
 			contentsEN = append(contentsEN, item)
 		}
 	}
@@ -277,9 +280,10 @@ func (g *Generator) fetchPublishedPages(ctx context.Context) ([]StaticPageRender
 			return nil, nil, err
 		}
 		p.BodyHTML = renderBodyBlocksToHTML(bodyBytes)
-		if p.Locale == "id" {
+		switch p.Locale {
+		case "id":
 			pagesID = append(pagesID, p)
-		} else if p.Locale == "en" {
+		case "en":
 			pagesEN = append(pagesEN, p)
 		}
 	}
