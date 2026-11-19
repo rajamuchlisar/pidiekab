@@ -25,9 +25,28 @@ const form = reactive({
 async function loadCategories() {
   isLoading.value = true
   try {
-    const res = await api.get<{ categories: any[] }>('/api/v1/admin/categories')
-    if (res?.categories) {
-      categories.value = res.categories
+    const res = await api.get<any>('/api/v1/admin/categories')
+    const list = res?.categories || res?.data || []
+    if (Array.isArray(list)) {
+      categories.value = list.map((cat: any) => {
+        const idTrans = cat.translations?.id || {}
+        const enTrans = cat.translations?.en || {}
+        return {
+          id: cat.id,
+          code: cat.code || idTrans.slug || `cat-${cat.id}`,
+          displayOrder: cat.displayOrder || cat.display_order || cat.id,
+          isActive: cat.isActive !== undefined ? cat.isActive : (cat.is_active !== undefined ? cat.is_active : true),
+          names: {
+            id: cat.names?.id || idTrans.name || cat.name || '-',
+            en: cat.names?.en || enTrans.name || '-',
+          },
+          slugs: {
+            id: cat.slugs?.id || idTrans.slug || '-',
+            en: cat.slugs?.en || enTrans.slug || '-',
+          },
+          raw: cat,
+        }
+      })
     }
   } catch (err: any) {
     notification.error('Gagal Memuat Kategori', err.detail || 'Terjadi kesalahan sistem.', err.requestId)
@@ -53,10 +72,10 @@ function openEditModal(cat: any) {
   currentId.value = cat.id
   form.code = cat.code || ''
   form.displayOrder = cat.displayOrder || cat.display_order || 1
-  form.nameId = cat.names?.id || ''
-  form.nameEn = cat.names?.en || ''
-  form.slugId = cat.slugs?.id || ''
-  form.slugEn = cat.slugs?.en || ''
+  form.nameId = cat.names?.id !== '-' ? cat.names?.id : ''
+  form.nameEn = cat.names?.en !== '-' ? cat.names?.en : ''
+  form.slugId = cat.slugs?.id !== '-' ? cat.slugs?.id : ''
+  form.slugEn = cat.slugs?.en !== '-' ? cat.slugs?.en : ''
   showModal.value = true
 }
 
@@ -70,22 +89,40 @@ function generateSlugs() {
 }
 
 async function handleSubmit() {
-  if (!form.code || !form.nameId || !form.nameEn) {
-    alert('Kode, Nama ID, dan Nama EN wajib diisi.')
+  if (!form.nameId) {
+    alert('Nama Kategori (Bahasa Indonesia) wajib diisi.')
     return
   }
 
   isSubmitting.value = true
   try {
+    const slugId = form.slugId || form.nameId.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-')
+    const slugEn = form.slugEn || (form.nameEn ? form.nameEn.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-') : slugId)
+    const code = form.code || slugId
+
     const payload = {
-      code: form.code,
-      display_order: Number(form.displayOrder),
-      names: { id: form.nameId, en: form.nameEn },
-      slugs: { id: form.slugId, en: form.slugEn },
+      is_active: true,
+      code,
+      names: { id: form.nameId, en: form.nameEn || form.nameId },
+      slugs: { id: slugId, en: slugEn },
+      translations: [
+        { locale: 'id', name: form.nameId, slug: slugId },
+        { locale: 'en', name: form.nameEn || form.nameId, slug: slugEn },
+      ],
     }
 
     if (isEditing.value && currentId.value) {
       await api.put(`/api/v1/admin/categories/${currentId.value}`, payload)
+      await api.put(`/api/v1/admin/categories/${currentId.value}/translations/id`, {
+        name: form.nameId,
+        slug: slugId,
+      }).catch(() => null)
+      if (form.nameEn) {
+        await api.put(`/api/v1/admin/categories/${currentId.value}/translations/en`, {
+          name: form.nameEn,
+          slug: slugEn,
+        }).catch(() => null)
+      }
       notification.success('Kategori Diperbarui', `Kategori "${form.nameId}" berhasil disimpan.`)
     } else {
       await api.post('/api/v1/admin/categories', payload)

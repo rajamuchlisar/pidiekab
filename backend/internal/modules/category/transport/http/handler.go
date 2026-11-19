@@ -51,7 +51,8 @@ func (h *Handler) handleList(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": categories,
+		"data":       categories,
+		"categories": categories,
 	})
 }
 
@@ -64,6 +65,9 @@ type translationInput struct {
 
 type createCategoryRequest struct {
 	IsActive     *bool              `json:"is_active"`
+	Code         string             `json:"code"`
+	Names        map[string]string  `json:"names"`
+	Slugs        map[string]string  `json:"slugs"`
 	Translations []translationInput `json:"translations"`
 }
 
@@ -83,6 +87,23 @@ func (h *Handler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	isActive := true
 	if req.IsActive != nil {
 		isActive = *req.IsActive
+	}
+
+	if len(req.Translations) == 0 && len(req.Names) > 0 {
+		for loc, name := range req.Names {
+			slug := ""
+			if req.Slugs != nil {
+				slug = req.Slugs[loc]
+			}
+			if slug == "" {
+				slug = strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+			}
+			req.Translations = append(req.Translations, translationInput{
+				Locale: loc,
+				Name:   name,
+				Slug:   slug,
+			})
+		}
 	}
 
 	var translations []*domain.CategoryTranslation
@@ -143,7 +164,11 @@ func (h *Handler) handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateCategoryRequest struct {
-	IsActive bool `json:"is_active"`
+	IsActive     *bool              `json:"is_active"`
+	Code         string             `json:"code"`
+	Names        map[string]string  `json:"names"`
+	Slugs        map[string]string  `json:"slugs"`
+	Translations []translationInput `json:"translations"`
 }
 
 func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
@@ -167,13 +192,42 @@ func (h *Handler) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip := extractClientIP(r)
-	if err := h.service.UpdateCategory(r.Context(), id, req.IsActive, admin.ID, &ip); err != nil {
-		if errors.Is(err, domain.ErrCategoryNotFound) {
-			writeProblem(w, r, http.StatusNotFound, "NOT_FOUND", "Category not found.")
+	if req.IsActive != nil {
+		if err := h.service.UpdateCategory(r.Context(), id, *req.IsActive, admin.ID, &ip); err != nil {
+			if errors.Is(err, domain.ErrCategoryNotFound) {
+				writeProblem(w, r, http.StatusNotFound, "NOT_FOUND", "Category not found.")
+				return
+			}
+			writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update category.")
 			return
 		}
-		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update category.")
-		return
+	}
+
+	if len(req.Translations) == 0 && len(req.Names) > 0 {
+		for loc, name := range req.Names {
+			slug := ""
+			if req.Slugs != nil {
+				slug = req.Slugs[loc]
+			}
+			if slug == "" {
+				slug = strings.ToLower(strings.ReplaceAll(name, " ", "-"))
+			}
+			req.Translations = append(req.Translations, translationInput{
+				Locale: loc,
+				Name:   name,
+				Slug:   slug,
+			})
+		}
+	}
+
+	for _, t := range req.Translations {
+		if strings.TrimSpace(t.Name) != "" {
+			slug := t.Slug
+			if slug == "" {
+				slug = strings.ToLower(strings.ReplaceAll(t.Name, " ", "-"))
+			}
+			_, _ = h.service.SaveTranslation(r.Context(), id, t.Locale, t.Name, t.Description, slug, admin.ID, &ip)
+		}
 	}
 
 	w.WriteHeader(http.StatusNoContent)

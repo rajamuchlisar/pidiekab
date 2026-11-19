@@ -84,6 +84,7 @@ export const api = {
       body: body ? JSON.stringify(body) : undefined,
     }),
   del: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
+  delete: <T>(endpoint: string) => request<T>(endpoint, { method: 'DELETE' }),
   upload: <T>(endpoint: string, formData: FormData) =>
     request<T>(endpoint, {
       method: 'POST',
