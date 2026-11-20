@@ -270,7 +270,12 @@ chmod +x /opt/pidiekab/current/bin/pidiekab
 	fmt.Println("\n=== 4. Seeding Authentic Draft Contents on Server ===")
 	seedDraftsCmd := `
 cd /opt/pidiekab/current
-PIDIEKAB_DATABASE_URL="postgres://pidiekab:pidiekab_strong_pass_2026!@127.0.0.1:5432/pidiekab_production?sslmode=disable" /opt/pidiekab/current/bin/pidiekab seed-drafts
+mkdir -p /var/lib/pidiekab/media
+if [ -d /opt/pidiekab/current/data/media ]; then
+    cp -rn /opt/pidiekab/current/data/media/* /var/lib/pidiekab/media/ 2>/dev/null || true
+fi
+PIDIEKAB_DATABASE_URL="postgres://pidiekab:pidiekab_strong_pass_2026!@127.0.0.1:5432/pidiekab_production?sslmode=disable" PIDIEKAB_STORAGE_PATH="/var/lib/pidiekab/media" /opt/pidiekab/current/bin/pidiekab seed-drafts
+chown -R pidiekab:pidiekab /var/lib/pidiekab/media
 `
 	out, err = exec.Sudo(seedDraftsCmd)
 	fmt.Printf("Seed drafts output:\n%s\n", out)
@@ -278,12 +283,13 @@ PIDIEKAB_DATABASE_URL="postgres://pidiekab:pidiekab_strong_pass_2026!@127.0.0.1:
 	fmt.Println("\n=== 5. Executing SSG Build on Server ===")
 	ssgBuildCmd := `
 cd /opt/pidiekab/current
-PIDIEKAB_DATABASE_URL="postgres://pidiekab:pidiekab_strong_pass_2026!@127.0.0.1:5432/pidiekab_production?sslmode=disable" PIDIEKAB_SSG_OUTPUT_ROOT="/var/lib/pidiekab/ssg" PIDIEKAB_BASE_URL="https://pidiekab.web.id" /opt/pidiekab/current/bin/pidiekab ssg build
+PIDIEKAB_DATABASE_URL="postgres://pidiekab:pidiekab_strong_pass_2026!@127.0.0.1:5432/pidiekab_production?sslmode=disable" PIDIEKAB_SSG_OUTPUT_ROOT="/var/lib/pidiekab/ssg" PIDIEKAB_STORAGE_PATH="/var/lib/pidiekab/media" PIDIEKAB_BASE_URL="https://pidiekab.web.id" /opt/pidiekab/current/bin/pidiekab ssg build
 `
 	out, err = exec.Sudo(ssgBuildCmd)
 	fmt.Printf("SSG build output:\n%s\n", out)
 
 	fmt.Println("\n=== 6. Restarting pidiekab.service ===")
+	exec.Sudo("chown -R pidiekab:pidiekab /opt/pidiekab /var/lib/pidiekab")
 	exec.Sudo("systemctl restart pidiekab.service")
 	time.Sleep(2 * time.Second)
 
