@@ -23,6 +23,9 @@ import (
 	curationApp "pidiekab/internal/modules/curation/application"
 	curationPostgres "pidiekab/internal/modules/curation/infrastructure/postgres"
 	curationHttp "pidiekab/internal/modules/curation/transport/http"
+	downloadApp "pidiekab/internal/modules/download/application"
+	downloadPostgres "pidiekab/internal/modules/download/infrastructure/postgres"
+	downloadHttp "pidiekab/internal/modules/download/transport/http"
 	identityApp "pidiekab/internal/modules/identity/application"
 	identityPostgres "pidiekab/internal/modules/identity/infrastructure/postgres"
 	identityHttp "pidiekab/internal/modules/identity/transport/http"
@@ -245,6 +248,13 @@ func main() {
 		// 13. System Audit Logs
 		auditHandler := auditHttp.NewAuditHandler(auditRepo, authService)
 		registrars = append(registrars, auditHandler)
+
+		// 14. Document Downloads (Unduhan)
+		downloadRepo := downloadPostgres.NewDownloadRepository(dbPool)
+		downloadService := downloadApp.NewDownloadService(downloadRepo, auditRepo)
+		downloadService.SetJobEnqueuer(jobRepo)
+		downloadHandler := downloadHttp.NewDownloadHandler(downloadService, authService, localStorage)
+		registrars = append(registrars, downloadHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}

@@ -100,6 +100,20 @@ type CurationData struct {
 	SupportingIDs []int64
 }
 
+type DownloadRender struct {
+	ID            int64
+	TitleID       string
+	TitleEN       string
+	Category      string
+	DescriptionID string
+	DescriptionEN string
+	FileURL       string
+	FileName      string
+	FileSize      int64
+	FileType      string
+	DownloadCount int64
+}
+
 func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	// 1. Fetch site settings
 	siteCtx, err := g.fetchSiteContext(ctx)
@@ -138,13 +152,16 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 		return fmt.Errorf("failed to load curation data for EN: %w", err)
 	}
 
+	// 4d. Fetch active downloads
+	downloads, _ := g.fetchDownloads(ctx)
+
 	// 5. Render Indonesian site
-	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, pagesID, menuItems, curationID); err != nil {
+	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, pagesID, menuItems, curationID, downloads); err != nil {
 		return fmt.Errorf("failed to render ID site: %w", err)
 	}
 
 	// 6. Render English site
-	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, pagesEN, menuItems, curationEN); err != nil {
+	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, pagesEN, menuItems, curationEN, downloads); err != nil {
 		return fmt.Errorf("failed to render EN site: %w", err)
 	}
 
@@ -392,6 +409,49 @@ func (g *Generator) fetchCurationData(ctx context.Context, locale string) (*Cura
 	return cd, nil
 }
 
+func (g *Generator) fetchDownloads(ctx context.Context) ([]DownloadRender, error) {
+	query := `
+		SELECT id, title_id, title_en, category, description_id, description_en,
+		       file_url, file_name, file_size, file_type, download_count
+		FROM downloads
+		WHERE is_active = TRUE
+		ORDER BY sort_order ASC, id DESC
+	`
+	rows, err := g.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []DownloadRender
+	for rows.Next() {
+		var it DownloadRender
+		if err := rows.Scan(
+			&it.ID, &it.TitleID, &it.TitleEN, &it.Category, &it.DescriptionID, &it.DescriptionEN,
+			&it.FileURL, &it.FileName, &it.FileSize, &it.FileType, &it.DownloadCount,
+		); err == nil {
+			items = append(items, it)
+		}
+	}
+	return items, nil
+}
+
+func formatFileSize(b int64) string {
+	if b <= 0 {
+		return "0 B"
+	}
+	const unit = 1024
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "KMGTPE"[exp])
+}
+
 var (
 	linkTagRegex    = regexp.MustCompile(`(?i)<a\s+([^>]+)>`)
 	hrefAttrRegex   = regexp.MustCompile(`(?i)\bhref\s*=\s*["']([^"']+)["']`)
@@ -571,6 +631,7 @@ func (g *Generator) renderLocaleSite(
 	pages []StaticPageRender,
 	menus []MenuItemRender,
 	curation *CurationData,
+	downloads []DownloadRender,
 ) error {
 	localeDir := filepath.Join(targetDir, locale)
 	if err := os.MkdirAll(localeDir, 0755); err != nil {
@@ -1118,6 +1179,150 @@ body {
     margin-bottom: 2.5rem;
 }
 
+/* Unduhan / Downloads Page */
+.downloads-container {
+    margin: 1.5rem 0 3rem;
+}
+.downloads-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    background: #ffffff;
+    padding: 1rem 1.25rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+}
+.downloads-cats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.cat-filter-btn {
+    padding: 0.35rem 0.85rem;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    border-radius: 9999px;
+    font-size: 0.825rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.cat-filter-btn.active, .cat-filter-btn:hover {
+    background: #047857;
+    color: #ffffff;
+    border-color: #047857;
+}
+.downloads-search-input {
+    padding: 0.45rem 0.85rem;
+    font-size: 0.85rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    min-width: 240px;
+    outline: none;
+}
+.downloads-search-input:focus {
+    border-color: #059669;
+    box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
+}
+.downloads-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+}
+@media (min-width: 640px) {
+    .downloads-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (min-width: 1024px) {
+    .downloads-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+.download-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.download-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+    border-color: #cbd5e1;
+}
+.download-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+.file-type-badge {
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    font-size: 0.725rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: #64748b;
+    color: #ffffff;
+}
+.file-type-pdf { background: #dc2626; color: #ffffff; }
+.file-type-docx, .file-type-doc { background: #2563eb; color: #ffffff; }
+.file-type-xlsx, .file-type-xls { background: #059669; color: #ffffff; }
+.file-type-zip, .file-type-rar { background: #d97706; color: #ffffff; }
+.download-card h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.05rem;
+    line-height: 1.4;
+    color: #0f172a;
+    font-weight: 700;
+}
+.download-card p {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0 0 1rem 0;
+    line-height: 1.5;
+    flex-grow: 1;
+}
+.download-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.775rem;
+    color: #64748b;
+    border-top: 1px solid #f1f5f9;
+    padding-top: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+.btn-download {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1rem;
+    background: #047857;
+    color: #ffffff;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 0.85rem;
+    transition: background 0.15s ease;
+    width: 100%;
+}
+.btn-download:hover {
+    background: #065f46;
+}
+
 /* Detail page */
 .back-btn {
     display: inline-flex;
@@ -1470,6 +1675,14 @@ body {
 		}
 	}
 
+	unduhanFooterText := "Pusat Unduhan & Dokumen"
+	unduhanBottomText := "Unduhan"
+	if locale == "en" {
+		unduhanFooterText = "Document Downloads"
+		unduhanBottomText = "Downloads"
+	}
+	pageLinksHTML.WriteString(fmt.Sprintf(`<li><a href="/%s/unduhan/">%s</a></li>`, locale, unduhanFooterText))
+
 	var contactHTML strings.Builder
 	if sc.ContactAddress != "" {
 		contactHTML.WriteString(fmt.Sprintf(`<li class="footer-contact-item"><svg class="footer-icon" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.69 18.933l.003.001C9.89 19.02 10 19 10 19s.11.02.308-.066l.002-.001.006-.003.018-.008a5.741 5.741 0 00.281-.14c.186-.096.446-.24.757-.433.62-.384 1.445-.966 2.274-1.765C15.302 14.988 17 12.493 17 9A7 7 0 103 9c0 3.492 1.698 5.988 3.36 7.587a15.42 15.42 0 002.273 1.765 11.75 11.75 0 001.04.573l.018.008.006.003zM10 11.25a2.25 2.25 0 100-4.5 2.25 2.25 0 000 4.5z" clip-rule="evenodd"/></svg><span>%s</span></li>`, template.HTMLEscapeString(sc.ContactAddress)))
@@ -1565,6 +1778,7 @@ body {
                 <p>&copy; %d PidieKab. %s</p>
                 <div class="footer-bottom-links">
                     <a href="/%s/">%s</a>
+                    <a href="/%s/unduhan/">%s</a>
                     <a href="/sitemap.xml">Sitemap</a>
                 </div>
             </div>
@@ -1586,6 +1800,8 @@ body {
 		allRightsReserved,
 		locale,
 		homeNavText,
+		locale,
+		unduhanBottomText,
 	)
 
 	faviconTag := ""
@@ -2158,6 +2374,193 @@ body {
 		}
 	}
 
+	// 5. Render Unduhan Page: <locale>/unduhan/index.html
+	unduhanDir := filepath.Join(localeDir, "unduhan")
+	if err := os.MkdirAll(unduhanDir, 0755); err != nil {
+		return err
+	}
+
+	unduhanPageTitle := "Pusat Unduhan & Dokumen Publik"
+	unduhanPageDesc := "Kumpulan panduan wisata, regulasi daerah, peta direktori, dan formulir informasi resmi Kabupaten Pidie yang dapat diunduh bebas."
+	allCatText := "Semua Kategori"
+	searchPlaceholder := "Cari dokumen atau kata kunci..."
+	downloadBtnText := "Unduh Dokumen &darr;"
+	timesDownloadedText := "diunduh"
+	emptyDownloadsText := "Belum ada dokumen publik yang tersedia untuk saat ini."
+	if locale == "en" {
+		unduhanPageTitle = "Download Center & Public Documents"
+		unduhanPageDesc = "Official travel guides, regional regulations, tourist maps, and public documents of Pidie Regency, Aceh."
+		allCatText = "All Categories"
+		searchPlaceholder = "Search documents or keywords..."
+		downloadBtnText = "Download File &darr;"
+		timesDownloadedText = "downloads"
+		emptyDownloadsText = "No public documents currently available."
+	}
+
+	categorySet := make(map[string]bool)
+	var downloadCats []string
+	for _, d := range downloads {
+		if d.Category != "" && !categorySet[d.Category] {
+			categorySet[d.Category] = true
+			downloadCats = append(downloadCats, d.Category)
+		}
+	}
+	sort.Strings(downloadCats)
+
+	var catButtonsHTML strings.Builder
+	catButtonsHTML.WriteString(fmt.Sprintf(`<button type="button" class="cat-filter-btn active" data-cat="all" onclick="filterCategory('all', this)">%s</button>`, allCatText))
+	for _, catName := range downloadCats {
+		catButtonsHTML.WriteString(fmt.Sprintf(`<button type="button" class="cat-filter-btn" data-cat="%s" onclick="filterCategory('%s', this)">%s</button>`,
+			template.HTMLEscapeString(catName),
+			template.HTMLEscapeString(catName),
+			template.HTMLEscapeString(catName),
+		))
+	}
+
+	var downloadCardsHTML strings.Builder
+	if len(downloads) == 0 {
+		downloadCardsHTML.WriteString(fmt.Sprintf(`<p class="empty-state" style="grid-column: 1/-1; padding: 3rem; text-align: center; color: #64748b;">%s</p>`, emptyDownloadsText))
+	} else {
+		for _, d := range downloads {
+			title := d.TitleID
+			desc := d.DescriptionID
+			if locale == "en" && d.TitleEN != "" {
+				title = d.TitleEN
+			}
+			if locale == "en" && d.DescriptionEN != "" {
+				desc = d.DescriptionEN
+			}
+			if desc == "" && locale == "en" {
+				desc = d.DescriptionID
+			}
+
+			fileTypeClass := "file-type-" + strings.ToLower(d.FileType)
+			sizeStr := formatFileSize(d.FileSize)
+
+			downloadURL := fmt.Sprintf("/api/v1/public/downloads/%d/file", d.ID)
+
+			downloadCardsHTML.WriteString(fmt.Sprintf(`
+        <article class="download-card" data-cat="%s">
+            <div>
+                <div class="download-header">
+                    <span class="file-type-badge %s">%s</span>
+                    <span class="badge">%s</span>
+                </div>
+                <h3>%s</h3>
+                <p>%s</p>
+            </div>
+            <div>
+                <div class="download-meta">
+                    <span>📦 %s</span>
+                    <span>⬇️ %d %s</span>
+                </div>
+                <a href="%s" class="btn-download" download target="_blank" rel="noopener noreferrer">%s</a>
+            </div>
+        </article>`,
+				template.HTMLEscapeString(d.Category),
+				fileTypeClass,
+				template.HTMLEscapeString(d.FileType),
+				template.HTMLEscapeString(d.Category),
+				template.HTMLEscapeString(title),
+				template.HTMLEscapeString(desc),
+				sizeStr,
+				d.DownloadCount,
+				timesDownloadedText,
+				downloadURL,
+				downloadBtnText,
+			))
+		}
+	}
+
+	unduhanCanonical := fmt.Sprintf("%s/%s/unduhan/", g.baseURL, locale)
+	unduhanHeaderHTML := buildHeader("/id/unduhan/", "/en/unduhan/")
+
+	unduhanHTML := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="%s">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>%s — %s</title>
+    <meta name="description" content="%s">%s
+    <link rel="canonical" href="%s">
+    <link rel="alternate" hreflang="id" href="%s/id/unduhan/">
+    <link rel="alternate" hreflang="en" href="%s/en/unduhan/">
+    <link rel="alternate" hreflang="x-default" href="%s/id/unduhan/">
+    <style>%s</style>
+</head>
+<body>
+%s
+    <main class="site-wrapper">
+        <section class="hero" style="margin-top: 1.5rem;">
+            <p><a href="/%s/" class="back-btn">%s</a></p>
+            <h2>%s</h2>
+            <p>%s</p>
+        </section>
+
+        <section class="downloads-container">
+            <div class="downloads-filter-bar">
+                <div class="downloads-cats">
+                    %s
+                </div>
+                <div>
+                    <input type="text" id="downloadSearch" class="downloads-search-input" placeholder="%s" oninput="searchDownloads(this.value)">
+                </div>
+            </div>
+
+            <div class="downloads-grid" id="downloadsGrid">
+                %s
+            </div>
+        </section>
+    </main>
+%s
+<script>
+function filterCategory(cat, btn) {
+    document.querySelectorAll('.cat-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    var q = (document.getElementById('downloadSearch').value || '').toLowerCase();
+    filterItems(cat, q);
+}
+function searchDownloads(q) {
+    var activeBtn = document.querySelector('.cat-filter-btn.active');
+    var cat = activeBtn ? activeBtn.getAttribute('data-cat') : 'all';
+    filterItems(cat, (q || '').toLowerCase());
+}
+function filterItems(cat, q) {
+    var cards = document.querySelectorAll('.download-card');
+    cards.forEach(function(el) {
+        var itemCat = el.getAttribute('data-cat') || '';
+        var itemText = (el.innerText || '').toLowerCase();
+        var matchCat = (cat === 'all' || itemCat === cat);
+        var matchQuery = (!q || itemText.indexOf(q) !== -1);
+        el.style.display = (matchCat && matchQuery) ? '' : 'none';
+    });
+}
+</script>
+</body>
+</html>`,
+		locale,
+		template.HTMLEscapeString(unduhanPageTitle),
+		template.HTMLEscapeString(siteName),
+		template.HTMLEscapeString(unduhanPageDesc),
+		faviconTag,
+		unduhanCanonical,
+		g.baseURL, g.baseURL, g.baseURL,
+		commonCSS,
+		unduhanHeaderHTML,
+		locale,
+		backHomeText,
+		template.HTMLEscapeString(unduhanPageTitle),
+		template.HTMLEscapeString(unduhanPageDesc),
+		catButtonsHTML.String(),
+		template.HTMLEscapeString(searchPlaceholder),
+		downloadCardsHTML.String(),
+		footerHTML,
+	)
+
+	if err := os.WriteFile(filepath.Join(unduhanDir, "index.html"), []byte(unduhanHTML), 0644); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -2187,6 +2590,23 @@ func (g *Generator) renderSitemap(
     <xhtml:link rel="alternate" hreflang="en" href="%s/en/"/>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
+  </url>
+`, g.baseURL, g.baseURL, g.baseURL, g.baseURL, g.baseURL, g.baseURL))
+
+	// Unduhan ID & EN
+	sb.WriteString(fmt.Sprintf(`  <url>
+    <loc>%s/id/unduhan/</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="%s/id/unduhan/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="%s/en/unduhan/"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>%s/en/unduhan/</loc>
+    <xhtml:link rel="alternate" hreflang="id" href="%s/id/unduhan/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="%s/en/unduhan/"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
   </url>
 `, g.baseURL, g.baseURL, g.baseURL, g.baseURL, g.baseURL, g.baseURL))
 

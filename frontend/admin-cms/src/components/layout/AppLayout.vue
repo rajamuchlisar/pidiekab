@@ -65,6 +65,11 @@ async function handleLogout() {
           <span class="nav-label">Menu Navigasi</span>
         </router-link>
 
+        <router-link to="/unduhan" class="nav-item" :class="{ active: currentRouteName === 'unduhan' }">
+          <span class="nav-icon"><BladeIcon name="arrow-down-tray" size="20" /></span>
+          <span class="nav-label">Unduhan Dokumen</span>
+        </router-link>
+
         <div class="nav-divider"></div>
 
         <router-link to="/settings" class="nav-item" :class="{ active: currentRouteName === 'settings' }">

@@ -10,6 +10,7 @@ import MediaLibraryView from '../views/media/MediaLibraryView.vue'
 import CurationView from '../views/curation/CurationView.vue'
 import StaticPagesView from '../views/staticpages/StaticPagesView.vue'
 import MenuView from '../views/menus/MenuView.vue'
+import UnduhanView from '../views/unduhan/UnduhanView.vue'
 import SettingsView from '../views/settings/SettingsView.vue'
 import AdminsView from '../views/admins/AdminsView.vue'
 import RedirectsView from '../views/redirects/RedirectsView.vue'
@@ -79,6 +80,12 @@ const routes: RouteRecordRaw[] = [
     name: 'menus',
     component: MenuView,
     meta: { requiresAuth: true, title: 'Navigasi Menu Header' },
+  },
+  {
+    path: '/unduhan',
+    name: 'unduhan',
+    component: UnduhanView,
+    meta: { requiresAuth: true, title: 'Unduhan Dokumen' },
   },
   {
     path: '/settings',
