@@ -129,6 +129,10 @@ func (s *DownloadService) DeleteDownload(ctx context.Context, adminID int64, id 
 	return nil
 }
 
+func (s *DownloadService) UpdateDownloadInternal(ctx context.Context, it *domain.DownloadItem) (*domain.DownloadItem, error) {
+	return s.repo.Update(ctx, it)
+}
+
 func (s *DownloadService) TrackDownload(ctx context.Context, id int64) (*domain.DownloadItem, error) {
 	item, err := s.repo.GetByID(ctx, id)
 	if err != nil {

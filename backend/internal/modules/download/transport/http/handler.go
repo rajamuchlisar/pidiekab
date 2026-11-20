@@ -1,16 +1,20 @@
 package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	identityApp "pidiekab/internal/modules/identity/application"
+	"pidiekab/internal/modules/download"
 	"pidiekab/internal/modules/download/application"
 	"pidiekab/internal/modules/download/domain"
 	"pidiekab/internal/modules/download/infrastructure/postgres"
@@ -19,6 +23,7 @@ import (
 
 type FileStorage interface {
 	Save(ctx context.Context, ext string, r io.Reader) (storageKey string, bytesWritten int64, err error)
+	Open(ctx context.Context, storageKey string) (io.ReadCloser, error)
 }
 
 type DownloadHandler struct {
@@ -83,6 +88,60 @@ func (h *DownloadHandler) HandlePublicListDownloads(w http.ResponseWriter, r *ht
 	})
 }
 
+func sanitizeFilename(name string) string {
+	clean := filepath.Base(name)
+	clean = strings.ReplaceAll(clean, `"`, "")
+	clean = strings.ReplaceAll(clean, "\r", "")
+	clean = strings.ReplaceAll(clean, "\n", "")
+	if clean == "" || clean == "." {
+		return "dokumen-pidie.pdf"
+	}
+	return clean
+}
+
+func detectMimeType(filename, fileType string) string {
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".pdf":
+		return "application/pdf"
+	case ".doc":
+		return "application/msword"
+	case ".docx":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case ".xls":
+		return "application/vnd.ms-excel"
+	case ".xlsx":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case ".zip":
+		return "application/zip"
+	case ".csv":
+		return "text/csv; charset=utf-8"
+	case ".txt":
+		return "text/plain; charset=utf-8"
+	case ".png":
+		return "image/png"
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".webp":
+		return "image/webp"
+	}
+	if mt := mime.TypeByExtension(ext); mt != "" {
+		return mt
+	}
+	switch strings.ToUpper(fileType) {
+	case "PDF":
+		return "application/pdf"
+	case "DOC", "DOCX":
+		return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+	case "XLS", "XLSX":
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+	case "ZIP":
+		return "application/zip"
+	default:
+		return "application/octet-stream"
+	}
+}
+
 func (h *DownloadHandler) HandlePublicDownloadFile(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil || id <= 0 {
@@ -105,8 +164,83 @@ func (h *DownloadHandler) HandlePublicDownloadFile(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// Redirect to target file_url
-	http.Redirect(w, r, item.FileURL, http.StatusFound)
+	fileURL := strings.TrimSpace(item.FileURL)
+
+	// 1. If external URL (pointing outside pidiekab.web.id/localhost), redirect directly
+	if (strings.HasPrefix(fileURL, "http://") || strings.HasPrefix(fileURL, "https://")) &&
+		!strings.Contains(fileURL, "pidiekab.web.id") &&
+		!strings.Contains(fileURL, "localhost") &&
+		!strings.Contains(fileURL, "127.0.0.1") {
+		http.Redirect(w, r, fileURL, http.StatusFound)
+		return
+	}
+
+	// 2. Prepare filename & MIME type
+	filename := strings.TrimSpace(item.FileName)
+	if filename == "" {
+		filename = filepath.Base(fileURL)
+	}
+	if filename == "" || filename == "." || filename == "/" {
+		filename = fmt.Sprintf("dokumen-pidie-%d.pdf", item.ID)
+	}
+	if filepath.Ext(filename) == "" && item.FileType != "" {
+		filename = filename + "." + strings.ToLower(item.FileType)
+	}
+
+	mimeType := detectMimeType(filename, item.FileType)
+
+	// 3. Try opening from local storage
+	var stream io.ReadCloser
+	if h.storage != nil {
+		storageKey := ""
+		if strings.Contains(fileURL, "/media/") {
+			parts := strings.Split(fileURL, "/media/")
+			if len(parts) > 1 {
+				storageKey = parts[len(parts)-1]
+			}
+		} else if !strings.HasPrefix(fileURL, "http://") && !strings.HasPrefix(fileURL, "https://") && !strings.HasPrefix(fileURL, "/") {
+			storageKey = fileURL
+		}
+
+		if storageKey != "" {
+			if s, err := h.storage.Open(r.Context(), storageKey); err == nil {
+				stream = s
+			}
+		}
+	}
+
+	// If file exists in storage, stream it directly to browser
+	if stream != nil {
+		defer stream.Close()
+		w.Header().Set("Content-Type", mimeType)
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", sanitizeFilename(filename)))
+		if item.FileSize > 0 {
+			w.Header().Set("Content-Length", strconv.FormatInt(item.FileSize, 10))
+		}
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "private, no-cache, no-store, must-revalidate")
+		_, _ = io.Copy(w, stream)
+		return
+	}
+
+	// 4. Fallback: Generate authentic official Pidie PDF on demand
+	pdfBytes := download.GenerateOfficialDocumentPDF(item.TitleID, item.Category, item.DescriptionID, filename)
+
+	// Cache generated document into storage and update item
+	if h.storage != nil {
+		if key, size, saveErr := h.storage.Save(r.Context(), "pdf", bytes.NewReader(pdfBytes)); saveErr == nil {
+			item.FileURL = "/media/" + key
+			item.FileSize = size
+			_, _ = h.service.UpdateDownloadInternal(r.Context(), item)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/pdf")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", sanitizeFilename(filename)))
+	w.Header().Set("Content-Length", strconv.Itoa(len(pdfBytes)))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write(pdfBytes)
 }
 
 func (h *DownloadHandler) HandleListDownloads(w http.ResponseWriter, r *http.Request) {

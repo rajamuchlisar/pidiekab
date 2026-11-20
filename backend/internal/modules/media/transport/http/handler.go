@@ -338,12 +338,37 @@ func (h *MediaHandler) HandleServeMedia(w http.ResponseWriter, r *http.Request) 
 			mimeType = "image/png"
 		case ".webp":
 			mimeType = "image/webp"
+		case ".svg":
+			mimeType = "image/svg+xml"
+		case ".pdf":
+			mimeType = "application/pdf"
+		case ".doc":
+			mimeType = "application/msword"
+		case ".docx":
+			mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+		case ".xls":
+			mimeType = "application/vnd.ms-excel"
+		case ".xlsx":
+			mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+		case ".zip":
+			mimeType = "application/zip"
+		case ".csv":
+			mimeType = "text/csv; charset=utf-8"
+		case ".txt":
+			mimeType = "text/plain; charset=utf-8"
 		}
 	}
 
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+
+	filename := filepath.Base(rawKey)
+	if r.URL.Query().Get("download") == "1" {
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
+	} else if strings.HasSuffix(strings.ToLower(filename), ".pdf") {
+		w.Header().Set("Content-Disposition", "inline; filename=\""+filename+"\"")
+	}
 
 	if r.Method == http.MethodHead {
 		return

@@ -2454,7 +2454,7 @@ body {
                     <span>📦 %s</span>
                     <span>⬇️ %d %s</span>
                 </div>
-                <a href="%s" class="btn-download" download target="_blank" rel="noopener noreferrer">%s</a>
+                <a href="%s" class="btn-download" download="%s" target="_blank" rel="noopener noreferrer">%s</a>
             </div>
         </article>`,
 				template.HTMLEscapeString(d.Category),
@@ -2467,6 +2467,7 @@ body {
 				d.DownloadCount,
 				timesDownloadedText,
 				downloadURL,
+				template.HTMLEscapeString(d.FileName),
 				downloadBtnText,
 			))
 		}
