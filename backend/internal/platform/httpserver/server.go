@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -249,7 +250,7 @@ func servePublicStatic(w http.ResponseWriter, r *http.Request, rootDir string, r
 
 	cleanPath := filepath.Clean(filepath.FromSlash(r.URL.Path))
 	if strings.Contains(cleanPath, "..") {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		serveCustomError(w, r, rootDir, http.StatusForbidden)
 		return
 	}
 
@@ -261,6 +262,16 @@ func servePublicStatic(w http.ResponseWriter, r *http.Request, rootDir string, r
 		applyCacheHeaders(w, r.URL.Path)
 		http.ServeFile(w, r, targetPath)
 		return
+	}
+
+	// Check if cleanPath + ".html" exists (e.g. /404 -> /404.html, /401 -> /401.html)
+	if !strings.HasSuffix(cleanPath, ".html") {
+		htmlPath := targetPath + ".html"
+		if stat, err := os.Stat(htmlPath); err == nil && !stat.IsDir() {
+			applyCacheHeaders(w, r.URL.Path)
+			http.ServeFile(w, r, htmlPath)
+			return
+		}
 	}
 
 	// Check if directory index.html exists
@@ -286,7 +297,43 @@ func servePublicStatic(w http.ResponseWriter, r *http.Request, rootDir string, r
 		}
 	}
 
-	http.NotFound(w, r)
+	serveCustomError(w, r, rootDir, http.StatusNotFound)
+}
+
+func serveCustomError(w http.ResponseWriter, r *http.Request, rootDir string, statusCode int) {
+	var candidates []string
+	if strings.HasPrefix(r.URL.Path, "/en/") || r.URL.Path == "/en" {
+		candidates = []string{
+			filepath.Join(rootDir, "en", fmt.Sprintf("%d", statusCode), "index.html"),
+			filepath.Join(rootDir, fmt.Sprintf("%d.html", statusCode)),
+			filepath.Join(rootDir, "404.html"),
+		}
+	} else if strings.HasPrefix(r.URL.Path, "/id/") || r.URL.Path == "/id" {
+		candidates = []string{
+			filepath.Join(rootDir, "id", fmt.Sprintf("%d", statusCode), "index.html"),
+			filepath.Join(rootDir, fmt.Sprintf("%d.html", statusCode)),
+			filepath.Join(rootDir, "404.html"),
+		}
+	} else {
+		candidates = []string{
+			filepath.Join(rootDir, fmt.Sprintf("%d.html", statusCode)),
+			filepath.Join(rootDir, "404.html"),
+			filepath.Join(rootDir, "id", fmt.Sprintf("%d", statusCode), "index.html"),
+		}
+	}
+
+	for _, cand := range candidates {
+		content, err := os.ReadFile(cand)
+		if err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.WriteHeader(statusCode)
+			_, _ = w.Write(content)
+			return
+		}
+	}
+
+	http.Error(w, fmt.Sprintf("%d %s", statusCode, http.StatusText(statusCode)), statusCode)
 }
 
 func serveCMSStatic(w http.ResponseWriter, r *http.Request, rootDir string) {

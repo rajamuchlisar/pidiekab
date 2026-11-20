@@ -382,3 +382,55 @@ func TestOpenAPIEndpoint(t *testing.T) {
 		t.Errorf("expected application/yaml; charset=utf-8, got %q", contentType)
 	}
 }
+
+func TestCustomErrorPagesServing(t *testing.T) {
+	tempDir := t.TempDir()
+	
+	// Create root 404.html, 401.html, 403.html
+	err404Content := "<html><body>Custom Root 404</body></html>"
+	err401Content := "<html><body>Custom 401 Unauthorized</body></html>"
+	err403Content := "<html><body>Custom 403 Forbidden</body></html>"
+	id404Content := "<html><body>Custom ID 404 Halaman Tidak Ditemukan</body></html>"
+
+	_ = os.WriteFile(filepath.Join(tempDir, "404.html"), []byte(err404Content), 0644)
+	_ = os.WriteFile(filepath.Join(tempDir, "401.html"), []byte(err401Content), 0644)
+	_ = os.WriteFile(filepath.Join(tempDir, "403.html"), []byte(err403Content), 0644)
+
+	_ = os.MkdirAll(filepath.Join(tempDir, "id", "404"), 0755)
+	_ = os.WriteFile(filepath.Join(tempDir, "id", "404", "index.html"), []byte(id404Content), 0644)
+
+	handler := newTestServerWithStaticAndDB(tempDir, "", nil)
+
+	// 1. Missing page at root -> custom root 404
+	req := httptest.NewRequest(http.MethodGet, "/unknown-page", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+	if rec.Body.String() != err404Content {
+		t.Errorf("expected %q, got %q", err404Content, rec.Body.String())
+	}
+
+	// 2. Missing page under /id/ -> custom ID 404
+	req = httptest.NewRequest(http.MethodGet, "/id/unknown-page/", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+	if rec.Body.String() != id404Content {
+		t.Errorf("expected %q, got %q", id404Content, rec.Body.String())
+	}
+
+	// 3. Direct access to /401 without extension
+	req = httptest.NewRequest(http.MethodGet, "/401", nil)
+	rec = httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rec.Code)
+	}
+	if rec.Body.String() != err401Content {
+		t.Errorf("expected %q, got %q", err401Content, rec.Body.String())
+	}
+}

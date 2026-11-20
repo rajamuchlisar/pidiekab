@@ -15,6 +15,8 @@ import SettingsView from '../views/settings/SettingsView.vue'
 import AdminsView from '../views/admins/AdminsView.vue'
 import RedirectsView from '../views/redirects/RedirectsView.vue'
 import AuditLogsView from '../views/audit/AuditLogsView.vue'
+import NotFoundView from '../views/errors/NotFoundView.vue'
+import ForbiddenView from '../views/errors/ForbiddenView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -110,6 +112,18 @@ const routes: RouteRecordRaw[] = [
     name: 'audit-logs',
     component: AuditLogsView,
     meta: { requiresAuth: true, title: 'Audit Trail' },
+  },
+  {
+    path: '/403',
+    name: 'forbidden',
+    component: ForbiddenView,
+    meta: { requiresAuth: true, title: 'Akses Ditolak (403)' },
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: NotFoundView,
+    meta: { requiresAuth: true, title: 'Halaman Tidak Ditemukan (404)' },
   },
 ]
 

@@ -188,6 +188,15 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 		return fmt.Errorf("failed to render EN site: %w", err)
 	}
 
+	// 6b. Render Root Error Pages (401.html, 403.html, 404.html, 500.html, 503.html)
+	for _, def := range getErrorPageDefs() {
+		srcPath := filepath.Join(targetDir, "id", fmt.Sprintf("%d", def.Code), "index.html")
+		destPath := filepath.Join(targetDir, fmt.Sprintf("%d.html", def.Code))
+		if data, err := os.ReadFile(srcPath); err == nil {
+			_ = os.WriteFile(destPath, data, 0644)
+		}
+	}
+
 	// 7. Render Root Redirect index.html (redirects / to /id/)
 	rootHTML := `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=/id/"><script>location.replace('/id/');</script></head><body><p>Redirecting to <a href="/id/">Bahasa Indonesia</a>...</p></body></html>`
 	if err := os.WriteFile(filepath.Join(targetDir, "index.html"), []byte(rootHTML), 0644); err != nil {
@@ -1834,6 +1843,143 @@ html {
 .footer-bottom-links a:hover {
     color: #34d399;
 }
+
+/* Error Page Layout */
+.error-page-container {
+    min-height: calc(100vh - 65px - 260px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem 4rem;
+}
+.error-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 20px;
+    padding: 2.75rem 2rem;
+    max-width: 620px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.05), 0 8px 10px -6px rgba(15, 23, 42, 0.03);
+    position: relative;
+    overflow: hidden;
+}
+.error-icon-wrapper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 80px;
+    height: 80px;
+    border-radius: 22px;
+    margin-bottom: 1.25rem;
+}
+.error-code-badge {
+    display: inline-block;
+    padding: 0.35rem 0.85rem;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+}
+.error-title {
+    font-size: clamp(1.4rem, 3.5vw, 1.85rem);
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.25;
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.02em;
+}
+.error-subtitle {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #475569;
+    margin: 0 0 0.85rem;
+}
+.error-description {
+    font-size: 0.925rem;
+    line-height: 1.6;
+    color: #64748b;
+    margin: 0 auto 1.75rem;
+    max-width: 500px;
+}
+.error-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: center;
+    margin-bottom: 2rem;
+}
+.error-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.4rem;
+    border-radius: 10px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    text-decoration: none;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    font-family: inherit;
+}
+.error-btn-primary {
+    background: #047857;
+    color: #ffffff;
+    border: 1px solid #047857;
+    box-shadow: 0 2px 4px rgba(4, 120, 87, 0.2);
+}
+.error-btn-primary:hover {
+    background: #065f46;
+    border-color: #065f46;
+}
+.error-btn-secondary {
+    background: #f8fafc;
+    color: #334155;
+    border: 1px solid #cbd5e1;
+}
+.error-btn-secondary:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+    border-color: #94a3b8;
+}
+.error-quicklinks {
+    border-top: 1px solid #f1f5f9;
+    padding-top: 1.5rem;
+    text-align: center;
+}
+.error-quicklinks-title {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    margin-bottom: 0.75rem;
+}
+.error-quicklinks-grid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.error-quicklinks-grid li a {
+    color: #047857;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.error-quicklinks-grid li a:hover {
+    text-decoration: underline;
+    color: #065f46;
+}
 `
 
 	brandLogoHTML := `<span class="brand-logo"><span class="brand-logo-badge">PK</span>PidieKab</span>`
@@ -2985,7 +3131,275 @@ function filterItems(cat, q) {
 		return err
 	}
 
+	// Render dedicated Error Pages (401, 403, 404, 500, 503)
+	for _, def := range getErrorPageDefs() {
+		errDir := filepath.Join(targetDir, locale, fmt.Sprintf("%d", def.Code))
+		if err := os.MkdirAll(errDir, 0755); err != nil {
+			return err
+		}
+		errHeaderHTML := buildHeader(fmt.Sprintf("/id/%d/", def.Code), fmt.Sprintf("/en/%d/", def.Code))
+		errHTML := g.renderErrorHTML(locale, def, sc, faviconTag, commonCSS, errHeaderHTML, footerHTML)
+		if err := os.WriteFile(filepath.Join(errDir, "index.html"), []byte(errHTML), 0644); err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+type ErrorPageDef struct {
+	Code               int
+	BadgeID            string
+	BadgeEN            string
+	BadgeStyle         string
+	IconBg             string
+	IconSVG            template.HTML
+	TitleID            string
+	TitleEN            string
+	SubtitleID         string
+	SubtitleEN         string
+	DescID             string
+	DescEN             string
+	PrimaryBtnTextID   string
+	PrimaryBtnTextEN   string
+	PrimaryBtnHref     string
+	SecondaryBtnTextID string
+	SecondaryBtnTextEN string
+	SecondaryBtnHref   string
+	IsReloadBtn        bool
+}
+
+func getErrorPageDefs() []ErrorPageDef {
+	return []ErrorPageDef{
+		{
+			Code:               401,
+			BadgeID:            "HTTP 401 • Autentikasi Diperlukan",
+			BadgeEN:            "HTTP 401 • Authentication Required",
+			BadgeStyle:         "background: #fef3c7; color: #b45309; border: 1px solid #fde68a;",
+			IconBg:             "background: #fffbeb; border: 1px solid #fef3c7;",
+			IconSVG:            template.HTML(`<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path><circle cx="12" cy="16" r="1.5"></circle></svg>`),
+			TitleID:            "Autentikasi Diperlukan",
+			TitleEN:            "Authentication Required",
+			SubtitleID:         "Sesi Kedaluwarsa atau Akses Terproteksi",
+			SubtitleEN:         "Session Expired or Protected Resource",
+			DescID:             "Halaman atau berkas yang Anda tuju memerlukan autentikasi login yang sah. Jika Anda pengelola portal, silakan masuk melalui panel CMS.",
+			DescEN:             "The requested page or resource requires valid authentication credentials. If you are a site manager, please log in via the CMS admin panel.",
+			PrimaryBtnTextID:   "Kembali ke Beranda",
+			PrimaryBtnTextEN:   "Back to Home",
+			PrimaryBtnHref:     "/",
+			SecondaryBtnTextID: "Masuk Panel CMS",
+			SecondaryBtnTextEN: "CMS Admin Login",
+			SecondaryBtnHref:   "/cms/login",
+			IsReloadBtn:        false,
+		},
+		{
+			Code:               403,
+			BadgeID:            "HTTP 403 • Akses Ditolak",
+			BadgeEN:            "HTTP 403 • Access Forbidden",
+			BadgeStyle:         "background: #ffe4e6; color: #be123c; border: 1px solid #fecdd3;",
+			IconBg:             "background: #fff1f2; border: 1px solid #ffe4e6;",
+			IconSVG:            template.HTML(`<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e11d48" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><line x1="9.5" y1="9.5" x2="14.5" y2="14.5"></line><line x1="14.5" y1="9.5" x2="9.5" y2="14.5"></line></svg>`),
+			TitleID:            "Akses Ditolak",
+			TitleEN:            "Access Forbidden",
+			SubtitleID:         "Izin Akses Terbatas",
+			SubtitleEN:         "Permission Restricted",
+			DescID:             "Maaf, Anda tidak memiliki izin untuk membuka direktori, berkas, atau sumber daya ini demi keamanan dan privasi data.",
+			DescEN:             "Sorry, you do not have permission to view this directory, file, or resource due to security and privacy policies.",
+			PrimaryBtnTextID:   "Kembali ke Beranda",
+			PrimaryBtnTextEN:   "Back to Home",
+			PrimaryBtnHref:     "/",
+			SecondaryBtnTextID: "Direktori Unduhan",
+			SecondaryBtnTextEN: "Public Downloads",
+			SecondaryBtnHref:   "/unduhan/",
+			IsReloadBtn:        false,
+		},
+		{
+			Code:               404,
+			BadgeID:            "HTTP 404 • Halaman Tidak Ditemukan",
+			BadgeEN:            "HTTP 404 • Page Not Found",
+			BadgeStyle:         "background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0;",
+			IconBg:             "background: #f0fdf4; border: 1px solid #dcfce7;",
+			IconSVG:            template.HTML(`<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#047857" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>`),
+			TitleID:            "Halaman Tidak Ditemukan",
+			TitleEN:            "Page Not Found",
+			SubtitleID:         "Tautan Mungkin Berubah atau Terhapus",
+			SubtitleEN:         "Link May Have Moved or Expired",
+			DescID:             "Halaman yang Anda tuju mungkin telah dipindahkan, diperbarui alamatnya, atau tautan yang dimasukkan kurang tepat. Mari temukan kembali informasi yang Anda cari.",
+			DescEN:             "The page you requested could not be found. It may have moved, been updated, or the address entered is incorrect. Please continue exploring below.",
+			PrimaryBtnTextID:   "Kembali ke Beranda",
+			PrimaryBtnTextEN:   "Back to Home",
+			PrimaryBtnHref:     "/",
+			SecondaryBtnTextID: "Direktori Unduhan",
+			SecondaryBtnTextEN: "Public Downloads",
+			SecondaryBtnHref:   "/unduhan/",
+			IsReloadBtn:        false,
+		},
+		{
+			Code:               500,
+			BadgeID:            "HTTP 500 • Gangguan Server",
+			BadgeEN:            "HTTP 500 • Internal Server Error",
+			BadgeStyle:         "background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe;",
+			IconBg:             "background: #eef2ff; border: 1px solid #e0e7ff;",
+			IconSVG:            template.HTML(`<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line><line x1="10" y1="6" x2="14" y2="6"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>`),
+			TitleID:            "Gangguan Server Sementara",
+			TitleEN:            "Internal Server Error",
+			SubtitleID:         "Sistem Sedang Menangani Kendala",
+			SubtitleEN:         "System Investigating the Issue",
+			DescID:             "Terjadi kendala teknis tak terduga pada server saat memproses permintaan Anda. Sistem telah mencatat insiden ini dan teknisi sedang memperbaikinya.",
+			DescEN:             "An unexpected technical problem occurred on the server while fulfilling your request. The incident has been recorded and is under investigation.",
+			PrimaryBtnTextID:   "Muat Ulang Halaman",
+			PrimaryBtnTextEN:   "Reload Page",
+			PrimaryBtnHref:     "#reload",
+			SecondaryBtnTextID: "Kembali ke Beranda",
+			SecondaryBtnTextEN: "Back to Home",
+			SecondaryBtnHref:   "/",
+			IsReloadBtn:        true,
+		},
+		{
+			Code:               503,
+			BadgeID:            "HTTP 503 • Pemeliharaan Sistem",
+			BadgeEN:            "HTTP 503 • Service Unavailable",
+			BadgeStyle:         "background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;",
+			IconBg:             "background: #f0f9ff; border: 1px solid #e0f2fe;",
+			IconSVG:            template.HTML(`<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path></svg>`),
+			TitleID:            "Layanan Dalam Pemeliharaan",
+			TitleEN:            "Service Unavailable",
+			SubtitleID:         "Peningkatan Sistem Sedang Berlangsung",
+			SubtitleEN:         "System Maintenance in Progress",
+			DescID:             "Platform sedang menjalani pemeliharaan berkala atau peningkatan performa infrastruktur demi kenyamanan Anda. Silakan coba beberapa saat lagi.",
+			DescEN:             "The platform is undergoing scheduled maintenance or infrastructure enhancements to serve you better. Please check back shortly.",
+			PrimaryBtnTextID:   "Muat Ulang Halaman",
+			PrimaryBtnTextEN:   "Reload Page",
+			PrimaryBtnHref:     "#reload",
+			SecondaryBtnTextID: "Kembali ke Beranda",
+			SecondaryBtnTextEN: "Back to Home",
+			SecondaryBtnHref:   "/",
+			IsReloadBtn:        true,
+		},
+	}
+}
+
+func (g *Generator) renderErrorHTML(
+	locale string,
+	def ErrorPageDef,
+	sc *SiteContext,
+	faviconTag string,
+	commonCSS string,
+	headerHTML string,
+	footerHTML string,
+) string {
+	title := def.TitleID
+	subtitle := def.SubtitleID
+	badge := def.BadgeID
+	desc := def.DescID
+	primaryText := def.PrimaryBtnTextID
+	secondaryText := def.SecondaryBtnTextID
+	quickTitle := "Halaman yang sering dikunjungi"
+	homeText := "Beranda"
+	aboutText := "Cerita Utama Pidie"
+	downloadsText := "Direktori Berkas Unduhan"
+	metaTitle := fmt.Sprintf("%d - %s | %s", def.Code, title, sc.SiteNameID)
+
+	if locale == "en" {
+		title = def.TitleEN
+		subtitle = def.SubtitleEN
+		badge = def.BadgeEN
+		desc = def.DescEN
+		primaryText = def.PrimaryBtnTextEN
+		secondaryText = def.SecondaryBtnTextEN
+		quickTitle = "Frequently visited pages"
+		homeText = "Home"
+		aboutText = "Pidie Editorial Story"
+		downloadsText = "Public Downloads"
+		metaTitle = fmt.Sprintf("%d - %s | %s", def.Code, title, sc.SiteNameEN)
+	}
+
+	primaryHref := def.PrimaryBtnHref
+	if primaryHref == "/" {
+		primaryHref = fmt.Sprintf("/%s/", locale)
+	}
+	secondaryHref := def.SecondaryBtnHref
+	if strings.HasPrefix(secondaryHref, "/") && secondaryHref != "/cms/login" {
+		secondaryHref = fmt.Sprintf("/%s%s", locale, secondaryHref)
+	}
+
+	primaryActionAttr := ""
+	if def.IsReloadBtn && primaryHref == "#reload" {
+		primaryActionAttr = ` onclick="window.location.reload(); return false;"`
+	}
+
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html lang="%s">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>%s</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="description" content="%s" />
+    %s
+    <style>
+%s
+    </style>
+</head>
+<body>
+%s
+<main class="site-wrapper">
+    <div class="error-page-container">
+        <div class="error-card">
+            <div class="error-icon-wrapper" style="%s">
+                %s
+            </div>
+            <div>
+                <span class="error-code-badge" style="%s">%s</span>
+            </div>
+            <h1 class="error-title">%s</h1>
+            <div class="error-subtitle">%s</div>
+            <p class="error-description">%s</p>
+            <div class="error-actions">
+                <a href="%s" class="error-btn error-btn-primary"%s>%s</a>
+                <a href="%s" class="error-btn error-btn-secondary">%s</a>
+            </div>
+            <div class="error-quicklinks">
+                <div class="error-quicklinks-title">%s</div>
+                <ul class="error-quicklinks-grid">
+                    <li><a href="/%s/">%s</a></li>
+                    <li><a href="/%s/sejarah-budaya/menyusuri-nafas-tanah-pedir-jejak-abadi/">%s</a></li>
+                    <li><a href="/%s/unduhan/">%s</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</main>
+%s
+</body>
+</html>`,
+		locale,
+		template.HTMLEscapeString(metaTitle),
+		template.HTMLEscapeString(desc),
+		faviconTag,
+		commonCSS,
+		headerHTML,
+		def.IconBg,
+		def.IconSVG,
+		def.BadgeStyle,
+		template.HTMLEscapeString(badge),
+		template.HTMLEscapeString(title),
+		template.HTMLEscapeString(subtitle),
+		template.HTMLEscapeString(desc),
+		primaryHref,
+		primaryActionAttr,
+		template.HTMLEscapeString(primaryText),
+		secondaryHref,
+		template.HTMLEscapeString(secondaryText),
+		template.HTMLEscapeString(quickTitle),
+		locale,
+		template.HTMLEscapeString(homeText),
+		locale,
+		template.HTMLEscapeString(aboutText),
+		locale,
+		template.HTMLEscapeString(downloadsText),
+		footerHTML,
+	)
 }
 
 func (g *Generator) renderSitemap(
