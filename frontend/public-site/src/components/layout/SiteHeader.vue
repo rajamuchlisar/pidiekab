@@ -48,7 +48,6 @@ const counterpartUrl = computed(() => {
         <span class="brand-badge">PK</span>
         <div class="brand-text">
           <span class="brand-name">PidieKab</span>
-          <span class="brand-tagline">Kabupaten Pidie, Aceh</span>
         </div>
       </RouterLink>
 
@@ -123,15 +122,19 @@ const counterpartUrl = computed(() => {
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid #e2e8f0;
+  height: 65px;
+  box-sizing: border-box;
 }
 
 .header-inner {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0.85rem 1.5rem;
+  padding: 0 1.5rem;
+  height: 65px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  box-sizing: border-box;
 }
 
 .site-brand {

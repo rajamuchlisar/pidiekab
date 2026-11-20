@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -68,6 +69,16 @@ func publishMasterEditorialStory(ctx context.Context, dbPool *pgxpool.Pool, admi
 		fmt.Printf(" [+] Master Hero Image Saved (Media ID #%d, /media/%s)\n", mediaID, mediaStorageKey)
 	} else {
 		fmt.Printf(" [=] Master Hero Image Exists (Media ID #%d, /media/%s)\n", mediaID, mediaStorageKey)
+		// Ensure physical file exists on disk
+		targetPath, resolveErr := store.ResolvePath(mediaStorageKey)
+		if resolveErr == nil {
+			if _, statErr := os.Stat(targetPath); os.IsNotExist(statErr) {
+				_ = os.MkdirAll(filepath.Dir(targetPath), 0750)
+				if writeErr := os.WriteFile(targetPath, masterHeroImageBytes, 0644); writeErr == nil {
+					fmt.Printf(" [+] Wrote missing hero image to storage disk: %s\n", targetPath)
+				}
+			}
+		}
 	}
 
 	// 3. Resolve category ID for 'sejarah-budaya'

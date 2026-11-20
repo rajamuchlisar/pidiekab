@@ -690,14 +690,18 @@ body {
     top: 0;
     z-index: 50;
     box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    height: 65px;
+    box-sizing: border-box;
 }
 .header-inner {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.75rem 0;
+    height: 65px;
+    padding: 0;
     gap: 1rem;
     position: relative;
+    box-sizing: border-box;
 }
 .header-left {
     display: flex;
@@ -805,24 +809,18 @@ body {
     letter-spacing: 0.05em;
 }
 .brand-logo-img {
-    height: 36px;
+    height: 42px;
     width: auto;
-    max-width: 180px;
+    max-width: 220px;
     object-fit: contain;
     vertical-align: middle;
+    display: block;
 }
 .brand-tagline {
-    display: none;
-    font-size: 0.8125rem;
-    color: #64748b;
-    border-left: 1px solid #cbd5e1;
-    padding-left: 0.5rem;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: none !important;
 }
 @media (min-width: 768px) {
-    .brand-tagline { display: inline-block; }
+    .brand-tagline { display: none !important; }
     .brand-logo { font-size: 1.35rem; }
 }
 
@@ -1679,9 +1677,8 @@ body {
         <div class="site-wrapper">
             <div class="header-inner">
                 <div class="header-left">
-                    <a href="/%s/" class="brand-group">
+                    <a href="/%s/" class="brand-group" aria-label="%s">
                         %s
-                        <span class="brand-tagline">%s</span>
                     </a>
                 </div>
                 <nav class="header-nav" id="header-menu-nav" aria-label="Navigasi Utama">
@@ -1701,7 +1698,7 @@ body {
             </div>
         </div>
     </header>
-`, locale, brandLogoHTML, template.HTMLEscapeString(siteName), headerNavHTML, idURL, idClass, enURL, enClass)
+`, locale, template.HTMLEscapeString(siteName), brandLogoHTML, headerNavHTML, idURL, idClass, enURL, enClass)
 	}
 
 	headerHTML := buildHeader("/id/", "/en/")
