@@ -297,10 +297,10 @@ func publishMasterEditorialStory(ctx context.Context, dbPool *pgxpool.Pool, admi
 	// 7. Upsert Indonesian translation (status: PUBLISHED)
 	_, err = dbPool.Exec(ctx, `
 		INSERT INTO content_translations (
-			content_id, locale, title, slug, summary, body, status, published_at,
+			content_id, locale, title, slug, summary, body, status, published_at, published_by,
 			search_vector, created_by, updated_by, created_at, updated_at
 		) VALUES (
-			$1, 'id', $2, $3, $4, $5, 'published', NOW(),
+			$1, 'id', $2, $3, $4, $5, 'published', NOW(), $6,
 			setweight(to_tsvector('simple', COALESCE($2, '')), 'A') || setweight(to_tsvector('simple', COALESCE($4, '')), 'B'),
 			$6, $6, NOW(), NOW()
 		)
@@ -311,6 +311,7 @@ func publishMasterEditorialStory(ctx context.Context, dbPool *pgxpool.Pool, admi
 		    body = EXCLUDED.body,
 		    status = 'published',
 		    published_at = NOW(),
+		    published_by = EXCLUDED.published_by,
 		    search_vector = EXCLUDED.search_vector,
 		    updated_by = EXCLUDED.updated_by,
 		    updated_at = NOW()
@@ -323,10 +324,10 @@ func publishMasterEditorialStory(ctx context.Context, dbPool *pgxpool.Pool, admi
 	// 8. Upsert English translation (status: PUBLISHED)
 	_, err = dbPool.Exec(ctx, `
 		INSERT INTO content_translations (
-			content_id, locale, title, slug, summary, body, status, published_at,
+			content_id, locale, title, slug, summary, body, status, published_at, published_by,
 			search_vector, created_by, updated_by, created_at, updated_at
 		) VALUES (
-			$1, 'en', $2, $3, $4, $5, 'published', NOW(),
+			$1, 'en', $2, $3, $4, $5, 'published', NOW(), $6,
 			setweight(to_tsvector('simple', COALESCE($2, '')), 'A') || setweight(to_tsvector('simple', COALESCE($4, '')), 'B'),
 			$6, $6, NOW(), NOW()
 		)
@@ -337,6 +338,7 @@ func publishMasterEditorialStory(ctx context.Context, dbPool *pgxpool.Pool, admi
 		    body = EXCLUDED.body,
 		    status = 'published',
 		    published_at = NOW(),
+		    published_by = EXCLUDED.published_by,
 		    search_vector = EXCLUDED.search_vector,
 		    updated_by = EXCLUDED.updated_by,
 		    updated_at = NOW()
