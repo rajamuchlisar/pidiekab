@@ -494,6 +494,15 @@ func handleSeedDraftsCLI(cfg config.Config, logger *slog.Logger) {
 		fmt.Printf(" [+] Draft Created (#%d): %s [%s]\n", contentID, it.idTitle, it.districtName)
 	}
 
+	// 5. Publish Master Editorial Story
+	storagePath := cfg.StoragePath
+	if storagePath == "" {
+		storagePath = os.Getenv("PIDIEKAB_STORAGE_PATH")
+	}
+	if err := publishMasterEditorialStory(ctx, dbPool, adminID, storagePath, logger); err != nil {
+		logger.Error("failed to publish master editorial story", "error", err)
+	}
+
 	fmt.Printf("==================================================\n")
 	fmt.Printf("Draft Seeding Summary:\n")
 	fmt.Printf(" - Newly Created Drafts : %d\n", createdCount)

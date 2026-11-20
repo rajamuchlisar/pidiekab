@@ -1387,6 +1387,83 @@ body {
     height: auto;
     border-radius: 10px;
 }
+.editorial-lead {
+    font-size: 1.125rem;
+    line-height: 1.85;
+    color: #1e293b;
+    font-style: italic;
+    border-left: 4px solid #059669;
+    padding: 0.75rem 1rem 0.75rem 1.25rem;
+    margin: 1.5rem 0 2rem;
+    background: #f0fdf4;
+    border-radius: 0 10px 10px 0;
+}
+.editorial-hero-banner {
+    margin: 1.5rem 0 2.25rem;
+}
+.editorial-hero-banner img {
+    width: 100%;
+    max-height: 480px;
+    object-fit: cover;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+}
+.editorial-hero-banner figcaption {
+    font-size: 0.8125rem;
+    color: #64748b;
+    font-style: italic;
+    margin-top: 0.6rem;
+    text-align: center;
+}
+.editorial-pullquote {
+    margin: 2.25rem 0;
+    padding: 1.5rem 1.75rem;
+    background: #f8fafc;
+    border-top: 2px solid #10b981;
+    border-bottom: 2px solid #10b981;
+    font-size: 1.15rem;
+    font-weight: 600;
+    line-height: 1.75;
+    color: #065f46;
+    text-align: center;
+    border-radius: 6px;
+}
+.editorial-pullquote p {
+    margin: 0;
+}
+.editorial-chapter-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 0.5rem;
+    margin-top: 2.75rem;
+    color: #065f46;
+}
+.editorial-sources-box {
+    margin-top: 3rem;
+    padding: 1.5rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #059669;
+    border-radius: 8px;
+}
+.editorial-sources-box h4 {
+    margin: 0 0 1rem;
+    color: #0f172a;
+    font-size: 1rem;
+    font-weight: 700;
+}
+.editorial-sources-box ol {
+    margin: 0;
+    padding-left: 1.25rem;
+    font-size: 0.875rem;
+    line-height: 1.65;
+    color: #475569;
+}
+.editorial-sources-box li {
+    margin-bottom: 0.5rem;
+}
 .source-box {
     margin-top: 2.5rem;
     padding: 1.25rem;
@@ -1632,7 +1709,7 @@ body {
 	quickLinksTitle := "Kategori Pilihan"
 	legalTitle := "Informasi & Legal"
 	contactTitle := "Kontak & Alamat"
-	socialTitle := "Media Sosial Resmi"
+	socialTitle := "Media Sosial"
 	communityDisclaimer := "Platform independen promosi potensi daerah & direktori informasi Kabupaten Pidie, Aceh. Bukan website resmi pemerintah."
 	allRightsReserved := "Hak Cipta Dilindungi."
 	homeNavText := "Beranda"
@@ -1640,7 +1717,7 @@ body {
 		quickLinksTitle = "Featured Categories"
 		legalTitle = "Information & Legal"
 		contactTitle = "Contact & Secretariat"
-		socialTitle = "Official Social Media"
+		socialTitle = "Social Media"
 		communityDisclaimer = "Independent regional promotion & digital visitor guide for Pidie Regency, Aceh. Not an official government website."
 		allRightsReserved = "All Rights Reserved."
 		homeNavText = "Home"
