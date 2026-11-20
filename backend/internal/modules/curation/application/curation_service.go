@@ -138,6 +138,59 @@ func (s *CurationService) SetSupportingStories(ctx context.Context, adminID int6
 	return nil
 }
 
+func (s *CurationService) SetStories(ctx context.Context, adminID int64, locale string, leadContentID *int64, supportingIDs []int64) error {
+	if err := domain.ValidateLocale(locale); err != nil {
+		return err
+	}
+
+	if leadContentID != nil && *leadContentID > 0 {
+		pub, err := s.repo.IsContentPublished(ctx, *leadContentID, locale)
+		if err != nil {
+			return err
+		}
+		if !pub {
+			return domain.ErrContentNotPublished
+		}
+	}
+
+	seen := make(map[int64]bool)
+	if leadContentID != nil && *leadContentID > 0 {
+		seen[*leadContentID] = true
+	}
+
+	for _, id := range supportingIDs {
+		if seen[id] {
+			return domain.ErrDuplicateContent
+		}
+		seen[id] = true
+
+		pub, err := s.repo.IsContentPublished(ctx, id, locale)
+		if err != nil {
+			return err
+		}
+		if !pub {
+			return domain.ErrContentNotPublished
+		}
+	}
+
+	if err := s.repo.SetStories(ctx, adminID, locale, leadContentID, supportingIDs); err != nil {
+		return err
+	}
+
+	s.recordAudit(ctx, &adminID, "curation.stories.set", "homepage_story_items", leadContentID, map[string]any{
+		"locale":     locale,
+		"supporting": len(supportingIDs),
+	}, nil)
+
+	if s.enqueuer != nil {
+		_, _ = s.enqueuer.Enqueue(ctx, nil, "curation.stories.updated", map[string]any{
+			"locale": locale,
+		})
+	}
+
+	return nil
+}
+
 func (s *CurationService) GetCuratedHomepage(ctx context.Context, locale string) (*domain.HomepageCuration, error) {
 	if err := domain.ValidateLocale(locale); err != nil {
 		return nil, err

@@ -120,6 +120,47 @@ func (r *CurationRepository) SetLeadStory(ctx context.Context, adminID int64, lo
 	return tx.Commit(ctx)
 }
 
+func (r *CurationRepository) SetStories(ctx context.Context, adminID int64, locale string, leadContentID *int64, supportingIDs []int64) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Remove all story items for this locale
+	if _, err := tx.Exec(ctx, `DELETE FROM homepage_story_items WHERE locale = $1`, locale); err != nil {
+		return fmt.Errorf("failed to clear story items for locale %s: %w", locale, err)
+	}
+
+	// Insert lead story if provided
+	if leadContentID != nil && *leadContentID > 0 {
+		query := `
+			INSERT INTO homepage_story_items (locale, content_id, role, position, created_by, updated_by, created_at, updated_at)
+			VALUES ($1, $2, 'lead', 1, $3, $3, NOW(), NOW())
+		`
+		if _, err := tx.Exec(ctx, query, locale, *leadContentID, adminID); err != nil {
+			return fmt.Errorf("failed to set lead story: %w", err)
+		}
+	}
+
+	// Insert supporting stories
+	for idx, cid := range supportingIDs {
+		if leadContentID != nil && cid == *leadContentID {
+			continue
+		}
+		pos := idx + 1
+		query := `
+			INSERT INTO homepage_story_items (locale, content_id, role, position, created_by, updated_by, created_at, updated_at)
+			VALUES ($1, $2, 'supporting', $3, $4, $4, NOW(), NOW())
+		`
+		if _, err := tx.Exec(ctx, query, locale, cid, pos, adminID); err != nil {
+			return fmt.Errorf("failed to insert supporting story position %d: %w", pos, err)
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
 func (r *CurationRepository) SetSupportingStories(ctx context.Context, adminID int64, locale string, contentIDs []int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {

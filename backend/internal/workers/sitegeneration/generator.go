@@ -94,6 +94,12 @@ type MenuItemRender struct {
 	SortOrder    int
 }
 
+type CurationData struct {
+	FeaturedIDs   []int64
+	LeadID        *int64
+	SupportingIDs []int64
+}
+
 func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	// 1. Fetch site settings
 	siteCtx, err := g.fetchSiteContext(ctx)
@@ -122,13 +128,23 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	// 4b. Fetch navigation menu items
 	menuItems, _ := g.fetchMenuItems(ctx)
 
+	// 4c. Fetch curation data for ID and EN
+	curationID, err := g.fetchCurationData(ctx, "id")
+	if err != nil {
+		return fmt.Errorf("failed to load curation data for ID: %w", err)
+	}
+	curationEN, err := g.fetchCurationData(ctx, "en")
+	if err != nil {
+		return fmt.Errorf("failed to load curation data for EN: %w", err)
+	}
+
 	// 5. Render Indonesian site
-	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, pagesID, menuItems); err != nil {
+	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, pagesID, menuItems, curationID); err != nil {
 		return fmt.Errorf("failed to render ID site: %w", err)
 	}
 
 	// 6. Render English site
-	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, pagesEN, menuItems); err != nil {
+	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, pagesEN, menuItems, curationEN); err != nil {
 		return fmt.Errorf("failed to render EN site: %w", err)
 	}
 
@@ -340,6 +356,42 @@ func (g *Generator) fetchPublishedPages(ctx context.Context) ([]StaticPageRender
 	return pagesID, pagesEN, nil
 }
 
+func (g *Generator) fetchCurationData(ctx context.Context, locale string) (*CurationData, error) {
+	cd := &CurationData{}
+
+	// 1. Featured contents ordered by position
+	fRows, err := g.pool.Query(ctx, `SELECT content_id FROM featured_contents ORDER BY position ASC`)
+	if err == nil {
+		defer fRows.Close()
+		for fRows.Next() {
+			var cid int64
+			if err := fRows.Scan(&cid); err == nil {
+				cd.FeaturedIDs = append(cd.FeaturedIDs, cid)
+			}
+		}
+	}
+
+	// 2. Story items for this locale ordered by position
+	sRows, err := g.pool.Query(ctx, `SELECT content_id, role FROM homepage_story_items WHERE locale = $1 ORDER BY position ASC`, locale)
+	if err == nil {
+		defer sRows.Close()
+		for sRows.Next() {
+			var cid int64
+			var role string
+			if err := sRows.Scan(&cid, &role); err == nil {
+				if role == "lead" {
+					cidCopy := cid
+					cd.LeadID = &cidCopy
+				} else if role == "supporting" {
+					cd.SupportingIDs = append(cd.SupportingIDs, cid)
+				}
+			}
+		}
+	}
+
+	return cd, nil
+}
+
 var (
 	linkTagRegex    = regexp.MustCompile(`(?i)<a\s+([^>]+)>`)
 	hrefAttrRegex   = regexp.MustCompile(`(?i)\bhref\s*=\s*["']([^"']+)["']`)
@@ -518,6 +570,7 @@ func (g *Generator) renderLocaleSite(
 	contents []ContentRender,
 	pages []StaticPageRender,
 	menus []MenuItemRender,
+	curation *CurationData,
 ) error {
 	localeDir := filepath.Join(targetDir, locale)
 	if err := os.MkdirAll(localeDir, 0755); err != nil {
@@ -867,6 +920,202 @@ body {
 .card-action:hover {
     color: #065f46;
     text-decoration: underline;
+}
+
+/* Category Chips */
+.category-nav-section {
+    margin: 1rem 0 2rem;
+}
+.category-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    align-items: center;
+}
+.cat-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.4rem 0.85rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 9999px;
+    font-size: 0.825rem;
+    font-weight: 600;
+    color: #334155;
+    text-decoration: none;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+.cat-chip:hover {
+    border-color: #059669;
+    color: #047857;
+    background: #ecfdf5;
+    transform: translateY(-1px);
+}
+.cat-chip-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #10b981;
+}
+
+/* Curated Stories Section */
+.curated-stories-section {
+    margin-bottom: 2.75rem;
+}
+.stories-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+}
+@media (min-width: 860px) {
+    .stories-grid {
+        grid-template-columns: 1.4fr 1fr;
+        gap: 1.5rem;
+    }
+}
+.lead-card {
+    background: #ffffff;
+    border: 2px solid #a7f3d0;
+    border-radius: 14px;
+    padding: 1.75rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 0 4px 15px rgba(5, 150, 105, 0.08);
+}
+.lead-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+.lead-badge {
+    background: #059669;
+    color: #ffffff;
+    padding: 0.25rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.lead-card h3 {
+    margin: 0.25rem 0 0.75rem;
+    font-size: clamp(1.2rem, 2.5vw, 1.55rem);
+    line-height: 1.35;
+    font-weight: 800;
+    color: #064e3b;
+}
+.lead-card h3 a {
+    color: inherit;
+    text-decoration: none;
+}
+.lead-card h3 a:hover {
+    color: #047857;
+    text-decoration: underline;
+}
+.lead-card p {
+    font-size: 0.95rem;
+    color: #475569;
+    line-height: 1.6;
+    margin: 0 0 1.25rem;
+}
+.supporting-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+.supporting-heading {
+    margin: 0 0 0.5rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.supporting-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1;
+}
+.supporting-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1rem 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    transition: transform 0.15s, border-color 0.15s;
+}
+.supporting-card:hover {
+    border-color: #cbd5e1;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+.supporting-card h4 {
+    margin: 0.2rem 0;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    font-weight: 700;
+    color: #0f172a;
+}
+.supporting-card h4 a {
+    color: inherit;
+    text-decoration: none;
+}
+.supporting-card h4 a:hover {
+    color: #047857;
+    text-decoration: underline;
+}
+.supporting-card p {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: #64748b;
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Featured Section */
+.featured-section {
+    margin-bottom: 2.75rem;
+}
+.section-header-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.section-subtitle-tag {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #059669;
+    background: #ecfdf5;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+    border: 1px solid #d1fae5;
+}
+.card-featured {
+    border-color: #fde68a;
+    background: linear-gradient(180deg, #fffbeb 0%, #ffffff 40%);
+}
+.badge-featured {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fde68a;
+}
+.all-articles-section {
+    margin-bottom: 2.5rem;
 }
 
 /* Detail page */
@@ -1344,6 +1593,224 @@ body {
 		faviconTag = fmt.Sprintf("\n    <link rel=\"icon\" href=\"%s\">", template.HTMLEscapeString(sc.FaviconURL))
 	}
 
+	// Build quick category chips
+	var catChipsBuilder strings.Builder
+	for _, c := range sortedCats {
+		catChipsBuilder.WriteString(fmt.Sprintf(
+			`<a href="/%s/%s/" class="cat-chip"><span class="cat-chip-dot"></span>%s</a>`,
+			locale, c.Slug, template.HTMLEscapeString(c.Name),
+		))
+	}
+
+	// Prepare curated contents
+	contentByID := make(map[int64]ContentRender, len(contents))
+	for _, c := range contents {
+		contentByID[c.ID] = c
+	}
+
+	var leadStory *ContentRender
+	var supportingStories []ContentRender
+	var featuredStories []ContentRender
+	handledStoryIDs := make(map[int64]bool)
+
+	if curation != nil {
+		if curation.LeadID != nil {
+			if ls, ok := contentByID[*curation.LeadID]; ok {
+				leadStory = &ls
+				handledStoryIDs[*curation.LeadID] = true
+			}
+		}
+		for _, sID := range curation.SupportingIDs {
+			if handledStoryIDs[sID] {
+				continue
+			}
+			if ss, ok := contentByID[sID]; ok {
+				supportingStories = append(supportingStories, ss)
+				handledStoryIDs[sID] = true
+			}
+		}
+		for _, fID := range curation.FeaturedIDs {
+			if fc, ok := contentByID[fID]; ok {
+				featuredStories = append(featuredStories, fc)
+			}
+		}
+	}
+
+	storiesSectionTitle := "Cerita tentang Pidie"
+	leadBadgeText := "Cerita Utama"
+	readLeadText := "Baca Kisah Utama &rarr;"
+	supportingHeading := "Sorotan Terkait"
+	featuredSectionTitle := "Pilihan Redaksi"
+	featuredBadgeText := "Pilihan Redaksi"
+	featuredTagText := "Rekomendasi Terverifikasi"
+	allSectionTitle := "Eksplorasi Destinasi & Potensi Daerah"
+	if locale == "en" {
+		storiesSectionTitle = "Stories of Pidie"
+		leadBadgeText = "Lead Story"
+		readLeadText = "Read Lead Story &rarr;"
+		supportingHeading = "Related Highlights"
+		featuredSectionTitle = "Editor's Picks"
+		featuredBadgeText = "Editor's Pick"
+		featuredTagText = "Verified Recommendations"
+		allSectionTitle = "Explore All Destinations & Heritage"
+	}
+
+	// Build Curated Stories Section (Lead & Supporting)
+	var storiesHTML strings.Builder
+	if leadStory != nil || len(supportingStories) > 0 {
+		storiesHTML.WriteString(fmt.Sprintf(`
+        <section class="curated-stories-section">
+            <h2 class="section-title">%s</h2>
+            <div class="stories-grid">`, storiesSectionTitle))
+
+		if leadStory != nil {
+			leadDetailPath := fmt.Sprintf("/%s/%s/%s/", locale, leadStory.CategorySlug, leadStory.Slug)
+			storiesHTML.WriteString(fmt.Sprintf(`
+                <article class="lead-card">
+                    <div>
+                        <div class="lead-badges">
+                            <span class="lead-badge">%s</span>
+                            <span class="badge">%s</span>
+                        </div>
+                        <h3><a href="%s">%s</a></h3>
+                        <p>%s</p>
+                    </div>
+                    <div>
+                        <a href="%s" class="card-action">%s</a>
+                    </div>
+                </article>`,
+				leadBadgeText,
+				template.HTMLEscapeString(leadStory.CategoryName),
+				leadDetailPath,
+				template.HTMLEscapeString(leadStory.Title),
+				template.HTMLEscapeString(leadStory.Summary),
+				leadDetailPath,
+				readLeadText,
+			))
+		}
+
+		if len(supportingStories) > 0 {
+			storiesHTML.WriteString(fmt.Sprintf(`
+                <div class="supporting-column">
+                    <h3 class="supporting-heading">%s</h3>
+                    <div class="supporting-list">`, supportingHeading))
+			for _, ss := range supportingStories {
+				sDetailPath := fmt.Sprintf("/%s/%s/%s/", locale, ss.CategorySlug, ss.Slug)
+				storiesHTML.WriteString(fmt.Sprintf(`
+                        <article class="supporting-card">
+                            <span class="badge">%s</span>
+                            <h4><a href="%s">%s</a></h4>
+                            <p>%s</p>
+                        </article>`,
+					template.HTMLEscapeString(ss.CategoryName),
+					sDetailPath,
+					template.HTMLEscapeString(ss.Title),
+					template.HTMLEscapeString(ss.Summary),
+				))
+			}
+			storiesHTML.WriteString(`
+                    </div>
+                </div>`)
+		}
+
+		storiesHTML.WriteString(`
+            </div>
+        </section>`)
+	}
+
+	// Build Curated Featured Section
+	var featuredHTML strings.Builder
+	if len(featuredStories) > 0 {
+		featuredHTML.WriteString(fmt.Sprintf(`
+        <section class="featured-section">
+            <div class="section-header-row">
+                <h2 class="section-title">%s</h2>
+                <span class="section-subtitle-tag">%s</span>
+            </div>
+            <div class="card-grid">`, featuredSectionTitle, featuredTagText))
+
+		for _, fc := range featuredStories {
+			fDetailPath := fmt.Sprintf("/%s/%s/%s/", locale, fc.CategorySlug, fc.Slug)
+			featuredHTML.WriteString(fmt.Sprintf(`
+                <article class="card card-featured">
+                    <div>
+                        <div class="lead-badges">
+                            <span class="badge badge-featured">%s</span>
+                            <span class="badge">%s</span>
+                        </div>
+                        <h3><a href="%s">%s</a></h3>
+                        <p>%s</p>
+                    </div>
+                    <div>
+                        <a href="%s" class="card-action">%s</a>
+                    </div>
+                </article>`,
+				featuredBadgeText,
+				template.HTMLEscapeString(fc.CategoryName),
+				fDetailPath,
+				template.HTMLEscapeString(fc.Title),
+				template.HTMLEscapeString(fc.Summary),
+				fDetailPath,
+				readMoreText,
+			))
+		}
+
+		featuredHTML.WriteString(`
+            </div>
+        </section>`)
+	}
+
+	// Build General / Remaining Contents Section
+	var remainingContents []ContentRender
+	hasCuration := (leadStory != nil || len(supportingStories) > 0 || len(featuredStories) > 0)
+	for _, c := range contents {
+		if hasCuration && handledStoryIDs[c.ID] {
+			continue
+		}
+		remainingContents = append(remainingContents, c)
+	}
+	if len(remainingContents) == 0 && len(contents) > 0 {
+		remainingContents = contents
+	}
+
+	var allArticlesHTML strings.Builder
+	if len(remainingContents) > 0 {
+		displayTitle := allSectionTitle
+		if !hasCuration {
+			displayTitle = sectionTitle
+		}
+		allArticlesHTML.WriteString(fmt.Sprintf(`
+        <section class="all-articles-section">
+            <h2 class="section-title">%s</h2>
+            <div class="card-grid">`, displayTitle))
+
+		for _, c := range remainingContents {
+			detailPath := fmt.Sprintf("/%s/%s/%s/", locale, c.CategorySlug, c.Slug)
+			allArticlesHTML.WriteString(fmt.Sprintf(`
+                <article class="card">
+                    <div>
+                        <span class="badge">%s</span>
+                        <h3><a href="%s">%s</a></h3>
+                        <p>%s</p>
+                    </div>
+                    <div>
+                        <a href="%s" class="card-action">%s</a>
+                    </div>
+                </article>`,
+				template.HTMLEscapeString(c.CategoryName),
+				detailPath,
+				template.HTMLEscapeString(c.Title),
+				template.HTMLEscapeString(c.Summary),
+				detailPath,
+				readMoreText,
+			))
+		}
+
+		allArticlesHTML.WriteString(`
+            </div>
+        </section>`)
+	}
+
 	// 1. Render Homepage: <locale>/index.html
 	homeHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
@@ -1365,10 +1832,18 @@ body {
             <h2>%s</h2>
             <p>%s</p>
         </section>
-        <section>
-            <h2 class="section-title">%s</h2>
-            <div class="card-grid">
-`,
+        <section class="category-nav-section" aria-label="Kategori">
+            <div class="category-chips">
+%s
+            </div>
+        </section>
+%s
+%s
+%s
+    </main>
+%s
+</body>
+</html>`,
 		locale,
 		template.HTMLEscapeString(siteName),
 		template.HTMLEscapeString(tagline),
@@ -1380,39 +1855,12 @@ body {
 		headerHTML,
 		template.HTMLEscapeString(tagline),
 		template.HTMLEscapeString(heroSubtitle),
-		template.HTMLEscapeString(sectionTitle),
+		catChipsBuilder.String(),
+		storiesHTML.String(),
+		featuredHTML.String(),
+		allArticlesHTML.String(),
+		footerHTML,
 	)
-
-	var cardsBuilder strings.Builder
-	for _, c := range contents {
-		detailPath := fmt.Sprintf("/%s/%s/%s/", locale, c.CategorySlug, c.Slug)
-		cardsBuilder.WriteString(fmt.Sprintf(`
-                <article class="card">
-                    <div>
-                        <span class="badge">%s</span>
-                        <h3><a href="%s">%s</a></h3>
-                        <p>%s</p>
-                    </div>
-                    <div>
-                        <a href="%s" class="card-action">%s</a>
-                    </div>
-                </article>`,
-			template.HTMLEscapeString(c.CategoryName),
-			detailPath,
-			template.HTMLEscapeString(c.Title),
-			template.HTMLEscapeString(c.Summary),
-			detailPath,
-			readMoreText,
-		))
-	}
-
-	homeHTML += cardsBuilder.String() + fmt.Sprintf(`
-            </div>
-        </section>
-    </main>
-%s
-</body>
-</html>`, footerHTML)
 
 	if err := os.WriteFile(filepath.Join(localeDir, "index.html"), []byte(homeHTML), 0644); err != nil {
 		return err

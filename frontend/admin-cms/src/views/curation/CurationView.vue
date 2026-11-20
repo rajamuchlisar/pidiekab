@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { api } from '../../api/client'
 import { useNotificationStore } from '../../stores/notification'
 import AppLayout from '../../components/layout/AppLayout.vue'
@@ -10,9 +10,11 @@ const activeTab = ref<'featured' | 'stories'>('featured')
 const activeLocale = ref<'id' | 'en'>('id')
 const isLoading = ref(true)
 const isSaving = ref(false)
+const searchQuery = ref('')
 
 // Published contents available to pick
 const availableContents = ref<any[]>([])
+const categoryMap = ref<Record<string, string>>({})
 
 // Featured state
 const featuredList = ref<Array<{ contentId: number; title: string; categoryName: string; position: number }>>([])
@@ -20,28 +22,61 @@ const featuredList = ref<Array<{ contentId: number; title: string; categoryName:
 // Stories state
 const leadContentId = ref<number | null>(null)
 const supportingList = ref<Array<{ contentId: number; title: string; categoryName: string; position: number }>>([])
+const allStoriesData = ref<{ id?: any; en?: any }>({})
+
+function getCategoryName(catId: any): string {
+  if (!catId) return 'Umum'
+  return categoryMap.value[String(catId)] || 'Umum'
+}
+
+const filteredContents = computed(() => {
+  if (!searchQuery.value.trim()) return availableContents.value
+  const q = searchQuery.value.toLowerCase()
+  return availableContents.value.filter((c: any) => {
+    const tID = c.translations?.id?.title?.toLowerCase() || ''
+    const tEN = c.translations?.en?.title?.toLowerCase() || ''
+    const cat = (c.categoryName || '').toLowerCase()
+    return tID.includes(q) || tEN.includes(q) || cat.includes(q)
+  })
+})
 
 async function loadData() {
   isLoading.value = true
   try {
-    const [contentsRes, featRes, storiesRes] = await Promise.all([
+    const [contentsRes, featRes, storiesRes, catRes] = await Promise.all([
       api.get<{ items: any[] }>('/api/v1/admin/contents?per_page=100'),
       api.get<{ items: any[] }>('/api/v1/admin/curation/featured'),
       api.get<any>('/api/v1/admin/curation/stories'),
+      api.get<{ items: any[] }>('/api/v1/admin/categories').catch(() => ({ items: [] })),
     ])
 
+    if (catRes?.items) {
+      const map: Record<string, string> = {}
+      catRes.items.forEach((cat: any) => {
+        map[String(cat.id)] = cat.translations?.id?.name || cat.translations?.en?.name || cat.slug || 'Umum'
+      })
+      categoryMap.value = map
+    }
+
     if (contentsRes?.items) {
-      availableContents.value = contentsRes.items
+      availableContents.value = contentsRes.items.map((c: any) => ({
+        ...c,
+        categoryName: getCategoryName(c.category_id),
+      }))
     }
 
     if (featRes?.items) {
-      featuredList.value = featRes.items
+      featuredList.value = featRes.items.map((f: any, idx: number) => ({
+        contentId: f.contentId,
+        title: f.title,
+        categoryName: f.categoryName || getCategoryName(availableContents.value.find((c) => c.id === f.contentId)?.category_id),
+        position: f.position || idx + 1,
+      }))
     }
 
-    if (storiesRes && storiesRes[activeLocale.value]) {
-      const locStories = storiesRes[activeLocale.value]
-      leadContentId.value = locStories.lead?.contentId || null
-      supportingList.value = locStories.supporting || []
+    if (storiesRes) {
+      allStoriesData.value = storiesRes
+      syncStoriesForActiveLocale()
     }
   } catch (err: any) {
     notification.error('Gagal Memuat Kurasi', err.detail || 'Terjadi kesalahan sistem.', err.requestId)
@@ -50,15 +85,36 @@ async function loadData() {
   }
 }
 
+function syncStoriesForActiveLocale() {
+  const locStories = allStoriesData.value[activeLocale.value]
+  if (locStories) {
+    leadContentId.value = locStories.lead?.contentId || null
+    supportingList.value = (locStories.supporting || []).map((s: any, idx: number) => ({
+      contentId: s.contentId,
+      title: s.title,
+      categoryName: s.categoryName || getCategoryName(availableContents.value.find((c) => c.id === s.contentId)?.category_id),
+      position: idx + 1,
+    }))
+  } else {
+    leadContentId.value = null
+    supportingList.value = []
+  }
+}
+
+function switchLocale(loc: 'id' | 'en') {
+  activeLocale.value = loc
+  syncStoriesForActiveLocale()
+}
+
 function addFeatured(content: any) {
   if (featuredList.value.some((f) => f.contentId === content.id)) {
-    alert('Artikel ini sudah ada di daftar Unggulan.')
+    notification.show('warning', 'Sudah Ada', 'Artikel ini sudah ada di daftar Unggulan.')
     return
   }
   featuredList.value.push({
     contentId: content.id,
     title: content.translations?.id?.title || content.translations?.en?.title || 'Tanpa Judul',
-    categoryName: content.categoryName || 'Umum',
+    categoryName: content.categoryName || getCategoryName(content.category_id),
     position: featuredList.value.length + 1,
   })
 }
@@ -70,19 +126,40 @@ function removeFeatured(index: number) {
   })
 }
 
+function moveFeatured(index: number, direction: 'up' | 'down') {
+  const targetIndex = direction === 'up' ? index - 1 : index + 1
+  if (targetIndex < 0 || targetIndex >= featuredList.value.length) return
+  const [item] = featuredList.value.splice(index, 1)
+  if (item) {
+    featuredList.value.splice(targetIndex, 0, item)
+    featuredList.value.forEach((f, idx) => {
+      f.position = idx + 1
+    })
+  }
+}
+
+function setLeadStory(content: any) {
+  leadContentId.value = content.id
+  // If this item was in supporting, remove it from supporting
+  const existingIdx = supportingList.value.findIndex((s) => s.contentId === content.id)
+  if (existingIdx !== -1) {
+    removeSupporting(existingIdx)
+  }
+}
+
 function addSupporting(content: any) {
   if (content.id === leadContentId.value) {
-    alert('Artikel yang dipilih sudah menjadi Lead Story.')
+    notification.show('warning', 'Perhatian', 'Artikel yang dipilih saat ini adalah Cerita Utama (Lead Story).')
     return
   }
   if (supportingList.value.some((s) => s.contentId === content.id)) {
-    alert('Artikel ini sudah ada di daftar Supporting Stories.')
+    notification.show('warning', 'Sudah Ada', 'Artikel ini sudah ada di daftar Supporting Stories.')
     return
   }
   supportingList.value.push({
     contentId: content.id,
-    title: content.translations?.[activeLocale.value]?.title || 'Tanpa Judul',
-    categoryName: content.categoryName || 'Umum',
+    title: content.translations?.[activeLocale.value]?.title || content.translations?.id?.title || content.translations?.en?.title || 'Tanpa Judul',
+    categoryName: content.categoryName || getCategoryName(content.category_id),
     position: supportingList.value.length + 1,
   })
 }
@@ -94,10 +171,23 @@ function removeSupporting(index: number) {
   })
 }
 
+function moveSupporting(index: number, direction: 'up' | 'down') {
+  const targetIndex = direction === 'up' ? index - 1 : index + 1
+  if (targetIndex < 0 || targetIndex >= supportingList.value.length) return
+  const [item] = supportingList.value.splice(index, 1)
+  if (item) {
+    supportingList.value.splice(targetIndex, 0, item)
+    supportingList.value.forEach((s, idx) => {
+      s.position = idx + 1
+    })
+  }
+}
+
 async function saveFeatured() {
   isSaving.value = true
   try {
     const payload = {
+      content_ids: featuredList.value.map((f) => f.contentId),
       items: featuredList.value.map((f, idx) => ({
         content_id: f.contentId,
         position: idx + 1,
@@ -118,12 +208,18 @@ async function saveStories() {
     const payload = {
       locale: activeLocale.value,
       lead_content_id: leadContentId.value,
+      supporting_ids: supportingList.value.map((s) => s.contentId),
       supporting: supportingList.value.map((s, idx) => ({
         content_id: s.contentId,
         position: idx + 1,
       })),
     }
     await api.put('/api/v1/admin/curation/stories', payload)
+    // Update local store
+    allStoriesData.value[activeLocale.value] = {
+      lead: leadContentId.value ? { contentId: leadContentId.value } : null,
+      supporting: [...supportingList.value],
+    }
     notification.success('Cerita Beranda Disimpan', `Kurasi Cerita Pidie (${activeLocale.value.toUpperCase()}) berhasil disimpan.`)
   } catch (err: any) {
     notification.error('Gagal Menyimpan', err.detail || 'Terjadi kesalahan kurasi cerita.', err.requestId)
@@ -143,7 +239,7 @@ onMounted(() => {
       <div class="page-header">
         <div>
           <h2 class="page-title">Kurasi Editorial Beranda</h2>
-          <p class="page-desc">Tentukan artikel unggulan dan cerita utama yang tampil di beranda website publik.</p>
+          <p class="page-desc">Tentukan artikel unggulan dan cerita utama yang tampil di beranda website publik (SSG).</p>
         </div>
       </div>
 
@@ -155,7 +251,7 @@ onMounted(() => {
           @click="activeTab = 'featured'"
         >
           <BladeIcon name="star" size="18" />
-          <span>Artikel Unggulan (Featured)</span>
+          <span>Artikel Unggulan (Pilihan Redaksi)</span>
         </button>
         <button
           class="tab-btn"
@@ -163,7 +259,7 @@ onMounted(() => {
           @click="activeTab = 'stories'"
         >
           <BladeIcon name="book-open" size="18" />
-          <span>Cerita tentang Pidie (Stories)</span>
+          <span>Cerita tentang Pidie (Lead & Supporting)</span>
         </button>
       </div>
 
@@ -176,8 +272,8 @@ onMounted(() => {
           <div class="card cur-card">
             <div class="card-header">
               <div>
-                <h3 class="card-title">Daftar Artikel Unggulan Terpilih</h3>
-                <p class="card-sub">Urutan posisi 1, 2, 3 menentukan posisi tampil di kartu grid beranda.</p>
+                <h3 class="card-title">Daftar Artikel Unggulan (Pilihan Redaksi)</h3>
+                <p class="card-sub">Urutan posisi 1, 2, 3 menentukan posisi tampil di kartu grid beranda. Gunakan tombol ▲ ▼ untuk mengatur urutan.</p>
               </div>
               <button class="btn btn-primary" :disabled="isSaving" @click="saveFeatured">
                 {{ isSaving ? 'Menyimpan...' : 'Simpan Urutan' }}
@@ -195,7 +291,11 @@ onMounted(() => {
                   <span class="item-title">{{ item.title }}</span>
                   <span class="item-cat">{{ item.categoryName }}</span>
                 </div>
-                <button class="btn-remove" @click="removeFeatured(idx)">Hapus</button>
+                <div class="item-actions">
+                  <button class="btn-arrow" :disabled="idx === 0" @click="moveFeatured(idx, 'up')" title="Geser ke Atas">▲</button>
+                  <button class="btn-arrow" :disabled="idx === featuredList.length - 1" @click="moveFeatured(idx, 'down')" title="Geser ke Bawah">▼</button>
+                  <button class="btn-remove" @click="removeFeatured(idx)">Hapus</button>
+                </div>
               </li>
             </ul>
           </div>
@@ -205,8 +305,17 @@ onMounted(() => {
             <h3 class="card-title">Pilih dari Artikel Tersedia</h3>
             <p class="card-sub">Hanya artikel yang sudah terbit (Published) yang dapat diunggulkan.</p>
 
+            <div class="search-box">
+              <input
+                v-model="searchQuery"
+                type="text"
+                class="form-input"
+                placeholder="Cari artikel atau kategori..."
+              />
+            </div>
+
             <ul class="pool-items">
-              <li v-for="c in availableContents" :key="c.id" class="pool-item">
+              <li v-for="c in filteredContents" :key="c.id" class="pool-item">
                 <div class="pool-info">
                   <span class="pool-title">
                     {{ c.translations?.id?.title || c.translations?.en?.title || 'Tanpa Judul' }}
@@ -227,7 +336,7 @@ onMounted(() => {
           <button
             class="sub-tab"
             :class="{ active: activeLocale === 'id' }"
-            @click="activeLocale = 'id'; loadData()"
+            @click="switchLocale('id')"
           >
             <BladeIcon name="language" size="16" />
             <span>Cerita Pidie (Bahasa Indonesia)</span>
@@ -235,7 +344,7 @@ onMounted(() => {
           <button
             class="sub-tab"
             :class="{ active: activeLocale === 'en' }"
-            @click="activeLocale = 'en'; loadData()"
+            @click="switchLocale('en')"
           >
             <BladeIcon name="globe-alt" size="16" />
             <span>Pidie Stories (English)</span>
@@ -247,7 +356,7 @@ onMounted(() => {
             <div class="card-header">
               <div>
                 <h3 class="card-title">Cerita Utama & Pendukung ({{ activeLocale.toUpperCase() }})</h3>
-                <p class="card-sub">Maksimal 1 Lead Story (Cerita Utama) dan kumpulan Supporting Stories.</p>
+                <p class="card-sub">Tentukan 1 Cerita Utama (Lead Story) berukuran besar dan beberapa cerita pendukung di sampingnya.</p>
               </div>
               <button class="btn btn-primary" :disabled="isSaving" @click="saveStories">
                 {{ isSaving ? 'Menyimpan...' : 'Simpan Cerita' }}
@@ -256,17 +365,20 @@ onMounted(() => {
 
             <!-- Lead Story Box -->
             <div class="lead-box">
-              <span class="box-badge">LEAD STORY (Cerita Utama)</span>
+              <span class="box-badge">CERITA UTAMA (LEAD STORY)</span>
               <div v-if="leadContentId" class="lead-selected">
                 <div class="item-info">
                   <span class="item-title">
-                    {{ availableContents.find(c => c.id === leadContentId)?.translations?.[activeLocale]?.title || 'Artikel #' + leadContentId }}
+                    {{ availableContents.find((c) => c.id === leadContentId)?.translations?.[activeLocale]?.title || availableContents.find((c) => c.id === leadContentId)?.translations?.id?.title || 'Artikel #' + leadContentId }}
+                  </span>
+                  <span class="item-cat">
+                    {{ availableContents.find((c) => c.id === leadContentId)?.categoryName || 'Umum' }}
                   </span>
                 </div>
-                <button class="btn-remove" @click="leadContentId = null">Ganti / Hapus</button>
+                <button class="btn-remove" @click="leadContentId = null">Hapus Lead</button>
               </div>
               <div v-else class="lead-empty">
-                Belum ada Lead Story yang dipilih. Klik tombol "+ Jadikan Lead" pada daftar artikel di sebelah kanan.
+                Belum ada Cerita Utama yang dipilih. Klik tombol "+ Jadikan Lead" pada artikel di sebelah kanan.
               </div>
             </div>
 
@@ -282,7 +394,11 @@ onMounted(() => {
                   <span class="item-title">{{ item.title }}</span>
                   <span class="item-cat">{{ item.categoryName }}</span>
                 </div>
-                <button class="btn-remove" @click="removeSupporting(idx)">Hapus</button>
+                <div class="item-actions">
+                  <button class="btn-arrow" :disabled="idx === 0" @click="moveSupporting(idx, 'up')" title="Geser ke Atas">▲</button>
+                  <button class="btn-arrow" :disabled="idx === supportingList.length - 1" @click="moveSupporting(idx, 'down')" title="Geser ke Bawah">▼</button>
+                  <button class="btn-remove" @click="removeSupporting(idx)">Hapus</button>
+                </div>
               </li>
             </ul>
           </div>
@@ -292,14 +408,23 @@ onMounted(() => {
             <h3 class="card-title">Artikel Tersedia ({{ activeLocale.toUpperCase() }})</h3>
             <p class="card-sub">Pilih artikel untuk dijadikan Lead Story atau Supporting Story.</p>
 
+            <div class="search-box">
+              <input
+                v-model="searchQuery"
+                type="text"
+                class="form-input"
+                placeholder="Cari artikel atau kategori..."
+              />
+            </div>
+
             <ul class="pool-items">
-              <li v-for="c in availableContents" :key="c.id" class="pool-item">
+              <li v-for="c in filteredContents" :key="c.id" class="pool-item">
                 <div class="pool-info">
-                  <span class="pool-title">{{ c.translations?.[activeLocale]?.title || 'Tanpa Judul' }}</span>
+                  <span class="pool-title">{{ c.translations?.[activeLocale]?.title || c.translations?.id?.title || 'Tanpa Judul' }}</span>
                   <span class="pool-cat">{{ c.categoryName }}</span>
                 </div>
                 <div class="pool-actions">
-                  <button class="btn-xs btn-outline" @click="leadContentId = c.id">Lead</button>
+                  <button class="btn-xs btn-primary-outline" @click="setLeadStory(c)">+ Lead</button>
                   <button class="btn-xs btn-outline ml-1" @click="addSupporting(c)">+ Support</button>
                 </div>
               </li>
@@ -333,6 +458,9 @@ onMounted(() => {
 }
 
 .tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   padding: 0.65rem 1.25rem;
   border: 1px solid #cbd5e1;
   background: #ffffff;
@@ -341,6 +469,7 @@ onMounted(() => {
   font-weight: 600;
   font-size: 0.9rem;
   color: #475569;
+  transition: all 0.15s ease;
 }
 
 .tab-btn.active {
@@ -350,6 +479,9 @@ onMounted(() => {
 }
 
 .sub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   padding: 0.5rem 1rem;
   border: 1px solid #cbd5e1;
   background: #f8fafc;
@@ -358,6 +490,7 @@ onMounted(() => {
   font-size: 0.85rem;
   font-weight: 600;
   color: #475569;
+  transition: all 0.15s ease;
 }
 
 .sub-tab.active {
@@ -368,9 +501,15 @@ onMounted(() => {
 
 .curation-grid {
   display: grid;
-  grid-template-columns: 1fr 340px;
+  grid-template-columns: 1fr 360px;
   gap: 1.5rem;
   align-items: start;
+}
+
+@media (max-width: 900px) {
+  .curation-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .card {
@@ -389,7 +528,25 @@ onMounted(() => {
 }
 
 .card-title { margin: 0 0 0.25rem 0; font-size: 1.05rem; font-weight: 700; color: #0f172a; }
-.card-sub { margin: 0; font-size: 0.8rem; color: #64748b; }
+.card-sub { margin: 0; font-size: 0.8rem; color: #64748b; line-height: 1.4; }
+
+.search-box {
+  margin: 0.75rem 0 1rem;
+}
+
+.form-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #059669;
+}
 
 .curation-items, .pool-items {
   list-style: none;
@@ -408,30 +565,64 @@ onMounted(() => {
   border: 1px solid #e2e8f0;
   padding: 0.65rem 0.85rem;
   border-radius: 6px;
-  gap: 0.5rem;
+  gap: 0.6rem;
 }
 
 .item-pos {
   font-weight: 800;
   color: #059669;
   font-size: 0.95rem;
+  min-width: 24px;
 }
 
 .item-info, .pool-info {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-width: 0;
 }
 
 .item-title, .pool-title {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .item-cat, .pool-cat {
-  font-size: 0.725rem;
-  color: #64748b;
+  font-size: 0.75rem;
+  color: #047857;
+  font-weight: 600;
+}
+
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btn-arrow {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.75rem;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-arrow:hover:not(:disabled) {
+  background: #059669;
+  color: #ffffff;
+  border-color: #059669;
+}
+
+.btn-arrow:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
 }
 
 .btn-remove {
@@ -441,6 +632,11 @@ onMounted(() => {
   font-size: 0.775rem;
   font-weight: 600;
   cursor: pointer;
+  padding: 0.2rem 0.4rem;
+}
+
+.btn-remove:hover {
+  text-decoration: underline;
 }
 
 .lead-box {
@@ -460,12 +656,14 @@ onMounted(() => {
   padding: 0.15rem 0.4rem;
   border-radius: 4px;
   margin-bottom: 0.5rem;
+  letter-spacing: 0.04em;
 }
 
 .lead-selected {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
 }
 
 .lead-empty {
@@ -481,11 +679,11 @@ onMounted(() => {
 }
 
 .pool-card {
-  max-height: 580px;
+  max-height: 640px;
   overflow-y: auto;
 }
 
-.pool-actions { display: flex; }
+.pool-actions { display: flex; align-items: center; }
 .ml-1 { margin-left: 0.35rem; }
 
 .btn {
@@ -497,15 +695,18 @@ onMounted(() => {
   border-radius: 6px;
   cursor: pointer;
   border: none;
+  transition: background 0.15s;
 }
 
 .btn-primary { background: #059669; color: #ffffff; }
 .btn-primary:hover:not(:disabled) { background: #047857; }
 .btn-outline { border: 1px solid #cbd5e1; background: #ffffff; color: #334155; cursor: pointer; }
 .btn-outline:hover { background: #f8fafc; }
+.btn-primary-outline { border: 1px solid #059669; background: #ecfdf5; color: #059669; cursor: pointer; font-weight: 600; }
+.btn-primary-outline:hover { background: #059669; color: #ffffff; }
 
 .btn-sm { padding: 0.35rem 0.65rem; font-size: 0.775rem; border-radius: 4px; }
-.btn-xs { padding: 0.2rem 0.45rem; font-size: 0.7rem; border-radius: 4px; }
+.btn-xs { padding: 0.25rem 0.5rem; font-size: 0.725rem; border-radius: 4px; }
 
 .loading-state, .empty-list {
   padding: 3rem;

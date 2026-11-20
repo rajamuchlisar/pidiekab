@@ -39,6 +39,7 @@ func (h *CurationHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/v1/admin/curation/stories", wrapGet(h.HandleGetStories))
 	mux.Handle("GET /api/v1/admin/curation/{locale}", wrapGet(h.HandleGetCuratedHomepage))
 	mux.Handle("PUT /api/v1/admin/curation/featured", wrapProtected(h.HandleSetFeatured))
+	mux.Handle("PUT /api/v1/admin/curation/stories", wrapProtected(h.HandleSetStories))
 	mux.Handle("PUT /api/v1/admin/curation/{locale}/lead", wrapProtected(h.HandleSetLeadStory))
 	mux.Handle("PUT /api/v1/admin/curation/{locale}/supporting", wrapProtected(h.HandleSetSupportingStories))
 }
@@ -125,6 +126,10 @@ func (h *CurationHandler) HandleGetCuratedHomepage(w http.ResponseWriter, r *htt
 
 type setFeaturedRequest struct {
 	ContentIDs []int64 `json:"content_ids"`
+	Items      []struct {
+		ContentID int64 `json:"content_id"`
+		Position  int   `json:"position"`
+	} `json:"items"`
 }
 
 func (h *CurationHandler) HandleSetFeatured(w http.ResponseWriter, r *http.Request) {
@@ -140,7 +145,15 @@ func (h *CurationHandler) HandleSetFeatured(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.service.SetFeatured(r.Context(), admin.ID, req.ContentIDs); err != nil {
+	// Extract ContentIDs if provided as Items array
+	contentIDs := req.ContentIDs
+	if len(contentIDs) == 0 && len(req.Items) > 0 {
+		for _, it := range req.Items {
+			contentIDs = append(contentIDs, it.ContentID)
+		}
+	}
+
+	if err := h.service.SetFeatured(r.Context(), admin.ID, contentIDs); err != nil {
 		if errors.Is(err, domain.ErrDuplicateContent) || errors.Is(err, domain.ErrContentNotPublished) {
 			writeJSONError(w, http.StatusBadRequest, "VALIDATION_FAILED", err.Error())
 			return
@@ -151,6 +164,54 @@ func (h *CurationHandler) HandleSetFeatured(w http.ResponseWriter, r *http.Reque
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{"message": "Featured contents updated successfully"})
+}
+
+type setStoriesRequest struct {
+	Locale        string `json:"locale"`
+	LeadContentID *int64 `json:"lead_content_id"`
+	Supporting    []struct {
+		ContentID int64 `json:"content_id"`
+		Position  int   `json:"position"`
+	} `json:"supporting"`
+	SupportingIDs []int64 `json:"supporting_ids"`
+}
+
+func (h *CurationHandler) HandleSetStories(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok || admin == nil {
+		writeJSONError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Admin session required")
+		return
+	}
+
+	var req setStoriesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_JSON", "Malformed JSON body")
+		return
+	}
+
+	locale := strings.ToLower(strings.TrimSpace(req.Locale))
+	if locale == "" {
+		locale = "id"
+	}
+
+	supportingIDs := req.SupportingIDs
+	if len(supportingIDs) == 0 && len(req.Supporting) > 0 {
+		for _, it := range req.Supporting {
+			supportingIDs = append(supportingIDs, it.ContentID)
+		}
+	}
+
+	if err := h.service.SetStories(r.Context(), admin.ID, locale, req.LeadContentID, supportingIDs); err != nil {
+		if errors.Is(err, domain.ErrInvalidLocale) || errors.Is(err, domain.ErrDuplicateContent) || errors.Is(err, domain.ErrContentNotPublished) {
+			writeJSONError(w, http.StatusBadRequest, "VALIDATION_FAILED", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update stories")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{"message": "Stories updated successfully"})
 }
 
 type setLeadStoryRequest struct {
