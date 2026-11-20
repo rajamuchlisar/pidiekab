@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"html/template"
 	"os"
 	"path/filepath"
@@ -1490,6 +1491,139 @@ body {
     text-decoration: underline;
 }
 
+/* Article Layout with Floating Sticky TOC */
+.article-page-container {
+    max-width: 1200px;
+    padding-top: 1.5rem;
+    padding-bottom: 3.5rem;
+}
+.article-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    align-items: flex-start;
+}
+@media (min-width: 1024px) {
+    .article-layout {
+        flex-direction: row;
+        gap: 3.5rem;
+        align-items: flex-start;
+    }
+}
+.article-main-col {
+    flex: 1;
+    min-width: 0;
+    max-width: 800px;
+    width: 100%;
+}
+
+/* Floating Sticky TOC Sidebar */
+.article-toc-sidebar {
+    width: 100%;
+}
+@media (min-width: 1024px) {
+    .article-toc-sidebar {
+        width: 320px;
+        flex-shrink: 0;
+        position: sticky;
+        top: 85px;
+        max-height: calc(100vh - 105px);
+        overflow-y: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #cbd5e1 transparent;
+    }
+    .article-toc-sidebar::-webkit-scrollbar {
+        width: 4px;
+    }
+    .article-toc-sidebar::-webkit-scrollbar-thumb {
+        background-color: #cbd5e1;
+        border-radius: 9999px;
+    }
+}
+.article-toc-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+}
+.toc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.85rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+.toc-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+}
+.toc-icon {
+    color: #059669;
+    flex-shrink: 0;
+}
+.toc-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #059669;
+    background: #ecfdf5;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid #a7f3d0;
+}
+.toc-nav {
+    display: block;
+}
+.toc-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+.toc-item {
+    font-size: 0.84rem;
+    line-height: 1.45;
+}
+.toc-item.toc-level-3 {
+    padding-left: 0.85rem;
+    font-size: 0.8rem;
+}
+.toc-link {
+    color: #475569;
+    text-decoration: none;
+    display: block;
+    padding: 0.4rem 0.65rem;
+    border-radius: 6px;
+    transition: all 0.15s ease-in-out;
+    border-left: 3px solid transparent;
+}
+.toc-link:hover {
+    color: #047857;
+    background: #f0fdf4;
+}
+.toc-link.active {
+    color: #047857;
+    font-weight: 700;
+    background: #ecfdf5;
+    border-left: 3px solid #059669;
+}
+html {
+    scroll-behavior: smooth;
+}
+.article-body h2,
+.article-body h3,
+.editorial-chapter-title {
+    scroll-margin-top: 85px;
+}
+
 /* Footer */
 .site-footer {
     margin-top: 4.5rem;
@@ -2337,6 +2471,83 @@ body {
 			sourcesHTML.WriteString(`</ul></div>`)
 		}
 
+		processedBodyHTML, tocItems := extractTOCAndInjectIDs(string(c.BodyHTML))
+
+		var tocSidebarHTML string
+		var tocScriptHTML string
+		if len(tocItems) >= 2 {
+			tocTitle := "Daftar Isi"
+			countLabel := fmt.Sprintf("%d Bagian", len(tocItems))
+			if locale == "en" {
+				tocTitle = "Table of Contents"
+				countLabel = fmt.Sprintf("%d Sections", len(tocItems))
+			}
+
+			var tocListBuilder strings.Builder
+			for _, item := range tocItems {
+				tocListBuilder.WriteString(fmt.Sprintf(`
+                            <li class="toc-item toc-level-%d">
+                                <a href="#%s" class="toc-link" data-target="%s">%s</a>
+                            </li>`, item.Level, item.ID, item.ID, template.HTMLEscapeString(item.Title)))
+			}
+
+			tocSidebarHTML = fmt.Sprintf(`
+                <aside class="article-toc-sidebar" aria-label="%s">
+                    <div class="article-toc-card">
+                        <div class="toc-header">
+                            <div class="toc-header-left">
+                                <svg class="toc-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h14"/>
+                                </svg>
+                                <span class="toc-heading-text">%s</span>
+                            </div>
+                            <span class="toc-badge">%s</span>
+                        </div>
+                        <nav class="toc-nav">
+                            <ul class="toc-list">
+                                %s
+                            </ul>
+                        </nav>
+                    </div>
+                </aside>`, template.HTMLEscapeString(tocTitle), template.HTMLEscapeString(tocTitle), countLabel, tocListBuilder.String())
+
+			tocScriptHTML = `
+    <script>
+    (function() {
+        var links = document.querySelectorAll('.toc-link');
+        if (!links.length) return;
+        var targets = [];
+        links.forEach(function(l) {
+            var id = l.getAttribute('data-target');
+            var el = document.getElementById(id);
+            if (el) targets.push({ id: id, el: el, link: l });
+        });
+        if (!targets.length) return;
+
+        function updateTOC() {
+            var scrollY = window.pageYOffset || document.documentElement.scrollTop;
+            var offset = 120;
+            var active = null;
+            for (var i = 0; i < targets.length; i++) {
+                var top = targets[i].el.getBoundingClientRect().top + scrollY;
+                if (scrollY >= top - offset) {
+                    active = targets[i];
+                }
+            }
+            links.forEach(function(l) { l.classList.remove('active'); });
+            if (active) {
+                active.link.classList.add('active');
+            } else if (targets.length > 0) {
+                targets[0].link.classList.add('active');
+            }
+        }
+
+        window.addEventListener('scroll', updateTOC, { passive: true });
+        updateTOC();
+    })();
+    </script>`
+		}
+
 		canonical := fmt.Sprintf("%s/%s/%s/%s/", g.baseURL, locale, c.CategorySlug, c.Slug)
 		detailHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
@@ -2350,22 +2561,28 @@ body {
 </head>
 <body>
 %s
-    <main class="site-wrapper" style="max-width: 800px; padding-top: 1.5rem;">
+    <main class="site-wrapper article-page-container">
         <p style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;font-size:0.85rem;margin-bottom:1.25rem;">
             <a href="/%s/" class="back-btn" style="margin-bottom:0;">%s</a>
             <span style="color:#94a3b8;">/</span>
             <a href="/%s/%s/" class="back-btn" style="margin-bottom:0;">%s</a>
         </p>
-        <article class="article-header">
-            <span class="badge">%s</span>
-            <h1 class="article-title">%s</h1>
-            <div class="article-meta">📍 %s: %s</div>
-        </article>
-        <article class="article-body">
+        <div class="article-layout">
+            <div class="article-main-col">
+                <article class="article-header">
+                    <span class="badge">%s</span>
+                    <h1 class="article-title">%s</h1>
+                    <div class="article-meta">📍 %s: %s</div>
+                </article>
+                <article class="article-body">
+                    %s
+                    %s
+                </article>
+            </div>
             %s
-            %s
-        </article>
+        </div>
     </main>
+%s
 %s
 </body>
 </html>`,
@@ -2386,9 +2603,11 @@ body {
 			template.HTMLEscapeString(c.Title),
 			locationLabel,
 			template.HTMLEscapeString(c.Address),
-			string(c.BodyHTML),
+			processedBodyHTML,
 			sourcesHTML.String(),
+			tocSidebarHTML,
 			footerHTML,
+			tocScriptHTML,
 		)
 
 		if err := os.WriteFile(filepath.Join(contentDir, "index.html"), []byte(detailHTML), 0644); err != nil {
@@ -2772,4 +2991,92 @@ func (g *Generator) renderSitemap(
 	sb.WriteString("</urlset>\n")
 
 	return os.WriteFile(filepath.Join(targetDir, "sitemap.xml"), []byte(sb.String()), 0644)
+}
+
+type TOCItem struct {
+	ID    string
+	Title string
+	Level int
+}
+
+var headingRegex = regexp.MustCompile(`(?i)<h([23])([^>]*)>(.*?)</h[23]>`)
+var idAttrRegex = regexp.MustCompile(`(?i)\bid\s*=\s*["']([^"']+)["']`)
+var tagStripRegex = regexp.MustCompile(`<[^>]+>`)
+
+func extractTOCAndInjectIDs(htmlContent string) (string, []TOCItem) {
+	var items []TOCItem
+	seenIDs := make(map[string]int)
+
+	result := headingRegex.ReplaceAllStringFunc(htmlContent, func(match string) string {
+		submatches := headingRegex.FindStringSubmatch(match)
+		if len(submatches) < 4 {
+			return match
+		}
+		levelStr := submatches[1]
+		attrs := submatches[2]
+		rawInner := submatches[3]
+
+		level := 2
+		if levelStr == "3" {
+			level = 3
+		}
+
+		cleanText := strings.TrimSpace(tagStripRegex.ReplaceAllString(rawInner, ""))
+		cleanText = html.UnescapeString(cleanText)
+		if cleanText == "" {
+			return match
+		}
+
+		var id string
+		if idMatch := idAttrRegex.FindStringSubmatch(attrs); len(idMatch) > 1 {
+			id = idMatch[1]
+		} else {
+			id = slugifyHeading(cleanText)
+		}
+
+		if id == "" {
+			id = fmt.Sprintf("section-%d", len(items)+1)
+		}
+
+		if count, exists := seenIDs[id]; exists {
+			seenIDs[id] = count + 1
+			id = fmt.Sprintf("%s-%d", id, count+1)
+		} else {
+			seenIDs[id] = 1
+		}
+
+		items = append(items, TOCItem{
+			ID:    id,
+			Title: cleanText,
+			Level: level,
+		})
+
+		if !idAttrRegex.MatchString(attrs) {
+			return fmt.Sprintf(`<h%s id="%s"%s>%s</h%s>`, levelStr, id, attrs, rawInner, levelStr)
+		}
+		return match
+	})
+
+	return result, items
+}
+
+func slugifyHeading(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+		} else if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	res := strings.Trim(b.String(), "-")
+	if len(res) > 50 {
+		res = res[:50]
+		res = strings.TrimRight(res, "-")
+	}
+	return res
 }
