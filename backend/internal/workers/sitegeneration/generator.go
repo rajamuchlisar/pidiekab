@@ -66,6 +66,9 @@ type ContentRender struct {
 	Latitude     *float64
 	Longitude    *float64
 	Sources      []SourceRender
+	MainMediaURL string
+	PublishedAt  *time.Time
+	UpdatedAt    *time.Time
 }
 
 type SourceRender struct {
@@ -156,13 +159,32 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	// 4d. Fetch active downloads
 	downloads, _ := g.fetchDownloads(ctx)
 
+	// Build counterpart lookup maps for hreflang and cross-linking
+	contentMapEN := make(map[int64]ContentRender)
+	for _, c := range contentsEN {
+		contentMapEN[c.ID] = c
+	}
+	contentMapID := make(map[int64]ContentRender)
+	for _, c := range contentsID {
+		contentMapID[c.ID] = c
+	}
+
+	pageMapEN := make(map[int64]StaticPageRender)
+	for _, p := range pagesEN {
+		pageMapEN[p.ID] = p
+	}
+	pageMapID := make(map[int64]StaticPageRender)
+	for _, p := range pagesID {
+		pageMapID[p.ID] = p
+	}
+
 	// 5. Render Indonesian site
-	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, pagesID, menuItems, curationID, downloads); err != nil {
+	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, contentMapEN, pagesID, pageMapEN, menuItems, curationID, downloads); err != nil {
 		return fmt.Errorf("failed to render ID site: %w", err)
 	}
 
 	// 6. Render English site
-	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, pagesEN, menuItems, curationEN, downloads); err != nil {
+	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, contentMapID, pagesEN, pageMapID, menuItems, curationEN, downloads); err != nil {
 		return fmt.Errorf("failed to render EN site: %w", err)
 	}
 
@@ -302,11 +324,14 @@ func (g *Generator) fetchPublishedContents(ctx context.Context) ([]ContentRender
 		SELECT
 			c.id, ct.locale, ct.title, ct.slug, COALESCE(ct.summary, ''), ct.body,
 			COALESCE(c.address, ''), c.latitude, c.longitude,
-			cat_t.slug, cat_t.name
+			cat_t.slug, cat_t.name,
+			COALESCE(m.storage_key, ''),
+			ct.published_at, ct.updated_at
 		FROM contents c
 		JOIN content_translations ct ON ct.content_id = c.id
 		JOIN categories cat ON cat.id = c.category_id AND cat.is_active = TRUE
 		JOIN category_translations cat_t ON cat_t.category_id = cat.id AND cat_t.locale = ct.locale
+		LEFT JOIN media_assets m ON m.id = c.main_media_id
 		WHERE ct.status = 'published'
 		ORDER BY ct.published_at DESC NULLS LAST, c.id DESC
 	`
@@ -320,15 +345,26 @@ func (g *Generator) fetchPublishedContents(ctx context.Context) ([]ContentRender
 	for rows.Next() {
 		var item ContentRender
 		var bodyBytes []byte
+		var mediaStorageKey string
 		if err := rows.Scan(
 			&item.ID, &item.Locale, &item.Title, &item.Slug, &item.Summary, &bodyBytes,
 			&item.Address, &item.Latitude, &item.Longitude,
 			&item.CategorySlug, &item.CategoryName,
+			&mediaStorageKey,
+			&item.PublishedAt, &item.UpdatedAt,
 		); err != nil {
 			return nil, nil, err
 		}
 
 		item.BodyHTML = renderBodyBlocksToHTML(bodyBytes)
+
+		if mediaStorageKey != "" {
+			item.MainMediaURL = "/media/" + mediaStorageKey
+		} else {
+			if match := firstImgRegex.FindStringSubmatch(string(item.BodyHTML)); len(match) > 1 {
+				item.MainMediaURL = match[1]
+			}
+		}
 
 		switch item.Locale {
 		case "id":
@@ -629,7 +665,9 @@ func (g *Generator) renderLocaleSite(
 	cats map[int64]CategoryRender,
 	altCats map[int64]CategoryRender,
 	contents []ContentRender,
+	altContents map[int64]ContentRender,
 	pages []StaticPageRender,
+	altPages map[int64]StaticPageRender,
 	menus []MenuItemRender,
 	curation *CurationData,
 	downloads []DownloadRender,
@@ -2236,17 +2274,23 @@ html {
 	}
 
 	// 1. Render Homepage: <locale>/index.html
+	homeCanonical := fmt.Sprintf("%s/%s/", g.baseURL, locale)
+	homeSEO := renderSEOHeadTags(sc, g.baseURL, SEOMetadata{
+		Title:        siteName,
+		Description:  tagline,
+		CanonicalURL: homeCanonical,
+		AlternateID:  fmt.Sprintf("%s/id/", g.baseURL),
+		AlternateEN:  fmt.Sprintf("%s/en/", g.baseURL),
+		ImageURL:     toAbsoluteURL(g.baseURL, sc.LogoURL),
+		Type:         "website",
+		Locale:       locale,
+	})
+
 	homeHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s — %s</title>
-    <meta name="description" content="%s">%s
-    <link rel="canonical" href="%s/%s/">
-    <link rel="alternate" hreflang="id" href="%s/id/">
-    <link rel="alternate" hreflang="en" href="%s/en/">
-    <link rel="alternate" hreflang="x-default" href="%s/id/">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">%s%s
     <style>%s</style>
 </head>
 <body>
@@ -2269,12 +2313,8 @@ html {
 </body>
 </html>`,
 		locale,
-		template.HTMLEscapeString(siteName),
-		template.HTMLEscapeString(tagline),
-		template.HTMLEscapeString(tagline),
+		homeSEO,
 		faviconTag,
-		g.baseURL, locale,
-		g.baseURL, g.baseURL, g.baseURL,
 		commonCSS,
 		headerHTML,
 		template.HTMLEscapeString(tagline),
@@ -2342,6 +2382,26 @@ html {
 			catDesc = tagline
 		}
 
+		catImageURL := toAbsoluteURL(g.baseURL, sc.LogoURL)
+		if len(catContents) > 0 && catContents[0].MainMediaURL != "" {
+			catImageURL = toAbsoluteURL(g.baseURL, catContents[0].MainMediaURL)
+		}
+
+		catSEO := renderSEOHeadTags(sc, g.baseURL, SEOMetadata{
+			Title:        cat.Name,
+			Description:  catDesc,
+			CanonicalURL: catCanonical,
+			AlternateID:  catAlternateID,
+			AlternateEN:  catAlternateEN,
+			ImageURL:     catImageURL,
+			Type:         "website",
+			Locale:       locale,
+			Breadcrumbs: []SEOBreadcrumb{
+				{Name: homeNavText, URL: fmt.Sprintf("%s/%s/", g.baseURL, locale)},
+				{Name: cat.Name, URL: catCanonical},
+			},
+		})
+
 		categoryBadgeLabel := "Kategori"
 		articlesSectionTitle := "Daftar Artikel & Panduan Destinasi"
 		emptyTitle := "Belum Ada Artikel dalam Kategori Ini"
@@ -2396,13 +2456,7 @@ html {
 <html lang="%s">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s — %s</title>
-    <meta name="description" content="%s">%s
-    <link rel="canonical" href="%s">
-    <link rel="alternate" hreflang="id" href="%s">
-    <link rel="alternate" hreflang="en" href="%s">
-    <link rel="alternate" hreflang="x-default" href="%s">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">%s%s
     <style>%s</style>
 </head>
 <body>
@@ -2423,14 +2477,8 @@ html {
 </body>
 </html>`,
 			locale,
-			template.HTMLEscapeString(cat.Name),
-			template.HTMLEscapeString(siteName),
-			template.HTMLEscapeString(catDesc),
+			catSEO,
 			faviconTag,
-			catCanonical,
-			catAlternateID,
-			catAlternateEN,
-			catAlternateID,
 			commonCSS,
 			catHeaderHTML,
 			locale,
@@ -2549,14 +2597,57 @@ html {
 		}
 
 		canonical := fmt.Sprintf("%s/%s/%s/%s/", g.baseURL, locale, c.CategorySlug, c.Slug)
+
+		altIDURL := ""
+		altENURL := ""
+		if alt, ok := altContents[c.ID]; ok && alt.Slug != "" {
+			if locale == "id" {
+				altIDURL = canonical
+				altENURL = fmt.Sprintf("%s/en/%s/%s/", g.baseURL, alt.CategorySlug, alt.Slug)
+			} else {
+				altENURL = canonical
+				altIDURL = fmt.Sprintf("%s/id/%s/%s/", g.baseURL, alt.CategorySlug, alt.Slug)
+			}
+		} else {
+			if locale == "id" {
+				altIDURL = canonical
+			} else {
+				altENURL = canonical
+			}
+		}
+
+		contentImageURL := toAbsoluteURL(g.baseURL, c.MainMediaURL)
+		if contentImageURL == "" && sc.LogoURL != "" {
+			contentImageURL = toAbsoluteURL(g.baseURL, sc.LogoURL)
+		}
+
+		contentSEO := renderSEOHeadTags(sc, g.baseURL, SEOMetadata{
+			Title:        c.Title,
+			Description:  c.Summary,
+			CanonicalURL: canonical,
+			AlternateID:  altIDURL,
+			AlternateEN:  altENURL,
+			ImageURL:     contentImageURL,
+			Type:         "article",
+			Locale:       locale,
+			PublishedAt:  c.PublishedAt,
+			UpdatedAt:    c.UpdatedAt,
+			CategoryName: c.CategoryName,
+			Address:      c.Address,
+			GeoLat:       c.Latitude,
+			GeoLng:       c.Longitude,
+			Breadcrumbs: []SEOBreadcrumb{
+				{Name: homeNavText, URL: fmt.Sprintf("%s/%s/", g.baseURL, locale)},
+				{Name: c.CategoryName, URL: fmt.Sprintf("%s/%s/%s/", g.baseURL, locale, c.CategorySlug)},
+				{Name: c.Title, URL: canonical},
+			},
+		})
+
 		detailHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s — %s</title>
-    <meta name="description" content="%s">%s
-    <link rel="canonical" href="%s">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">%s%s
     <style>%s</style>
 </head>
 <body>
@@ -2587,11 +2678,8 @@ html {
 </body>
 </html>`,
 			locale,
-			template.HTMLEscapeString(c.Title),
-			template.HTMLEscapeString(siteName),
-			template.HTMLEscapeString(c.Summary),
+			contentSEO,
 			faviconTag,
-			canonical,
 			commonCSS,
 			headerHTML,
 			locale,
@@ -2623,14 +2711,54 @@ html {
 		}
 
 		canonical := fmt.Sprintf("%s/%s/%s/", g.baseURL, locale, p.Slug)
+
+		pageTitle := p.Title
+		if p.SeoTitle != "" {
+			pageTitle = p.SeoTitle
+		}
+		pageDesc := p.SeoDesc
+		if pageDesc == "" {
+			pageDesc = tagline
+		}
+
+		altIDURL := ""
+		altENURL := ""
+		if alt, ok := altPages[p.ID]; ok && alt.Slug != "" {
+			if locale == "id" {
+				altIDURL = canonical
+				altENURL = fmt.Sprintf("%s/en/%s/", g.baseURL, alt.Slug)
+			} else {
+				altENURL = canonical
+				altIDURL = fmt.Sprintf("%s/id/%s/", g.baseURL, alt.Slug)
+			}
+		} else {
+			if locale == "id" {
+				altIDURL = canonical
+			} else {
+				altENURL = canonical
+			}
+		}
+
+		pageSEO := renderSEOHeadTags(sc, g.baseURL, SEOMetadata{
+			Title:        pageTitle,
+			Description:  pageDesc,
+			CanonicalURL: canonical,
+			AlternateID:  altIDURL,
+			AlternateEN:  altENURL,
+			ImageURL:     toAbsoluteURL(g.baseURL, sc.LogoURL),
+			Type:         "website",
+			Locale:       locale,
+			Breadcrumbs: []SEOBreadcrumb{
+				{Name: homeNavText, URL: fmt.Sprintf("%s/%s/", g.baseURL, locale)},
+				{Name: p.Title, URL: canonical},
+			},
+		})
+
 		pageHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s — %s</title>
-    <meta name="description" content="%s">%s
-    <link rel="canonical" href="%s">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">%s%s
     <style>%s</style>
 </head>
 <body>
@@ -2648,11 +2776,8 @@ html {
 </body>
 </html>`,
 			locale,
-			template.HTMLEscapeString(p.Title),
-			template.HTMLEscapeString(siteName),
-			template.HTMLEscapeString(p.SeoDesc),
+			pageSEO,
 			faviconTag,
-			canonical,
 			commonCSS,
 			headerHTML,
 			locale,
@@ -2769,17 +2894,26 @@ html {
 	unduhanCanonical := fmt.Sprintf("%s/%s/unduhan/", g.baseURL, locale)
 	unduhanHeaderHTML := buildHeader("/id/unduhan/", "/en/unduhan/")
 
+	unduhanSEO := renderSEOHeadTags(sc, g.baseURL, SEOMetadata{
+		Title:        unduhanPageTitle,
+		Description:  unduhanPageDesc,
+		CanonicalURL: unduhanCanonical,
+		AlternateID:  fmt.Sprintf("%s/id/unduhan/", g.baseURL),
+		AlternateEN:  fmt.Sprintf("%s/en/unduhan/", g.baseURL),
+		ImageURL:     toAbsoluteURL(g.baseURL, sc.LogoURL),
+		Type:         "website",
+		Locale:       locale,
+		Breadcrumbs: []SEOBreadcrumb{
+			{Name: homeNavText, URL: fmt.Sprintf("%s/%s/", g.baseURL, locale)},
+			{Name: unduhanPageTitle, URL: unduhanCanonical},
+		},
+	})
+
 	unduhanHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>%s — %s</title>
-    <meta name="description" content="%s">%s
-    <link rel="canonical" href="%s">
-    <link rel="alternate" hreflang="id" href="%s/id/unduhan/">
-    <link rel="alternate" hreflang="en" href="%s/en/unduhan/">
-    <link rel="alternate" hreflang="x-default" href="%s/id/unduhan/">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">%s%s
     <style>%s</style>
 </head>
 <body>
@@ -2833,12 +2967,8 @@ function filterItems(cat, q) {
 </body>
 </html>`,
 		locale,
-		template.HTMLEscapeString(unduhanPageTitle),
-		template.HTMLEscapeString(siteName),
-		template.HTMLEscapeString(unduhanPageDesc),
+		unduhanSEO,
 		faviconTag,
-		unduhanCanonical,
-		g.baseURL, g.baseURL, g.baseURL,
 		commonCSS,
 		unduhanHeaderHTML,
 		locale,
@@ -2991,6 +3121,252 @@ func (g *Generator) renderSitemap(
 	sb.WriteString("</urlset>\n")
 
 	return os.WriteFile(filepath.Join(targetDir, "sitemap.xml"), []byte(sb.String()), 0644)
+}
+
+var firstImgRegex = regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+)["']`)
+
+type SEOMetadata struct {
+	Title        string
+	Description  string
+	CanonicalURL string
+	ImageURL     string
+	Type         string // "website" or "article"
+	Locale       string // "id" or "en"
+	AlternateID  string
+	AlternateEN  string
+	PublishedAt  *time.Time
+	UpdatedAt    *time.Time
+	CategoryName string
+	Breadcrumbs  []SEOBreadcrumb
+	GeoLat       *float64
+	GeoLng       *float64
+	Address      string
+}
+
+type SEOBreadcrumb struct {
+	Name string
+	URL  string
+}
+
+func toAbsoluteURL(baseURL, pathOrURL string) string {
+	pathOrURL = strings.TrimSpace(pathOrURL)
+	if pathOrURL == "" {
+		return ""
+	}
+	if strings.HasPrefix(pathOrURL, "http://") || strings.HasPrefix(pathOrURL, "https://") {
+		return pathOrURL
+	}
+	if !strings.HasPrefix(pathOrURL, "/") {
+		pathOrURL = "/" + pathOrURL
+	}
+	return baseURL + pathOrURL
+}
+
+func renderSEOHeadTags(sc *SiteContext, baseURL string, meta SEOMetadata) string {
+	var sb strings.Builder
+
+	imageURL := meta.ImageURL
+	if imageURL == "" && sc != nil && sc.LogoURL != "" {
+		imageURL = sc.LogoURL
+	}
+	imageURL = toAbsoluteURL(baseURL, imageURL)
+
+	siteName := "pidiekab.web.id"
+	ogType := meta.Type
+	if ogType == "" {
+		ogType = "website"
+	}
+
+	ogLocale := "id_ID"
+	ogAltLocale := "en_US"
+	if meta.Locale == "en" {
+		ogLocale = "en_US"
+		ogAltLocale = "id_ID"
+	}
+
+	// 1. Basic Title, Description & Canonical
+	sb.WriteString(fmt.Sprintf(`
+    <title>%s — %s</title>
+    <meta name="description" content="%s">
+    <link rel="canonical" href="%s">`,
+		template.HTMLEscapeString(meta.Title),
+		template.HTMLEscapeString(siteName),
+		template.HTMLEscapeString(meta.Description),
+		meta.CanonicalURL,
+	))
+
+	// 2. Multilingual Hreflang
+	if meta.AlternateID != "" && meta.AlternateEN != "" {
+		sb.WriteString(fmt.Sprintf(`
+    <link rel="alternate" hreflang="id" href="%s">
+    <link rel="alternate" hreflang="en" href="%s">
+    <link rel="alternate" hreflang="x-default" href="%s">`,
+			meta.AlternateID, meta.AlternateEN, meta.AlternateID,
+		))
+	} else if meta.AlternateID != "" {
+		sb.WriteString(fmt.Sprintf(`
+    <link rel="alternate" hreflang="%s" href="%s">
+    <link rel="alternate" hreflang="x-default" href="%s">`,
+			meta.Locale, meta.CanonicalURL, meta.CanonicalURL,
+		))
+	}
+
+	// 3. Open Graph / Social Media (WhatsApp, Facebook, LinkedIn)
+	sb.WriteString(fmt.Sprintf(`
+    <!-- Open Graph / Social Media -->
+    <meta property="og:site_name" content="%s">
+    <meta property="og:type" content="%s">
+    <meta property="og:title" content="%s">
+    <meta property="og:description" content="%s">
+    <meta property="og:url" content="%s">
+    <meta property="og:image" content="%s">
+    <meta property="og:locale" content="%s">
+    <meta property="og:locale:alternate" content="%s">`,
+		template.HTMLEscapeString(siteName),
+		ogType,
+		template.HTMLEscapeString(meta.Title),
+		template.HTMLEscapeString(meta.Description),
+		meta.CanonicalURL,
+		imageURL,
+		ogLocale,
+		ogAltLocale,
+	))
+
+	// 4. Twitter Cards
+	sb.WriteString(fmt.Sprintf(`
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="%s">
+    <meta name="twitter:description" content="%s">
+    <meta name="twitter:image" content="%s">`,
+		template.HTMLEscapeString(meta.Title),
+		template.HTMLEscapeString(meta.Description),
+		imageURL,
+	))
+
+	// 5. Schema.org JSON-LD Structured Data
+	jsonLD := buildJSONLD(sc, baseURL, meta, imageURL)
+	if jsonLD != "" {
+		sb.WriteString(fmt.Sprintf(`
+    <!-- Schema.org JSON-LD Structured Data -->
+    <script type="application/ld+json">
+%s
+    </script>`, jsonLD))
+	}
+
+	return sb.String()
+}
+
+func buildJSONLD(sc *SiteContext, baseURL string, meta SEOMetadata, imageURL string) string {
+	graph := make([]map[string]any, 0)
+	logoURL := ""
+	if sc != nil && sc.LogoURL != "" {
+		logoURL = toAbsoluteURL(baseURL, sc.LogoURL)
+	}
+
+	orgSchema := map[string]any{
+		"@type":       "Organization",
+		"@id":         baseURL + "/#organization",
+		"name":        "pidiekab.web.id",
+		"url":         baseURL + "/",
+		"description": "Platform independen promosi potensi daerah & direktori informasi Kabupaten Pidie, Aceh. Bukan website resmi pemerintah.",
+	}
+	if logoURL != "" {
+		orgSchema["logo"] = map[string]any{
+			"@type": "ImageObject",
+			"url":   logoURL,
+		}
+	}
+
+	if meta.Type == "article" {
+		articleSchema := map[string]any{
+			"@type":            "Article",
+			"@id":              meta.CanonicalURL + "#article",
+			"headline":         meta.Title,
+			"description":      meta.Description,
+			"mainEntityOfPage": meta.CanonicalURL,
+			"inLanguage":       meta.Locale,
+			"author": map[string]any{
+				"@type": "Organization",
+				"name":  "pidiekab.web.id",
+				"url":   baseURL + "/",
+			},
+			"publisher": orgSchema,
+		}
+		if imageURL != "" {
+			articleSchema["image"] = imageURL
+		}
+		if meta.PublishedAt != nil && !meta.PublishedAt.IsZero() {
+			articleSchema["datePublished"] = meta.PublishedAt.Format(time.RFC3339)
+		}
+		if meta.UpdatedAt != nil && !meta.UpdatedAt.IsZero() {
+			articleSchema["dateModified"] = meta.UpdatedAt.Format(time.RFC3339)
+		}
+		graph = append(graph, articleSchema)
+
+		if meta.GeoLat != nil && meta.GeoLng != nil {
+			placeSchema := map[string]any{
+				"@type":       "Place",
+				"@id":         meta.CanonicalURL + "#place",
+				"name":        meta.Title,
+				"description": meta.Description,
+				"geo": map[string]any{
+					"@type":     "GeoCoordinates",
+					"latitude":  *meta.GeoLat,
+					"longitude": *meta.GeoLng,
+				},
+			}
+			if meta.Address != "" {
+				placeSchema["address"] = map[string]any{
+					"@type":           "PostalAddress",
+					"streetAddress":   meta.Address,
+					"addressLocality": "Kabupaten Pidie",
+					"addressRegion":   "Aceh",
+					"addressCountry":  "ID",
+				}
+			}
+			graph = append(graph, placeSchema)
+		}
+	} else {
+		siteSchema := map[string]any{
+			"@type":       "WebSite",
+			"@id":         meta.CanonicalURL + "#website",
+			"url":         meta.CanonicalURL,
+			"name":        "pidiekab.web.id",
+			"description": meta.Description,
+			"inLanguage":  meta.Locale,
+			"publisher":   orgSchema,
+		}
+		graph = append(graph, siteSchema, orgSchema)
+	}
+
+	if len(meta.Breadcrumbs) > 0 {
+		itemList := make([]map[string]any, 0, len(meta.Breadcrumbs))
+		for i, bc := range meta.Breadcrumbs {
+			itemList = append(itemList, map[string]any{
+				"@type":    "ListItem",
+				"position": i + 1,
+				"name":     bc.Name,
+				"item":     bc.URL,
+			})
+		}
+		graph = append(graph, map[string]any{
+			"@type":           "BreadcrumbList",
+			"@id":             meta.CanonicalURL + "#breadcrumb",
+			"itemListElement": itemList,
+		})
+	}
+
+	root := map[string]any{
+		"@context": "https://schema.org",
+		"@graph":   graph,
+	}
+
+	data, err := json.MarshalIndent(root, "    ", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 type TOCItem struct {
