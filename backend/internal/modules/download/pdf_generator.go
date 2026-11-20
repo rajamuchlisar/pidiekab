@@ -2,6 +2,7 @@ package download
 
 import (
 	"bytes"
+	"compress/zlib"
 	"fmt"
 	"strings"
 	"time"
@@ -89,19 +90,19 @@ func GenerateOfficialDocumentPDF(title, category, description, filename string) 
 	stream.WriteString("BT\n")
 	stream.WriteString("/F1 15 Tf\n")
 	stream.WriteString("0.05 0.3 0.2 rg\n")
-	stream.WriteString("55 785 Td (PEMERINTAH KABUPATEN PIDIE) Tj\n")
+	stream.WriteString("55 785 Td (PIDIEKAB.WEB.ID) Tj\n")
 	stream.WriteString("ET\n")
 
 	stream.WriteString("BT\n")
 	stream.WriteString("/F2 10 Tf\n")
 	stream.WriteString("0.35 0.4 0.45 rg\n")
-	stream.WriteString("55 768 Td (Portal Informasi Resmi & Layanan Publik — pidiekab.web.id) Tj\n")
+	stream.WriteString("55 768 Td (Portal Informasi & Panduan Wisata Kabupaten Pidie) Tj\n")
 	stream.WriteString("ET\n")
 
 	stream.WriteString("BT\n")
 	stream.WriteString("/F2 9 Tf\n")
 	stream.WriteString("0.4 0.45 0.5 rg\n")
-	stream.WriteString(fmt.Sprintf("55 748 Td (Kategori Dokumen: %s | Terbit: %s) Tj\n", sanitizePDFText(category), time.Now().Format("02 January 2006")))
+	stream.WriteString(fmt.Sprintf("55 748 Td (Kategori: %s | Terbit: %s) Tj\n", sanitizePDFText(category), time.Now().Format("02 January 2006")))
 	stream.WriteString("ET\n")
 
 	// Document Title Section
@@ -156,7 +157,7 @@ func GenerateOfficialDocumentPDF(title, category, description, filename string) 
 	stream.WriteString("BT\n")
 	stream.WriteString("/F1 11 Tf\n")
 	stream.WriteString("0.05 0.3 0.2 rg\n")
-	stream.WriteString(fmt.Sprintf("40 %.2f Td (II. INFORMASI WILAYAH & REKOMENDASI RESMI) Tj\n", yCursor))
+	stream.WriteString(fmt.Sprintf("40 %.2f Td (II. INFORMASI WILAYAH & PANDUAN PIDIE) Tj\n", yCursor))
 	stream.WriteString("ET\n")
 
 	yCursor -= 18
@@ -167,7 +168,7 @@ func GenerateOfficialDocumentPDF(title, category, description, filename string) 
 		"",
 		"Destinasi & Potensi Utama:",
 		"- Wisata Alam & Geopark: Tangse (Lembah Sejuk & Kopi Robusta), Guha Tujoh Laweung.",
-		"- Wisata Sejarah & Religi: Masjid Po Teumeureuhom, Kompleks Makam Daud Beureueh.",
+		"- Wisata Sejarah & Budaya: Masjid Po Teumeureuhom, Kompleks Makam Daud Beureueh.",
 		"- Kuliner Khas: Emping Melinjo Asli Pidie, Kupi Khop (Kopi Terbalik Sigli), Meukutop.",
 		"- Potensi Ekonomi: Pertanian Padi Organik, Perkebunan Kopi, Sektor Kelautan & Perikanan.",
 	}
@@ -203,17 +204,17 @@ func GenerateOfficialDocumentPDF(title, category, description, filename string) 
 	stream.WriteString("BT\n")
 	stream.WriteString("/F1 9 Tf\n")
 	stream.WriteString("0.1 0.2 0.35 rg\n")
-	stream.WriteString(fmt.Sprintf("55 %.2f Td (LEMBAR VERIFIKASI DIGITAL:) Tj\n", yCursor-18))
+	stream.WriteString(fmt.Sprintf("55 %.2f Td (LEMBAR INFORMASI DOKUMEN:) Tj\n", yCursor-18))
 	stream.WriteString("ET\n")
 
 	stream.WriteString("BT\n")
 	stream.WriteString("/F2 8.5 Tf\n")
 	stream.WriteString("0.3 0.35 0.4 rg\n")
-	stream.WriteString(fmt.Sprintf("55 %.2f Td (Nama Berkas: %s | Format: PDF 1.4 Standar Internasional) Tj\n", yCursor-32, sanitizePDFText(filename)))
+	stream.WriteString(fmt.Sprintf("55 %.2f Td (Nama Berkas: %s | Format: PDF 1.4 Standar) Tj\n", yCursor-32, sanitizePDFText(filename)))
 	stream.WriteString("0 -14 Td\n")
-	stream.WriteString("(Dikeluarkan Oleh: Pemerintah Kabupaten Pidie, Provinsi Aceh, Indonesia) Tj\n")
+	stream.WriteString("(Diterbitkan Melalui: Portal Komunitas & Wisata pidiekab.web.id) Tj\n")
 	stream.WriteString("0 -14 Td\n")
-	stream.WriteString("(Akses Publik Resmi: https://pidiekab.web.id/id/unduhan/) Tj\n")
+	stream.WriteString("(Akses Unduhan: https://pidiekab.web.id/id/unduhan/) Tj\n")
 	stream.WriteString("ET\n")
 
 	// Footer Bar
@@ -223,9 +224,9 @@ func GenerateOfficialDocumentPDF(title, category, description, filename string) 
 	stream.WriteString("Q\n")
 
 	stream.WriteString("BT\n")
-	stream.WriteString("/F2 8 Tf\n")
+	stream.WriteString("/F2 7.5 Tf\n")
 	stream.WriteString("0.5 0.55 0.6 rg\n")
-	stream.WriteString("40 38 Td (Hak Cipta Pemerintah Kabupaten Pidie — Sigli, Aceh. Dokumen ini dapat diunduh bebas untuk keperluan publik.) Tj\n")
+	stream.WriteString("40 38 Td (Hak Cipta PidieKab - Sigli, Aceh. Platform independen direktori informasi & pariwisata, bukan website resmi pemerintah.) Tj\n")
 	stream.WriteString("ET\n")
 
 	stream.WriteString("q\n")
@@ -233,13 +234,21 @@ func GenerateOfficialDocumentPDF(title, category, description, filename string) 
 	stream.WriteString("0 0 595.28 6 re f\n")
 	stream.WriteString("Q\n")
 
-	streamBytes := stream.Bytes()
-
 	// 3: Page -> Parent 2, Contents 4, Resources (Fonts 5, 6)
 	b.addObj("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>")
 
-	// 4: Stream object
-	b.addObj(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(streamBytes), streamBytes))
+	// 4: Compressed Stream object (FlateDecode) to minimize file size on disk and wire
+	var flateBuf bytes.Buffer
+	zw, err := zlib.NewWriterLevel(&flateBuf, zlib.BestCompression)
+	if err == nil {
+		_, _ = zw.Write(stream.Bytes())
+		_ = zw.Close()
+		compressedStream := flateBuf.Bytes()
+		b.addObj(fmt.Sprintf("<< /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream", len(compressedStream), compressedStream))
+	} else {
+		streamBytes := stream.Bytes()
+		b.addObj(fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(streamBytes), streamBytes))
+	}
 
 	// 5: Font F1 (Helvetica-Bold)
 	b.addObj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>")

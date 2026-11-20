@@ -7,7 +7,7 @@ import (
 )
 
 func TestGenerateOfficialDocumentPDF(t *testing.T) {
-	title := "Panduan Resmi Wisata & Kebudayaan Kabupaten Pidie"
+	title := "Panduan Wisata & Kebudayaan Kabupaten Pidie"
 	cat := "Panduan Wisata"
 	desc := "Panduan lengkap destinasi wisata alam, sejarah, dan sentra kuliner khas di Kabupaten Pidie."
 	filename := "panduan-wisata-pidie.pdf"

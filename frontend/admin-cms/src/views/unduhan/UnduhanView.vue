@@ -167,6 +167,16 @@ async function handleFileUpload(e: Event) {
   const file = target.files[0]
   if (!file) return
 
+  const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB limit
+  if (file.size > MAX_FILE_SIZE) {
+    notification.error(
+      'Ukuran Berkas Melebihi Batas',
+      `Ukuran berkas (${formatFileSize(file.size)}) melebihi batas maksimum 10 MB. Silakan kompres berkas atau pilih berkas yang lebih kecil.`
+    )
+    if (fileInputRef.value) fileInputRef.value.value = ''
+    return
+  }
+
   isUploading.value = true
 
   const formData = new FormData()
@@ -191,7 +201,15 @@ async function handleFileUpload(e: Event) {
       form.title_id = cleanName.charAt(0).toUpperCase() + cleanName.slice(1)
     }
 
-    notification.success('Berkas Terunggah', `File ${file.name} berhasil diunggah.`)
+    if (res.file_size < file.size) {
+      const savedPercent = Math.round(((file.size - res.file_size) / file.size) * 100)
+      notification.success(
+        'Berkas Terunggah & Terkompresi',
+        `File ${file.name} berhasil dioptimasi & dikompres (hemat ${savedPercent}%: ${formatFileSize(file.size)} ➔ ${formatFileSize(res.file_size)}).`
+      )
+    } else {
+      notification.success('Berkas Terunggah', `File ${file.name} (${formatFileSize(res.file_size)}) berhasil diunggah.`)
+    }
   } catch (err: any) {
     notification.error('Gagal Mengunggah Berkas', err.detail || 'Terjadi kesalahan saat mengunggah file.', err.requestId)
   } finally {
@@ -540,7 +558,7 @@ onMounted(() => {
                     <BladeIcon name="arrow-up-tray" size="18" />
                     <span>Pilih Berkas dari Komputer</span>
                   </button>
-                  <span class="upload-hint">Mendukung PDF, DOCX, XLSX, ZIP, gambar (Maks. 50MB)</span>
+                  <span class="upload-hint">Maksimal 10 MB per berkas (PDF, DOCX, XLSX, ZIP, Gambar). Otomatis dioptimasi & dikompres agar hemat penyimpanan server.</span>
                 </div>
 
                 <!-- File Info Preview -->

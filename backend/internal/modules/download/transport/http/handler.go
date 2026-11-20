@@ -456,8 +456,13 @@ func (h *DownloadHandler) HandleUploadDownloadFile(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// 50 MB max limit for documents & downloads
-	_ = r.ParseMultipartForm(50 * 1024 * 1024)
+	// 10 MB max limit enforced at request level
+	r.Body = http.MaxBytesReader(w, r.Body, download.MaxDownloadFileSizeBytes+1024*1024)
+	if err := r.ParseMultipartForm(download.MaxDownloadFileSizeBytes); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "FILE_TOO_LARGE", "Ukuran unggahan melebihi batas maksimum 10 MB")
+		return
+	}
+
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "FILE_REQUIRED", "Form field 'file' is required")
@@ -465,23 +470,51 @@ func (h *DownloadHandler) HandleUploadDownloadFile(w http.ResponseWriter, r *htt
 	}
 	defer file.Close()
 
-	ext := strings.TrimPrefix(filepath.Ext(header.Filename), ".")
-	storageKey, size, err := h.storage.Save(r.Context(), ext, file)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "STORAGE_ERROR", "Failed to save uploaded file")
+	if header.Size > download.MaxDownloadFileSizeBytes {
+		writeJSONError(w, http.StatusBadRequest, "FILE_TOO_LARGE", "Ukuran berkas melebihi batas maksimum 10 MB")
 		return
 	}
 
-	fileType := strings.ToUpper(ext)
-	if fileType == "" {
-		fileType = "FILE"
+	rawBytes, err := io.ReadAll(io.LimitReader(file, download.MaxDownloadFileSizeBytes+1))
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "READ_ERROR", "Gagal membaca berkas unggahan")
+		return
+	}
+	if len(rawBytes) > download.MaxDownloadFileSizeBytes {
+		writeJSONError(w, http.StatusBadRequest, "FILE_TOO_LARGE", "Ukuran berkas melebihi batas maksimum 10 MB")
+		return
+	}
+
+	optimizedBytes, fileType, finalSize, err := download.OptimizeDownloadFile(header.Filename, rawBytes)
+	if err != nil {
+		if errors.Is(err, download.ErrFileTooLarge) {
+			writeJSONError(w, http.StatusBadRequest, "FILE_TOO_LARGE", err.Error())
+			return
+		}
+		if errors.Is(err, download.ErrDisallowedExtension) {
+			writeJSONError(w, http.StatusBadRequest, "DISALLOWED_FILE_TYPE", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusBadRequest, "OPTIMIZATION_ERROR", err.Error())
+		return
+	}
+
+	ext := strings.ToLower(strings.TrimPrefix(filepath.Ext(header.Filename), "."))
+	storageKey, sizeWritten, err := h.storage.Save(r.Context(), ext, bytes.NewReader(optimizedBytes))
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "STORAGE_ERROR", "Gagal menyimpan berkas ke storage")
+		return
+	}
+
+	if finalSize <= 0 {
+		finalSize = sizeWritten
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"file_url":  "/media/" + storageKey,
 		"file_name": header.Filename,
-		"file_size": size,
+		"file_size": finalSize,
 		"file_type": fileType,
 	})
 }

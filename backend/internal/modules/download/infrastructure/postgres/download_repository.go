@@ -52,11 +52,13 @@ func (r *DownloadRepository) EnsureSchema(ctx context.Context) error {
 		return fmt.Errorf("failed to ensure downloads table: %w", err)
 	}
 
-	// Clean up any legacy or dead asset URLs
+	// Clean up any legacy or dead asset URLs and ensure community portal branding (not government)
 	_, _ = r.pool.Exec(ctx, `
 		UPDATE downloads 
-		SET file_url = '/api/v1/public/downloads/' || id || '/file'
-		WHERE file_url LIKE '%/assets/%';
+		SET file_url = '/api/v1/public/downloads/' || id || '/file',
+		    title_id = REPLACE(title_id, 'Resmi ', ''),
+		    title_en = REPLACE(title_en, 'Official ', '')
+		WHERE file_url LIKE '%/assets/%' OR title_id LIKE '%Resmi%' OR title_en LIKE '%Official%' OR id IN (1, 2, 3);
 	`)
 
 	// Seed baseline download if empty
@@ -66,7 +68,7 @@ func (r *DownloadRepository) EnsureSchema(ctx context.Context) error {
 		sampleQuery := `
 		INSERT INTO downloads (title_id, title_en, category, description_id, description_en, file_url, file_name, file_size, file_type, sort_order)
 		VALUES 
-		('Panduan Resmi Wisata & Kebudayaan Kabupaten Pidie', 'Official Travel & Cultural Guide of Pidie Regency', 'Panduan Wisata', 'Panduan lengkap destinasi wisata alam, sejarah, dan sentra kuliner khas di Kabupaten Pidie.', 'Comprehensive guide to nature, heritage, and culinary destinations across Pidie Regency.', '/api/v1/public/downloads/1/file', 'panduan-wisata-pidie.pdf', 2450000, 'PDF', 1),
+		('Panduan Wisata & Kebudayaan Kabupaten Pidie', 'Travel & Cultural Guide of Pidie Regency', 'Panduan Wisata', 'Panduan lengkap destinasi wisata alam, sejarah, dan sentra kuliner khas di Kabupaten Pidie.', 'Comprehensive guide to nature, heritage, and culinary destinations across Pidie Regency.', '/api/v1/public/downloads/1/file', 'panduan-wisata-pidie.pdf', 2450000, 'PDF', 1),
 		('Peta Wisata & Direktori Kecamatan Pidie', 'Pidie Tourism Map & Sub-district Directory', 'Peta & Brosur', 'Peta persebaran objek wisata, rute transportasi, dan informasi fasilitas publik di seluruh kecamatan.', 'Tourist map showing destinations, transport routes, and public facilities across Pidie.', '/api/v1/public/downloads/2/file', 'peta-wisata-pidie.pdf', 3890000, 'PDF', 2),
 		('Profil Potensi Investasi Daerah Kabupaten Pidie', 'Pidie Regional Investment & Economic Profile', 'Informasi Publik', 'Dokumen informasi komoditas unggulan pertanian, perkebunan, kelautan, dan peluang investasi.', 'Overview of leading agricultural, marine, and commercial investment opportunities in Pidie.', '/api/v1/public/downloads/3/file', 'profil-investasi-pidie.pdf', 1780000, 'PDF', 3)
 		ON CONFLICT DO NOTHING;

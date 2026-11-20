@@ -2380,16 +2380,16 @@ body {
 		return err
 	}
 
-	unduhanPageTitle := "Pusat Unduhan & Dokumen Publik"
-	unduhanPageDesc := "Kumpulan panduan wisata, regulasi daerah, peta direktori, dan formulir informasi resmi Kabupaten Pidie yang dapat diunduh bebas."
+	unduhanPageTitle := "Pusat Unduhan & Dokumen"
+	unduhanPageDesc := "Kumpulan panduan wisata, peta direktori, brosur informasi, dan dokumen seputar Kabupaten Pidie yang dapat diunduh bebas."
 	allCatText := "Semua Kategori"
 	searchPlaceholder := "Cari dokumen atau kata kunci..."
 	downloadBtnText := "Unduh Dokumen &darr;"
 	timesDownloadedText := "diunduh"
 	emptyDownloadsText := "Belum ada dokumen publik yang tersedia untuk saat ini."
 	if locale == "en" {
-		unduhanPageTitle = "Download Center & Public Documents"
-		unduhanPageDesc = "Official travel guides, regional regulations, tourist maps, and public documents of Pidie Regency, Aceh."
+		unduhanPageTitle = "Download Center & Documents"
+		unduhanPageDesc = "Collection of travel guides, tourism maps, directories, and documents for exploring Pidie Regency, Aceh."
 		allCatText = "All Categories"
 		searchPlaceholder = "Search documents or keywords..."
 		downloadBtnText = "Download File &darr;"
