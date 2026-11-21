@@ -240,3 +240,31 @@ func (r *PageRepository) UpdateStatus(ctx context.Context, pageID int64, locale,
 	}
 	return nil
 }
+
+func (r *PageRepository) UpdatePageKey(ctx context.Context, id int64, newKey string) error {
+	query := `
+		UPDATE static_pages
+		SET page_key = $1, updated_at = NOW()
+		WHERE id = $2
+	`
+	tag, err := r.pool.Exec(ctx, query, newKey, id)
+	if err != nil {
+		return fmt.Errorf("failed to update static page key: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrPageNotFound
+	}
+	return nil
+}
+
+func (r *PageRepository) DeletePage(ctx context.Context, id int64) error {
+	query := `DELETE FROM static_pages WHERE id = $1`
+	tag, err := r.pool.Exec(ctx, query, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete static page: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return domain.ErrPageNotFound
+	}
+	return nil
+}

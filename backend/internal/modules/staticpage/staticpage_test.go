@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -136,5 +137,27 @@ func TestStaticPageLifecycle(t *testing.T) {
 	}
 	if detail.Translations["id"].Status != pageDomain.StatusPublished {
 		t.Errorf("expected translation status published, got %s", detail.Translations["id"].Status)
+	}
+
+	// 4. Update Page Key
+	newKey := fmt.Sprintf("updated-terms-%d", time.Now().UnixNano())
+	if err := service.UpdatePageKey(ctx, 1, pageID, newKey); err != nil {
+		t.Fatalf("failed to update page key: %v", err)
+	}
+	updatedDetail, err := service.GetPage(ctx, pageID)
+	if err != nil {
+		t.Fatalf("failed to get updated page: %v", err)
+	}
+	if updatedDetail.PageKey != newKey {
+		t.Errorf("expected page key %s, got %s", newKey, updatedDetail.PageKey)
+	}
+
+	// 5. Delete static page
+	if err := service.DeletePage(ctx, 1, pageID); err != nil {
+		t.Fatalf("failed to delete static page: %v", err)
+	}
+	_, err = service.GetPage(ctx, pageID)
+	if !errors.Is(err, pageDomain.ErrPageNotFound) {
+		t.Fatalf("expected ErrPageNotFound after delete, got %v", err)
 	}
 }

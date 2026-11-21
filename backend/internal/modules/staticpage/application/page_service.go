@@ -230,6 +230,63 @@ func (s *PageService) ArchiveTranslation(ctx context.Context, adminID int64, pag
 	return nil
 }
 
+func (s *PageService) UpdatePageKey(ctx context.Context, adminID int64, pageID int64, newKey string) error {
+	if err := domain.ValidatePageKey(newKey); err != nil {
+		return err
+	}
+	cleanKey := strings.TrimSpace(newKey)
+
+	existing, err := s.repo.GetPageByID(ctx, pageID)
+	if err != nil {
+		return err
+	}
+	if existing.PageKey == cleanKey {
+		return nil
+	}
+
+	if err := s.repo.UpdatePageKey(ctx, pageID, cleanKey); err != nil {
+		return err
+	}
+
+	s.recordAudit(ctx, &adminID, "static_page.rename_key", "static_page", &pageID, map[string]any{
+		"old_key": existing.PageKey,
+		"new_key": cleanKey,
+	}, nil)
+
+	if s.enqueuer != nil {
+		_, _ = s.enqueuer.Enqueue(ctx, nil, "static_page.update", map[string]any{
+			"page_id":  pageID,
+			"page_key": cleanKey,
+		})
+	}
+
+	return nil
+}
+
+func (s *PageService) DeletePage(ctx context.Context, adminID int64, pageID int64) error {
+	page, err := s.repo.GetPageByID(ctx, pageID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.repo.DeletePage(ctx, pageID); err != nil {
+		return err
+	}
+
+	s.recordAudit(ctx, &adminID, "static_page.delete", "static_page", &pageID, map[string]any{
+		"page_key": page.PageKey,
+	}, nil)
+
+	if s.enqueuer != nil {
+		_, _ = s.enqueuer.Enqueue(ctx, nil, "static_page.delete", map[string]any{
+			"page_id":  pageID,
+			"page_key": page.PageKey,
+		})
+	}
+
+	return nil
+}
+
 func (s *PageService) recordAudit(ctx context.Context, adminID *int64, action, entityType string, entityID *int64, meta map[string]any, ip *string) {
 	if s.audit == nil {
 		return

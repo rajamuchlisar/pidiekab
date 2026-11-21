@@ -41,6 +41,8 @@ func (h *PageHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/admin/pages", wrapProtected(h.HandleCreatePage))
 	mux.Handle("GET /api/v1/admin/pages/{id}", wrapGet(h.HandleGetPage))
 	mux.Handle("PUT /api/v1/admin/pages/{id}", wrapProtected(h.HandleUpdatePage))
+	mux.Handle("PUT /api/v1/admin/pages/{id}/key", wrapProtected(h.HandleUpdatePageKey))
+	mux.Handle("DELETE /api/v1/admin/pages/{id}", wrapProtected(h.HandleDeletePage))
 	mux.Handle("PUT /api/v1/admin/pages/{id}/translations/{locale}", wrapProtected(h.HandleSaveTranslation))
 	mux.Handle("POST /api/v1/admin/pages/{id}/translations/{locale}/publish", wrapProtected(h.HandlePublishTranslation))
 	mux.Handle("POST /api/v1/admin/pages/{id}/translations/{locale}/archive", wrapProtected(h.HandleArchiveTranslation))
@@ -50,6 +52,8 @@ func (h *PageHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("POST /api/v1/admin/static-pages", wrapProtected(h.HandleCreatePage))
 	mux.Handle("GET /api/v1/admin/static-pages/{id}", wrapGet(h.HandleGetPage))
 	mux.Handle("PUT /api/v1/admin/static-pages/{id}", wrapProtected(h.HandleUpdatePage))
+	mux.Handle("PUT /api/v1/admin/static-pages/{id}/key", wrapProtected(h.HandleUpdatePageKey))
+	mux.Handle("DELETE /api/v1/admin/static-pages/{id}", wrapProtected(h.HandleDeletePage))
 	mux.Handle("PUT /api/v1/admin/static-pages/{id}/translations/{locale}", wrapProtected(h.HandleSaveTranslation))
 	mux.Handle("POST /api/v1/admin/static-pages/{id}/translations/{locale}/publish", wrapProtected(h.HandlePublishTranslation))
 	mux.Handle("POST /api/v1/admin/static-pages/{id}/translations/{locale}/archive", wrapProtected(h.HandleArchiveTranslation))
@@ -206,6 +210,18 @@ func (h *PageHandler) HandleUpdatePage(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "INVALID_JSON", "Malformed JSON body")
 		return
+	}
+
+	cleanKey := strings.TrimSpace(req.PageKey)
+	if cleanKey != "" {
+		if err := h.service.UpdatePageKey(r.Context(), admin.ID, id, cleanKey); err != nil {
+			if errors.Is(err, domain.ErrPageKeyEmpty) || errors.Is(err, domain.ErrPageKeyInvalid) {
+				writeJSONError(w, http.StatusBadRequest, "INVALID_PAGE_KEY", err.Error())
+				return
+			}
+			writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update page key: "+err.Error())
+			return
+		}
 	}
 
 	for locale, tReq := range req.Translations {
@@ -388,6 +404,86 @@ func (h *PageHandler) HandleArchiveTranslation(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"message": "Static page translation archived successfully",
+	})
+}
+
+type updatePageKeyRequest struct {
+	PageKey string `json:"page_key"`
+}
+
+func (h *PageHandler) HandleUpdatePageKey(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok || admin == nil {
+		writeJSONError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Admin session required")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_ID", "Invalid static page ID")
+		return
+	}
+
+	var req updatePageKeyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_JSON", "Malformed JSON body")
+		return
+	}
+
+	cleanKey := strings.TrimSpace(req.PageKey)
+	if err := h.service.UpdatePageKey(r.Context(), admin.ID, id, cleanKey); err != nil {
+		if errors.Is(err, domain.ErrPageNotFound) {
+			writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "Static page not found")
+			return
+		}
+		if errors.Is(err, domain.ErrPageKeyEmpty) || errors.Is(err, domain.ErrPageKeyInvalid) {
+			writeJSONError(w, http.StatusBadRequest, "INVALID_PAGE_KEY", err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update static page key")
+		return
+	}
+
+	page, err := h.service.GetPage(r.Context(), id)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to get updated static page")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"data":    page,
+		"page":    page,
+		"message": "Nama kunci halaman berhasil diperbarui",
+	})
+}
+
+func (h *PageHandler) HandleDeletePage(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok || admin == nil {
+		writeJSONError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Admin session required")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_ID", "Invalid static page ID")
+		return
+	}
+
+	if err := h.service.DeletePage(r.Context(), admin.ID, id); err != nil {
+		if errors.Is(err, domain.ErrPageNotFound) {
+			writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "Static page not found")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete static page")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"message": "Halaman statis berhasil dihapus",
+		"id":      id,
 	})
 }
 

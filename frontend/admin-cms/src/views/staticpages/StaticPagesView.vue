@@ -18,6 +18,17 @@ const showCreateModal = ref(false)
 const newPageKey = ref('')
 const isCreating = ref(false)
 
+// Rename page key modal
+const showRenameModal = ref(false)
+const renamePageKey = ref('')
+const renameTargetPage = ref<any | null>(null)
+const isRenaming = ref(false)
+
+// Delete confirmation modal
+const showDeleteModal = ref(false)
+const deleteTargetPage = ref<any | null>(null)
+const isDeleting = ref(false)
+
 const form = reactive({
   pageKey: '',
   translations: {
@@ -143,6 +154,64 @@ function openPublicPage() {
   }
 }
 
+function openRenameModal(page?: any) {
+  const target = page || selectedPage.value
+  if (!target) return
+  renameTargetPage.value = target
+  renamePageKey.value = target.pageKey || target.page_key || ''
+  showRenameModal.value = true
+}
+
+async function submitRename() {
+  if (!renameTargetPage.value) return
+  const cleanKey = renamePageKey.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-')
+  if (!cleanKey) {
+    notification.error('Validasi Gagal', 'Nama kunci halaman tidak boleh kosong.')
+    return
+  }
+
+  isRenaming.value = true
+  try {
+    await api.put(`/api/v1/admin/static-pages/${renameTargetPage.value.id}/key`, { page_key: cleanKey })
+    notification.success('Nama Halaman Diperbarui', `Nama kunci halaman berhasil diubah menjadi "${cleanKey}".`)
+    showRenameModal.value = false
+    await loadPages(cleanKey)
+  } catch (err: any) {
+    notification.error('Gagal Mengubah Nama', err.detail || err.message || 'Terjadi kesalahan sistem.', err.requestId)
+  } finally {
+    isRenaming.value = false
+  }
+}
+
+function openDeleteModal(page?: any) {
+  const target = page || selectedPage.value
+  if (!target) return
+  deleteTargetPage.value = target
+  showDeleteModal.value = true
+}
+
+async function submitDelete() {
+  if (!deleteTargetPage.value) return
+  const targetId = deleteTargetPage.value.id
+  const targetKey = deleteTargetPage.value.pageKey || deleteTargetPage.value.page_key
+
+  isDeleting.value = true
+  try {
+    await api.delete(`/api/v1/admin/static-pages/${targetId}`)
+    notification.success('Halaman Dihapus', `Halaman "${targetKey}" berhasil dihapus.`)
+    showDeleteModal.value = false
+    if (selectedPage.value?.id === targetId) {
+      selectedPage.value = null
+    }
+    deleteTargetPage.value = null
+    await loadPages()
+  } catch (err: any) {
+    notification.error('Gagal Menghapus Halaman', err.detail || err.message || 'Terjadi kesalahan saat menghapus.', err.requestId)
+  } finally {
+    isDeleting.value = false
+  }
+}
+
 onMounted(() => {
   loadPages()
 })
@@ -182,18 +251,38 @@ onMounted(() => {
               :class="{ active: selectedPage?.id === p.id }"
               @click="selectPage(p)"
             >
-              <div class="page-meta">
-                <span class="page-key">
-                  <BladeIcon name="document-text" size="16" />
-                  <span>{{ p.pageKey || p.page_key }}</span>
-                </span>
-                <span class="page-label">
-                  <span
-                    class="status-dot"
-                    :class="p.translations?.id?.status === 'published' ? 'dot-published' : 'dot-draft'"
-                  ></span>
-                  ID: {{ p.translations?.id?.status || 'draft' }} &bull; EN: {{ p.translations?.en?.status || 'draft' }}
-                </span>
+              <div class="page-item-content">
+                <div class="page-meta">
+                  <span class="page-key">
+                    <BladeIcon name="document-text" size="16" />
+                    <span>{{ p.pageKey || p.page_key }}</span>
+                  </span>
+                  <span class="page-label">
+                    <span
+                      class="status-dot"
+                      :class="p.translations?.id?.status === 'published' ? 'dot-published' : 'dot-draft'"
+                    ></span>
+                    ID: {{ p.translations?.id?.status || 'draft' }} &bull; EN: {{ p.translations?.en?.status || 'draft' }}
+                  </span>
+                </div>
+                <div class="page-item-actions" @click.stop>
+                  <button
+                    type="button"
+                    class="action-icon-btn edit-key-btn"
+                    title="Ubah Nama / Key Halaman"
+                    @click="openRenameModal(p)"
+                  >
+                    <BladeIcon name="pencil-square" size="15" />
+                  </button>
+                  <button
+                    type="button"
+                    class="action-icon-btn delete-btn"
+                    title="Hapus Halaman"
+                    @click="openDeleteModal(p)"
+                  >
+                    <BladeIcon name="trash" size="15" />
+                  </button>
+                </div>
               </div>
             </li>
           </ul>
@@ -203,9 +292,20 @@ onMounted(() => {
         <div v-if="selectedPage" class="card editor-card">
           <div class="editor-header">
             <div>
-              <h3 class="card-title">
-                Edit Halaman: <code class="key-tag">{{ form.pageKey }}</code>
-              </h3>
+              <div class="header-title-row">
+                <h3 class="card-title">
+                  Edit Halaman: <code class="key-tag">{{ form.pageKey }}</code>
+                </h3>
+                <button
+                  type="button"
+                  class="btn-inline-action"
+                  title="Ubah Nama / Key Halaman"
+                  @click="openRenameModal(selectedPage)"
+                >
+                  <BladeIcon name="pencil" size="14" />
+                  <span>Ubah Nama</span>
+                </button>
+              </div>
               <p class="card-sub">Isi konten dan kelola publikasi independen untuk Bahasa Indonesia dan English.</p>
             </div>
             <div class="header-actions">
@@ -218,6 +318,15 @@ onMounted(() => {
               >
                 <BladeIcon name="arrow-top-right-on-square" size="16" />
                 <span>Lihat Publik</span>
+              </button>
+              <button
+                type="button"
+                class="btn btn-danger-outline"
+                title="Hapus Halaman Ini"
+                @click="openDeleteModal(selectedPage)"
+              >
+                <BladeIcon name="trash" size="16" />
+                <span>Hapus Halaman</span>
               </button>
               <button class="btn btn-primary" :disabled="isSaving" @click="savePage">
                 <BladeIcon name="bookmark" size="16" />
@@ -293,6 +402,17 @@ onMounted(() => {
             </div>
           </div>
         </div>
+
+        <!-- Empty selection / no pages state (Right) -->
+        <div v-else class="card empty-editor-card">
+          <BladeIcon name="document-duplicate" size="48" class="empty-icon" />
+          <h3>Tidak Ada Halaman yang Dipilih</h3>
+          <p>Pilih halaman dari daftar di sebelah kiri atau buat halaman informasi baru.</p>
+          <button class="btn btn-primary" @click="showCreateModal = true">
+            <BladeIcon name="plus" size="18" />
+            <span>Tambah Halaman Baru</span>
+          </button>
+        </div>
       </div>
 
       <!-- Create New Page Modal -->
@@ -322,6 +442,73 @@ onMounted(() => {
             <button class="btn btn-primary" :disabled="!newPageKey.trim() || isCreating" @click="createNewPage">
               <BladeIcon name="check" size="16" />
               <span>{{ isCreating ? 'Membuat...' : 'Buat Halaman' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rename Page Modal -->
+      <div v-if="showRenameModal" class="modal-backdrop" @click.self="showRenameModal = false">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h3>Ubah Nama / Key Halaman</h3>
+            <button class="modal-close" @click="showRenameModal = false" title="Tutup">
+              <BladeIcon name="x-mark" size="20" />
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Nama / Key Identifikasi Baru *</label>
+              <input
+                v-model="renamePageKey"
+                type="text"
+                class="input-control"
+                placeholder="misal: tentang-kami, kontak, faq"
+                @keyup.enter="submitRename"
+              />
+              <span class="field-hint">Hanya huruf kecil, angka, dan tanda hubung (-). Contoh: kontak-kami</span>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" :disabled="isRenaming" @click="showRenameModal = false">Batal</button>
+            <button class="btn btn-primary" :disabled="!renamePageKey.trim() || isRenaming" @click="submitRename">
+              <BladeIcon name="check" size="16" />
+              <span>{{ isRenaming ? 'Menyimpan...' : 'Simpan Nama' }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Delete Confirmation Modal -->
+      <div v-if="showDeleteModal" class="modal-backdrop" @click.self="showDeleteModal = false">
+        <div class="modal-card">
+          <div class="modal-header modal-header-danger">
+            <h3>Hapus Halaman Statis</h3>
+            <button class="modal-close" @click="showDeleteModal = false" title="Tutup">
+              <BladeIcon name="x-mark" size="20" />
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="delete-warning">
+              <div class="warning-icon-wrapper">
+                <BladeIcon name="exclamation-triangle" size="28" class="warning-icon" />
+              </div>
+              <div class="warning-text">
+                <p class="warning-title">
+                  Apakah Anda yakin ingin menghapus halaman
+                  <strong>"{{ deleteTargetPage?.pageKey || deleteTargetPage?.page_key }}"</strong>?
+                </p>
+                <p class="warning-sub">
+                  Semua terjemahan (ID & EN), konten, serta riwayat halaman ini akan dihapus secara permanen. Tindakan ini tidak dapat dibatalkan.
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" :disabled="isDeleting" @click="showDeleteModal = false">Batal</button>
+            <button class="btn btn-danger" :disabled="isDeleting" @click="submitDelete">
+              <BladeIcon name="trash" size="16" />
+              <span>{{ isDeleting ? 'Menghapus...' : 'Ya, Hapus Halaman' }}</span>
             </button>
           </div>
         </div>
@@ -443,6 +630,172 @@ onMounted(() => {
 .page-item.active {
   border-color: #059669;
   background: #ecfdf5;
+}
+
+.page-item-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.page-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+
+.page-item:hover .page-item-actions,
+.page-item.active .page-item-actions {
+  opacity: 1;
+}
+
+.action-icon-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 0.3rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  transition: all 0.15s ease;
+}
+
+.action-icon-btn:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+}
+
+.edit-key-btn:hover {
+  color: #059669;
+  border-color: #a7f3d0;
+  background: #f0fdf4;
+}
+
+.delete-btn:hover {
+  color: #dc2626;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-inline-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-inline-action:hover {
+  border-color: #059669;
+  color: #059669;
+  background: #f0fdf4;
+}
+
+.btn-danger-outline {
+  background: #ffffff;
+  border: 1px solid #fca5a5;
+  color: #dc2626;
+}
+
+.btn-danger-outline:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #dc2626;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.empty-editor-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  color: #64748b;
+  gap: 1rem;
+}
+
+.empty-icon {
+  color: #94a3b8;
+}
+
+.empty-editor-card h3 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.empty-editor-card p {
+  margin: 0;
+  max-width: 400px;
+  font-size: 0.875rem;
+}
+
+.modal-header-danger {
+  background: #fef2f2;
+  border-bottom: 1px solid #fecaca;
+}
+
+.modal-header-danger h3 {
+  color: #991b1b;
+}
+
+.delete-warning {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.warning-icon-wrapper {
+  background: #fee2e2;
+  color: #dc2626;
+  padding: 0.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.warning-title {
+  margin: 0 0 0.5rem 0;
+  font-weight: 600;
+  color: #1e293b;
+  font-size: 0.95rem;
+}
+
+.warning-sub {
+  margin: 0;
+  font-size: 0.825rem;
+  color: #64748b;
+  line-height: 1.45;
 }
 
 .page-meta {
