@@ -503,6 +503,11 @@ func handleSeedDraftsCLI(cfg config.Config, logger *slog.Logger) {
 		logger.Error("failed to publish master editorial story", "error", err)
 	}
 
+	// 6. Publish Comprehensive Kue Adee Editorial Story & Hero Image
+	if err := publishKueAdeeStory(ctx, dbPool, adminID, storagePath, logger); err != nil {
+		logger.Error("failed to publish kue adee story", "error", err)
+	}
+
 	fmt.Printf("==================================================\n")
 	fmt.Printf("Draft Seeding Summary:\n")
 	fmt.Printf(" - Newly Created Drafts : %d\n", createdCount)
