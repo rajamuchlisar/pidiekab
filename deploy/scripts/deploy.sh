@@ -52,10 +52,6 @@ echo "--> Deploying binary and frontend assets..."
 cp bin/pidiekab "${NEW_RELEASE_DIR}/bin/pidiekab"
 chmod +x "${NEW_RELEASE_DIR}/bin/pidiekab"
 
-if [ -d "frontend/public-site/dist" ]; then
-    cp -r frontend/public-site/dist/* "${NEW_RELEASE_DIR}/public/"
-fi
-
 if [ -d "frontend/admin-cms/dist" ]; then
     cp -r frontend/admin-cms/dist/* "${NEW_RELEASE_DIR}/cms/"
 fi
