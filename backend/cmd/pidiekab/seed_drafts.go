@@ -508,6 +508,11 @@ func handleSeedDraftsCLI(cfg config.Config, logger *slog.Logger) {
 		logger.Error("failed to publish kue adee story", "error", err)
 	}
 
+	// 7. Publish In-Depth Masjid Po Teumeureuhom Mila Editorial Monograph & Hero Image
+	if err := publishMasjidPoTeumeureuhomStory(ctx, dbPool, adminID, storagePath, logger); err != nil {
+		logger.Error("failed to publish masjid po teumeureuhom story", "error", err)
+	}
+
 	fmt.Printf("==================================================\n")
 	fmt.Printf("Draft Seeding Summary:\n")
 	fmt.Printf(" - Newly Created Drafts : %d\n", createdCount)
