@@ -14,6 +14,9 @@ import (
 
 	auditPostgres "pidiekab/internal/modules/audit/infrastructure/postgres"
 	auditHttp "pidiekab/internal/modules/audit/transport/http"
+	analyticsApp "pidiekab/internal/modules/analytics/application"
+	analyticsPostgres "pidiekab/internal/modules/analytics/infrastructure/postgres"
+	analyticsHttp "pidiekab/internal/modules/analytics/transport/http"
 	categoryApp "pidiekab/internal/modules/category/application"
 	categoryPostgres "pidiekab/internal/modules/category/infrastructure/postgres"
 	categoryHttp "pidiekab/internal/modules/category/transport/http"
@@ -255,6 +258,12 @@ func main() {
 		downloadService.SetJobEnqueuer(jobRepo)
 		downloadHandler := downloadHttp.NewDownloadHandler(downloadService, authService, localStorage)
 		registrars = append(registrars, downloadHandler)
+
+		// 15. Analytics, Traffic Tracking & Real-Time Dashboard
+		analyticsRepo := analyticsPostgres.NewAnalyticsRepository(dbPool)
+		analyticsService := analyticsApp.NewAnalyticsService(analyticsRepo)
+		analyticsHandler := analyticsHttp.NewAnalyticsHandler(analyticsService, authService)
+		registrars = append(registrars, analyticsHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}

@@ -32,6 +32,11 @@ type RedirectFinder interface {
 	FindRedirect(ctx context.Context, path string) (targetPath string, statusCode int, err error)
 }
 
+// RequestTracker records incoming page requests for real-time analytics.
+type RequestTracker interface {
+	TrackRequest(r *http.Request)
+}
+
 // RouteRegistrar allows domain modules to attach their HTTP routes onto the ServeMux.
 type RouteRegistrar interface {
 	RegisterRoutes(mux *http.ServeMux)
@@ -140,6 +145,7 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 	// 3. Module routes (Identity, Content, Redirects, etc.)
 	var releaseLocator ReleaseLocator
 	var redirectFinder RedirectFinder
+	var requestTracker RequestTracker
 	for _, reg := range registrars {
 		if reg != nil {
 			reg.RegisterRoutes(mux)
@@ -148,6 +154,9 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 			}
 			if rf, ok := reg.(RedirectFinder); ok {
 				redirectFinder = rf
+			}
+			if rt, ok := reg.(RequestTracker); ok {
+				requestTracker = rt
 			}
 		}
 	}
@@ -167,6 +176,9 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 
 	// 6. Public static serving (SSG generated HTML, assets, sitemap.xml, robots.txt)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if requestTracker != nil {
+			requestTracker.TrackRequest(r)
+		}
 		rootDir := cfg.PublicStaticDir
 		if releaseLocator != nil {
 			if activeDir, err := releaseLocator.GetActiveReleaseDir(); err == nil && activeDir != "" {
