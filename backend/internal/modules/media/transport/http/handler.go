@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"pidiekab/internal/modules/media/application"
 	mediaDomain "pidiekab/internal/modules/media/domain"
@@ -359,15 +360,37 @@ func (h *MediaHandler) HandleServeMedia(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
+	displayFilename := filepath.Base(rawKey)
+	if asset != nil && asset.OriginalFilename != "" {
+		displayFilename = asset.OriginalFilename
+	}
+
 	w.Header().Set("Content-Type", mimeType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 
-	filename := filepath.Base(rawKey)
+	// Relax restrictive security headers specifically for media files so browser PDF viewer and audio/video players can render
+	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	w.Header().Set("Content-Security-Policy", "default-src 'self' blob:; object-src 'self' blob:; img-src 'self' data: https: blob:; frame-ancestors 'self'")
+	w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+	w.Header().Del("Cross-Origin-Opener-Policy")
+
 	if r.URL.Query().Get("download") == "1" {
-		w.Header().Set("Content-Disposition", "attachment; filename=\""+filename+"\"")
-	} else if strings.HasSuffix(strings.ToLower(filename), ".pdf") {
-		w.Header().Set("Content-Disposition", "inline; filename=\""+filename+"\"")
+		w.Header().Set("Content-Disposition", "attachment; filename=\""+displayFilename+"\"")
+	} else if strings.HasSuffix(strings.ToLower(displayFilename), ".pdf") || mimeType == "application/pdf" {
+		w.Header().Set("Content-Disposition", "inline; filename=\""+displayFilename+"\"")
+	}
+
+	// Use http.ServeContent if the stream supports seeking (e.g. *os.File) to enable HTTP Range requests (206 Partial Content)
+	if seeker, ok := stream.(io.ReadSeeker); ok {
+		var modTime time.Time
+		if asset != nil && !asset.CreatedAt.IsZero() {
+			modTime = asset.CreatedAt
+		} else {
+			modTime = time.Now()
+		}
+		http.ServeContent(w, r, displayFilename, modTime, seeker)
+		return
 	}
 
 	if r.Method == http.MethodHead {

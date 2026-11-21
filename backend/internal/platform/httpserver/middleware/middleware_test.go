@@ -68,6 +68,18 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 	if val := rec.Header().Get("X-Frame-Options"); val != "DENY" {
 		t.Errorf("expected X-Frame-Options: DENY, got %q", val)
 	}
+
+	// Test media route relaxing framing policies
+	recMedia := httptest.NewRecorder()
+	reqMedia := httptest.NewRequest(http.MethodGet, "/media/2026/11/sample.pdf", nil)
+	handler.ServeHTTP(recMedia, reqMedia)
+
+	if val := recMedia.Header().Get("X-Frame-Options"); val != "SAMEORIGIN" {
+		t.Errorf("expected X-Frame-Options: SAMEORIGIN for media, got %q", val)
+	}
+	if val := recMedia.Header().Get("Cross-Origin-Resource-Policy"); val != "cross-origin" {
+		t.Errorf("expected Cross-Origin-Resource-Policy: cross-origin for media, got %q", val)
+	}
 }
 
 func TestRecoveryMiddleware(t *testing.T) {
