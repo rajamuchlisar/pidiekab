@@ -197,13 +197,15 @@ Kue adee dimasak di atas loyang bundar aluminium atau seng tebal berdiameter 20 
 	})
 
 	// Upsert Indonesian translation
+	idTitle := "Kue Adee Khas Pidie: Manis Legit Tradisi Kue Basah Aceh"
 	_, err = dbPool.Exec(ctx, `
 		INSERT INTO content_translations (
-			content_id, locale, title, slug, summary, body, status, published_at, created_at, updated_at
+			content_id, locale, title, slug, summary, body, status, published_at, published_by,
+			search_vector, created_by, updated_by, created_at, updated_at
 		) VALUES (
-			$1, 'id', 'Kue Adee Khas Pidie: Manis Legit Tradisi Kue Basah Aceh',
-			'kue-adee-khas-pidie-manis-legit-tradisi',
-			$2, $3, 'published', NOW(), NOW(), NOW()
+			$1, 'id', $2, 'kue-adee-khas-pidie-manis-legit-tradisi', $3, $4, 'published', NOW(), $5,
+			setweight(to_tsvector('simple', COALESCE($2, '')), 'A') || setweight(to_tsvector('simple', COALESCE($3, '')), 'B'),
+			$5, $5, NOW(), NOW()
 		)
 		ON CONFLICT (content_id, locale) DO UPDATE SET
 			title = EXCLUDED.title,
@@ -211,9 +213,12 @@ Kue adee dimasak di atas loyang bundar aluminium atau seng tebal berdiameter 20 
 			summary = EXCLUDED.summary,
 			body = EXCLUDED.body,
 			status = 'published',
-			published_at = COALESCE(content_translations.published_at, NOW()),
+			published_at = NOW(),
+			published_by = EXCLUDED.published_by,
+			search_vector = EXCLUDED.search_vector,
+			updated_by = EXCLUDED.updated_by,
 			updated_at = NOW()
-	`, contentID, idSummary, idBodyJSON)
+	`, contentID, idTitle, idSummary, idBodyJSON, adminID)
 
 	if err != nil {
 		return fmt.Errorf("failed to save ID translation for kue adee: %w", err)
@@ -221,6 +226,8 @@ Kue adee dimasak di atas loyang bundar aluminium atau seng tebal berdiameter 20 
 	fmt.Println(" [+] Indonesian Translation Published: 'Kue Adee Khas Pidie: Manis Legit Tradisi Kue Basah Aceh'")
 
 	// 6. Construct English Translation
+	enTitle := "Traditional Adee Cake: Sweet Fragrance of Pidie Confectionery"
+	enSlug := "traditional-adee-cake-pidie-confectionery"
 	enHTML := fmt.Sprintf(`
 <figure class="editorial-hero-banner">
     <img src="%s" alt="Traditional Adee Baked Sweet Cassava Cake of Pidie Aceh" loading="eager" />
@@ -277,7 +284,7 @@ Adee cakes are baked in circular aluminum pans measuring 20 to 25 centimeters in
     <h4>💡 Connoisseur’s Serving Guide:</h4>
     <ul>
         <li><strong>Optimal Temperature:</strong> Best enjoyed lukewarm, approximately 30 minutes after leaving the oven.</li>
-        <li><strong>Natural Shelf Life:</strong> Благодаря deep baking and pure coconut lipids, Adee keeps fresh for 2 to 3 days at cool room temperature, or up to 7 days refrigerated. Gently rewarm in an oven or dry pan to restore its crispy crust.</li>
+        <li><strong>Natural Shelf Life:</strong> Due to thorough baking and pure coconut lipids, Adee keeps fresh for 2 to 3 days at cool room temperature, or up to 7 days refrigerated. Gently rewarm in an oven or dry pan to restore its crispy crust.</li>
         <li><strong>Tasting Tip:</strong> Compare the hearty texture of cassava Adee against the silky melt of wheat custard Adee to appreciate the full spectrum of Pidie baking heritage.</li>
     </ul>
 </div>
@@ -293,11 +300,12 @@ Adee cakes are baked in circular aluminum pans measuring 20 to 25 centimeters in
 	// Upsert English translation
 	_, err = dbPool.Exec(ctx, `
 		INSERT INTO content_translations (
-			content_id, locale, title, slug, summary, body, status, published_at, created_at, updated_at
+			content_id, locale, title, slug, summary, body, status, published_at, published_by,
+			search_vector, created_by, updated_by, created_at, updated_at
 		) VALUES (
-			$1, 'en', 'Traditional Adee Cake: Sweet Fragrance of Pidie Confectionery',
-			'traditional-adee-cake-pidie-confectionery',
-			$2, $3, 'published', NOW(), NOW(), NOW()
+			$1, 'en', $2, $3, $4, $5, 'published', NOW(), $6,
+			setweight(to_tsvector('simple', COALESCE($2, '')), 'A') || setweight(to_tsvector('simple', COALESCE($4, '')), 'B'),
+			$6, $6, NOW(), NOW()
 		)
 		ON CONFLICT (content_id, locale) DO UPDATE SET
 			title = EXCLUDED.title,
@@ -305,9 +313,12 @@ Adee cakes are baked in circular aluminum pans measuring 20 to 25 centimeters in
 			summary = EXCLUDED.summary,
 			body = EXCLUDED.body,
 			status = 'published',
-			published_at = COALESCE(content_translations.published_at, NOW()),
+			published_at = NOW(),
+			published_by = EXCLUDED.published_by,
+			search_vector = EXCLUDED.search_vector,
+			updated_by = EXCLUDED.updated_by,
 			updated_at = NOW()
-	`, contentID, enSummary, enBodyJSON)
+	`, contentID, enTitle, enSlug, enSummary, enBodyJSON, adminID)
 
 	if err != nil {
 		return fmt.Errorf("failed to save EN translation for kue adee: %w", err)
