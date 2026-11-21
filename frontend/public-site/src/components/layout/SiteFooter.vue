@@ -96,10 +96,10 @@ const isId = computed(() => locale.value === 'id')
 
 <style scoped>
 .site-footer {
-  background: #0f172a;
-  color: #94a3b8;
+  background: #ffffff;
+  color: #475569;
   padding: 3.5rem 1.5rem 2.5rem 1.5rem;
-  border-top: 1px solid #1e293b;
+  border-top: 1px solid #e2e8f0;
   margin-top: 4rem;
 }
 
@@ -140,8 +140,8 @@ const isId = computed(() => locale.value === 'id')
 }
 
 .brand-badge {
-  background: #10b981;
-  color: #064e3b;
+  background: #047857;
+  color: #ffffff;
   font-weight: 800;
   width: 32px;
   height: 32px;
@@ -155,19 +155,19 @@ const isId = computed(() => locale.value === 'id')
 .brand-name {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #ffffff;
+  color: #0f172a;
 }
 
 .brand-desc {
   font-size: 0.85rem;
   line-height: 1.6;
   margin: 0 0 1rem 0;
-  color: #cbd5e1;
+  color: #64748b;
 }
 
 .disclaimer-box {
-  background: rgba(255, 255, 255, 0.04);
-  border-left: 3px solid #f59e0b;
+  background: #ecfdf5;
+  border-left: 3px solid #047857;
   padding: 0.65rem 0.85rem;
   border-radius: 0 4px 4px 0;
 }
@@ -175,7 +175,7 @@ const isId = computed(() => locale.value === 'id')
 .disclaimer-box strong {
   display: block;
   font-size: 0.75rem;
-  color: #fde68a;
+  color: #047857;
   margin-bottom: 0.2rem;
 }
 
@@ -183,11 +183,11 @@ const isId = computed(() => locale.value === 'id')
   margin: 0;
   font-size: 0.725rem;
   line-height: 1.4;
-  color: #94a3b8;
+  color: #475569;
 }
 
 .col-title {
-  color: #ffffff;
+  color: #0f172a;
   font-size: 0.95rem;
   font-weight: 600;
   margin: 0 0 1rem 0;
@@ -203,14 +203,14 @@ const isId = computed(() => locale.value === 'id')
 }
 
 .footer-links a {
-  color: #94a3b8;
+  color: #475569;
   text-decoration: none;
   font-size: 0.875rem;
   transition: color 0.15s;
 }
 
 .footer-links a:hover {
-  color: #10b981;
+  color: #047857;
 }
 
 .contact-info {

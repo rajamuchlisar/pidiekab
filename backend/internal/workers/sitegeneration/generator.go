@@ -857,9 +857,9 @@ body {
     letter-spacing: 0.05em;
 }
 .brand-logo-img {
-    height: 42px;
+    height: 65px;
     width: auto;
-    max-width: 220px;
+    max-width: 300px;
     object-fit: contain;
     vertical-align: middle;
     display: block;
@@ -1674,10 +1674,10 @@ html {
 /* Footer */
 .site-footer {
     margin-top: 4.5rem;
-    background: #0f172a;
-    color: #94a3b8;
+    background: #ffffff;
+    color: #475569;
     font-size: 0.875rem;
-    border-top: 1px solid #1e293b;
+    border-top: 1px solid #e2e8f0;
     padding-top: 3.5rem;
 }
 .footer-grid {
@@ -1700,33 +1700,33 @@ html {
     }
 }
 .footer-col h4 {
-    color: #f8fafc;
+    color: #0f172a;
     font-size: 0.875rem;
     font-weight: 700;
     margin: 0 0 1.25rem 0;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    border-bottom: 2px solid #059669;
+    border-bottom: 2px solid #047857;
     padding-bottom: 0.4rem;
     display: inline-block;
 }
 .footer-brand .brand-logo {
-    color: #10b981;
+    color: #047857;
     margin-bottom: 0.75rem;
 }
 .footer-brand p {
     margin: 0.75rem 0;
     line-height: 1.6;
-    color: #94a3b8;
+    color: #64748b;
     font-size: 0.85rem;
 }
 .footer-badge-disclaimer {
     display: inline-block;
     margin-top: 0.5rem;
-    padding: 0.3rem 0.65rem;
-    background: rgba(16, 185, 129, 0.1);
-    color: #34d399;
-    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 0.35rem 0.75rem;
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
     border-radius: 6px;
     font-size: 0.75rem;
     font-weight: 600;
@@ -1741,14 +1741,14 @@ html {
     gap: 0.65rem;
 }
 .footer-links li a {
-    color: #cbd5e1;
+    color: #475569;
     text-decoration: none;
     font-size: 0.875rem;
     transition: all 0.15s ease;
     display: inline-block;
 }
 .footer-links li a:hover {
-    color: #34d399;
+    color: #047857;
     padding-left: 4px;
 }
 .footer-contact {
@@ -1763,24 +1763,24 @@ html {
     display: flex;
     gap: 0.65rem;
     align-items: flex-start;
-    color: #cbd5e1;
+    color: #475569;
     font-size: 0.85rem;
     line-height: 1.5;
 }
 .footer-contact-item a {
-    color: #cbd5e1;
+    color: #475569;
     text-decoration: none;
     transition: color 0.15s;
 }
 .footer-contact-item a:hover {
-    color: #34d399;
+    color: #047857;
 }
 .footer-icon {
     width: 17px;
     height: 17px;
     min-width: 17px;
     margin-top: 2px;
-    color: #10b981;
+    color: #047857;
 }
 .social-section {
     margin-top: 1rem;
@@ -1797,13 +1797,13 @@ html {
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    background: #1e293b;
-    color: #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     transition: all 0.2s ease;
-    border: 1px solid #334155;
+    border: 1px solid #cbd5e1;
     text-decoration: none;
 }
 .social-btn svg {
@@ -1811,13 +1811,13 @@ html {
     height: 18px;
 }
 .social-btn:hover {
-    background: #059669;
+    background: #047857;
     color: #ffffff;
-    border-color: #059669;
+    border-color: #047857;
     transform: translateY(-2px);
 }
 .footer-bottom {
-    border-top: 1px solid #1e293b;
+    border-top: 1px solid #e2e8f0;
     padding: 1.5rem 0;
     display: flex;
     justify-content: space-between;
@@ -1836,12 +1836,12 @@ html {
     gap: 1.25rem;
 }
 .footer-bottom-links a {
-    color: #94a3b8;
+    color: #64748b;
     text-decoration: none;
     font-size: 0.8rem;
 }
 .footer-bottom-links a:hover {
-    color: #34d399;
+    color: #047857;
 }
 
 /* Error Page Layout */
