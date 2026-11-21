@@ -264,95 +264,78 @@ func publishKerupukMuliengStory(ctx context.Context, dbPool *pgxpool.Pool, admin
 
 	enSummary := "An in-depth culinary and cultural chronicle of Beureunuen's legendary melinjo emping: from woodfire sand-roasting and rhythmic iron-hammer flattening to the secret behind Sumatra's finest bittersweet crisps."
 
-	// 7. Update Indonesian translation
+	idBodyJSON, _ := json.Marshal(map[string]string{
+		"html":     idHTML,
+		"markdown": idHTML,
+	})
+	enBodyJSON, _ := json.Marshal(map[string]string{
+		"html":     enHTML,
+		"markdown": enHTML,
+	})
+
+	idTitle := "Kelezatan Gurih Kerupuk Mulieng Beureunuen: Warisan Melinjo Terbaik Pidie"
+	idSlug := "kelezatan-kerupuk-mulieng-beureunuen-melinjo"
+
+	// 7. Upsert Indonesian translation
 	_, err = dbPool.Exec(ctx, `
-		UPDATE content_translations 
-		SET title = $1, summary = $2, body_html = $3, body_markdown = $4,
-		    meta_title = $5, meta_description = $6, updated_at = NOW()
-		WHERE content_id = $7 AND locale = 'id'
-	`,
-		"Kelezatan Gurih Kerupuk Mulieng Beureunuen: Warisan Melinjo Terbaik Pidie",
-		idSummary,
-		idHTML,
-		idHTML,
-		"Kelezatan Gurih Kerupuk Mulieng Beureunuen: Warisan Melinjo Terbaik Pidie",
-		idSummary,
-		contentID,
-	)
+		INSERT INTO content_translations (
+			content_id, locale, title, slug, summary, body, status, published_at, published_by,
+			search_vector, created_by, updated_by, created_at, updated_at
+		) VALUES (
+			$1, 'id', $2, $3, $4, $5, 'published', NOW(), $6,
+			setweight(to_tsvector('simple', COALESCE($2, '')), 'A') || setweight(to_tsvector('simple', COALESCE($4, '')), 'B'),
+			$6, $6, NOW(), NOW()
+		)
+		ON CONFLICT (content_id, locale) DO UPDATE SET
+			title = EXCLUDED.title,
+			slug = EXCLUDED.slug,
+			summary = EXCLUDED.summary,
+			body = EXCLUDED.body,
+			status = 'published',
+			published_at = NOW(),
+			published_by = EXCLUDED.published_by,
+			search_vector = EXCLUDED.search_vector,
+			updated_by = EXCLUDED.updated_by,
+			updated_at = NOW()
+	`, contentID, idTitle, idSlug, idSummary, idBodyJSON, adminID)
+
 	if err != nil {
-		return fmt.Errorf("failed to update Indonesian translation for kerupuk mulieng: %w", err)
+		return fmt.Errorf("failed to save ID translation for kerupuk mulieng: %w", err)
 	}
 	fmt.Println(" [+] Indonesian Translation Published: 'Kelezatan Gurih Kerupuk Mulieng Beureunuen: Warisan Melinjo Terbaik Pidie'")
 
-	// 8. Update or Insert English translation
-	var enTransCount int
-	_ = dbPool.QueryRow(ctx, `SELECT COUNT(*) FROM content_translations WHERE content_id = $1 AND locale = 'en'`, contentID).Scan(&enTransCount)
+	// 8. Upsert English translation
+	enTitle := "Savory Crunch of Beureunuen Kerupuk Mulieng: Pidie's Premium Melinjo Heritage"
+	enSlug := "savory-beureunuen-kerupuk-mulieng-melinjo"
 
-	if enTransCount == 0 {
-		_, err = dbPool.Exec(ctx, `
-			INSERT INTO content_translations (
-				content_id, locale, title, slug, summary, body_html, body_markdown,
-				meta_title, meta_description, published_at, updated_at
-			) VALUES (
-				$1, 'en', $2, 'savory-beureunuen-kerupuk-mulieng-melinjo', $3, $4, $5,
-				$6, $7, NOW(), NOW()
-			)
-		`,
-			contentID,
-			"Savory Crunch of Beureunuen Kerupuk Mulieng: Pidie's Premium Melinjo Heritage",
-			enSummary,
-			enHTML,
-			enHTML,
-			"Savory Crunch of Beureunuen Kerupuk Mulieng: Pidie's Premium Melinjo Heritage",
-			enSummary,
+	_, err = dbPool.Exec(ctx, `
+		INSERT INTO content_translations (
+			content_id, locale, title, slug, summary, body, status, published_at, published_by,
+			search_vector, created_by, updated_by, created_at, updated_at
+		) VALUES (
+			$1, 'en', $2, $3, $4, $5, 'published', NOW(), $6,
+			setweight(to_tsvector('simple', COALESCE($2, '')), 'A') || setweight(to_tsvector('simple', COALESCE($4, '')), 'B'),
+			$6, $6, NOW(), NOW()
 		)
-	} else {
-		_, err = dbPool.Exec(ctx, `
-			UPDATE content_translations 
-			SET title = $1, summary = $2, body_html = $3, body_markdown = $4,
-			    meta_title = $5, meta_description = $6, updated_at = NOW()
-			WHERE content_id = $7 AND locale = 'en'
-		`,
-			"Savory Crunch of Beureunuen Kerupuk Mulieng: Pidie's Premium Melinjo Heritage",
-			enSummary,
-			enHTML,
-			enHTML,
-			"Savory Crunch of Beureunuen Kerupuk Mulieng: Pidie's Premium Melinjo Heritage",
-			enSummary,
-			contentID,
-		)
-	}
+		ON CONFLICT (content_id, locale) DO UPDATE SET
+			title = EXCLUDED.title,
+			slug = EXCLUDED.slug,
+			summary = EXCLUDED.summary,
+			body = EXCLUDED.body,
+			status = 'published',
+			published_at = NOW(),
+			published_by = EXCLUDED.published_by,
+			search_vector = EXCLUDED.search_vector,
+			updated_by = EXCLUDED.updated_by,
+			updated_at = NOW()
+	`, contentID, enTitle, enSlug, enSummary, enBodyJSON, adminID)
+
 	if err != nil {
-		return fmt.Errorf("failed to update English translation for kerupuk mulieng: %w", err)
+		return fmt.Errorf("failed to save EN translation for kerupuk mulieng: %w", err)
 	}
 	fmt.Println(" [+] English Translation Published: 'Savory Crunch of Beureunuen Kerupuk Mulieng: Pidie's Premium Melinjo Heritage'")
 
-	// 9. Update source attribution
-	sourceURL := "https://kebudayaan.kemdikbud.go.id/"
-	sourceNote := "Dokumentasi Warisan Budaya Takbenda (WBTb) Indonesia & Sentra Industri Melinjo Beureunuen Dekranasda Pidie."
-	_, _ = dbPool.Exec(ctx, `
-		INSERT INTO content_sources (content_id, source_type, source_name, source_url, notes, created_at)
-		VALUES ($1, 'official', 'Balai Pelestarian Nilai Budaya & Dekranasda Pidie', $2, $3, NOW())
-		ON CONFLICT (content_id) DO UPDATE 
-		SET source_type = EXCLUDED.source_type, source_name = EXCLUDED.source_name, source_url = EXCLUDED.source_url, notes = EXCLUDED.notes
-	`, contentID, sourceURL, sourceNote)
-
-	// 10. Update search vector in content_search
-	_ = dbPool.QueryRow(ctx, `
-		INSERT INTO content_search (content_id, locale, search_vector)
-		VALUES ($1, 'id', to_tsvector('indonesian', $2 || ' ' || $3 || ' ' || $4))
-		ON CONFLICT (content_id, locale) DO UPDATE
-		SET search_vector = EXCLUDED.search_vector
-	`, contentID, "Kelezatan Gurih Kerupuk Mulieng Beureunuen", idSummary, "melinjo emping beureunuen mutiara pidie kuliner renyah gurih")
-
-	_ = dbPool.QueryRow(ctx, `
-		INSERT INTO content_search (content_id, locale, search_vector)
-		VALUES ($1, 'en', to_tsvector('english', $2 || ' ' || $3 || ' ' || $4))
-		ON CONFLICT (content_id, locale) DO UPDATE
-		SET search_vector = EXCLUDED.search_vector
-	`, contentID, "Savory Crunch of Beureunuen Kerupuk Mulieng", enSummary, "melinjo emping beureunuen mutiara pidie culinary crackers crisps")
-
-	// 11. Mark content as featured
+	// 9. Mark content as featured & verified
 	curationMeta, _ := json.Marshal(map[string]any{
 		"badge":       "Kuliner Legendaris",
 		"curator":     "Dewan Redaksi PidieKab",
