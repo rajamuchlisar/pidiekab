@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"html"
 	"html/template"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -214,7 +216,57 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 		return err
 	}
 
+	// 10. Copy favicon to root (/favicon.ico, /favicon.png, /apple-touch-icon.png)
+	g.copyFaviconFiles(targetDir, siteCtx)
+
 	return nil
+}
+
+func (g *Generator) copyFaviconFiles(targetDir string, sc *SiteContext) {
+	if sc == nil || sc.FaviconURL == "" {
+		return
+	}
+	var data []byte
+
+	key := strings.TrimPrefix(sc.FaviconURL, "/media/")
+	key = strings.TrimPrefix(key, "/")
+
+	candidates := []string{
+		filepath.Join(os.Getenv("PIDIEKAB_STORAGE_PATH"), filepath.FromSlash(key)),
+		filepath.Join("./data/media", filepath.FromSlash(key)),
+		filepath.Join("../data/media", filepath.FromSlash(key)),
+		filepath.Join("/var/lib/pidiekab/media", filepath.FromSlash(key)),
+		filepath.Join("/opt/pidiekab/data/media", filepath.FromSlash(key)),
+		filepath.Join("/opt/pidiekab/current/data/media", filepath.FromSlash(key)),
+	}
+
+	for _, p := range candidates {
+		if p == "" {
+			continue
+		}
+		if b, readErr := os.ReadFile(p); readErr == nil && len(b) > 0 {
+			data = b
+			break
+		}
+	}
+
+	// Fallback to HTTP fetch if not found locally
+	if len(data) == 0 {
+		favFullURL := toAbsoluteURL(g.baseURL, sc.FaviconURL)
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, httpErr := client.Get(favFullURL)
+		if httpErr == nil && resp.StatusCode == http.StatusOK {
+			defer resp.Body.Close()
+			data, _ = io.ReadAll(resp.Body)
+		}
+	}
+
+	if len(data) > 0 {
+		_ = os.WriteFile(filepath.Join(targetDir, "favicon.ico"), data, 0644)
+		_ = os.WriteFile(filepath.Join(targetDir, "favicon.png"), data, 0644)
+		_ = os.WriteFile(filepath.Join(targetDir, "apple-touch-icon.png"), data, 0644)
+		_ = os.WriteFile(filepath.Join(targetDir, "apple-touch-icon-precomposed.png"), data, 0644)
+	}
 }
 
 func (g *Generator) fetchSiteContext(ctx context.Context) (*SiteContext, error) {
@@ -2198,7 +2250,18 @@ html {
 
 	faviconTag := ""
 	if sc.FaviconURL != "" {
-		faviconTag = fmt.Sprintf("\n    <link rel=\"icon\" href=\"%s\">", template.HTMLEscapeString(sc.FaviconURL))
+		favURL := toAbsoluteURL(g.baseURL, sc.FaviconURL)
+		faviconTag = fmt.Sprintf(`
+    <link rel="icon" type="image/png" sizes="32x32" href="%s">
+    <link rel="icon" type="image/png" sizes="192x192" href="%s">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="shortcut icon" href="/favicon.ico">`,
+			template.HTMLEscapeString(favURL),
+			template.HTMLEscapeString(favURL),
+		)
+	} else {
+		faviconTag = `
+    <link rel="icon" href="/favicon.ico">`
 	}
 
 	// Build quick category chips
@@ -2421,8 +2484,12 @@ html {
 
 	// 1. Render Homepage: <locale>/index.html
 	homeCanonical := fmt.Sprintf("%s/%s/", g.baseURL, locale)
+	homeTitle := "PidieKab — Cerita, Budaya, Kuliner & Potensi Daerah Pidie"
+	if locale == "en" {
+		homeTitle = "PidieKab — Heritage, Culture, and Living Potentials of Pidie"
+	}
 	homeSEO := renderSEOHeadTags(sc, g.baseURL, SEOMetadata{
-		Title:        siteName,
+		Title:        homeTitle,
 		Description:  tagline,
 		CanonicalURL: homeCanonical,
 		AlternateID:  fmt.Sprintf("%s/id/", g.baseURL),
@@ -3599,12 +3666,22 @@ func renderSEOHeadTags(sc *SiteContext, baseURL string, meta SEOMetadata) string
 	}
 
 	// 1. Basic Title, Description & Canonical
+	titleText := strings.TrimSpace(meta.Title)
+	if titleText == "" || titleText == siteName {
+		if meta.Locale == "en" {
+			titleText = "PidieKab — Heritage, Culture, and Potentials of Pidie"
+		} else {
+			titleText = "PidieKab — Cerita, Budaya, Kuliner & Potensi Daerah Pidie"
+		}
+	} else if !strings.Contains(titleText, siteName) && !strings.Contains(strings.ToLower(titleText), "pidiekab") {
+		titleText = fmt.Sprintf("%s — %s", titleText, siteName)
+	}
+
 	sb.WriteString(fmt.Sprintf(`
-    <title>%s — %s</title>
+    <title>%s</title>
     <meta name="description" content="%s">
     <link rel="canonical" href="%s">`,
-		template.HTMLEscapeString(meta.Title),
-		template.HTMLEscapeString(siteName),
+		template.HTMLEscapeString(titleText),
 		template.HTMLEscapeString(meta.Description),
 		meta.CanonicalURL,
 	))
@@ -3658,7 +3735,32 @@ func renderSEOHeadTags(sc *SiteContext, baseURL string, meta SEOMetadata) string
 		imageURL,
 	))
 
-	// 5. Schema.org JSON-LD Structured Data
+	// 5. Article Metadata for Search Engines (Publication Dates & Author)
+	if meta.Type == "article" {
+		if meta.PublishedAt != nil && !meta.PublishedAt.IsZero() {
+			pubTimeISO := meta.PublishedAt.Format(time.RFC3339)
+			pubDateSimple := meta.PublishedAt.Format("2006-01-02")
+			sb.WriteString(fmt.Sprintf(`
+    <!-- Article Publishing Dates for Search Engines -->
+    <meta property="article:published_time" content="%s">
+    <meta name="publish-date" content="%s">
+    <meta name="date" content="%s">`,
+				pubTimeISO, pubDateSimple, pubDateSimple,
+			))
+		}
+		if meta.UpdatedAt != nil && !meta.UpdatedAt.IsZero() {
+			modTimeISO := meta.UpdatedAt.Format(time.RFC3339)
+			sb.WriteString(fmt.Sprintf(`
+    <meta property="article:modified_time" content="%s">`,
+				modTimeISO,
+			))
+		}
+		sb.WriteString(`
+    <meta property="article:author" content="pidiekab.web.id">
+    <meta name="author" content="pidiekab.web.id">`)
+	}
+
+	// 6. Schema.org JSON-LD Structured Data
 	jsonLD := buildJSONLD(sc, baseURL, meta, imageURL)
 	if jsonLD != "" {
 		sb.WriteString(fmt.Sprintf(`
@@ -3716,7 +3818,7 @@ func buildJSONLD(sc *SiteContext, baseURL string, meta SEOMetadata, imageURL str
 		if meta.UpdatedAt != nil && !meta.UpdatedAt.IsZero() {
 			articleSchema["dateModified"] = meta.UpdatedAt.Format(time.RFC3339)
 		}
-		graph = append(graph, articleSchema)
+		graph = append(graph, orgSchema, articleSchema)
 
 		if meta.GeoLat != nil && meta.GeoLng != nil {
 			placeSchema := map[string]any{
