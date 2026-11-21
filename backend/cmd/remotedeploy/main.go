@@ -237,6 +237,8 @@ cd /home/ubuntu/pidiekab/backend
 CGO_ENABLED=0 go build -ldflags="-s -w" -o /opt/pidiekab/current/bin/pidiekab ./cmd/pidiekab
 chown pidiekab:pidiekab /opt/pidiekab/current/bin/pidiekab
 chmod +x /opt/pidiekab/current/bin/pidiekab
+rm -f /opt/pidiekab/current/pidiekab
+rm -rf /home/ubuntu/pidiekab/frontend/public-site /home/ubuntu/pidiekab/perencanaan
 `
 	out, err = exec.Sudo(compileCmd)
 	if err != nil {
