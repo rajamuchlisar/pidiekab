@@ -30,64 +30,64 @@ async function handleLogout() {
       </div>
 
       <nav class="nav-menu">
-        <router-link to="/dashboard" class="nav-item" :class="{ active: currentRouteName === 'dashboard' }">
+        <router-link v-if="authStore.canAccess('dashboard')" to="/dashboard" class="nav-item" :class="{ active: currentRouteName === 'dashboard' }">
           <span class="nav-icon"><BladeIcon name="chart-bar" size="20" /></span>
           <span class="nav-label">Dashboard</span>
         </router-link>
 
-        <router-link to="/contents" class="nav-item" :class="{ active: String(currentRouteName).startsWith('content') }">
+        <router-link v-if="authStore.canAccess('contents')" to="/contents" class="nav-item" :class="{ active: String(currentRouteName).startsWith('content') }">
           <span class="nav-icon"><BladeIcon name="document-text" size="20" /></span>
           <span class="nav-label">Kelola Konten</span>
         </router-link>
 
-        <router-link v-if="authStore.hasRole('super_admin', 'admin', 'editor')" to="/categories" class="nav-item" :class="{ active: currentRouteName === 'categories' }">
+        <router-link v-if="authStore.canAccess('categories')" to="/categories" class="nav-item" :class="{ active: currentRouteName === 'categories' }">
           <span class="nav-icon"><BladeIcon name="tag" size="20" /></span>
           <span class="nav-label">Kategori</span>
         </router-link>
 
-        <router-link to="/media" class="nav-item" :class="{ active: currentRouteName === 'media' }">
+        <router-link v-if="authStore.canAccess('media')" to="/media" class="nav-item" :class="{ active: currentRouteName === 'media' }">
           <span class="nav-icon"><BladeIcon name="photo" size="20" /></span>
           <span class="nav-label">Media Library</span>
         </router-link>
 
-        <router-link v-if="authStore.hasRole('super_admin', 'admin', 'editor')" to="/curation" class="nav-item" :class="{ active: currentRouteName === 'curation' }">
+        <router-link v-if="authStore.canAccess('curation')" to="/curation" class="nav-item" :class="{ active: currentRouteName === 'curation' }">
           <span class="nav-icon"><BladeIcon name="sparkles" size="20" /></span>
           <span class="nav-label">Kurasi Beranda</span>
         </router-link>
 
-        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/static-pages" class="nav-item" :class="{ active: currentRouteName === 'static-pages' }">
+        <router-link v-if="authStore.canAccess('static-pages')" to="/static-pages" class="nav-item" :class="{ active: currentRouteName === 'static-pages' }">
           <span class="nav-icon"><BladeIcon name="document-duplicate" size="20" /></span>
           <span class="nav-label">Halaman Statis</span>
         </router-link>
 
-        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/menus" class="nav-item" :class="{ active: currentRouteName === 'menus' }">
+        <router-link v-if="authStore.canAccess('menus')" to="/menus" class="nav-item" :class="{ active: currentRouteName === 'menus' }">
           <span class="nav-icon"><BladeIcon name="bars-3" size="20" /></span>
           <span class="nav-label">Menu Navigasi</span>
         </router-link>
 
-        <router-link v-if="authStore.hasRole('super_admin', 'admin', 'editor')" to="/unduhan" class="nav-item" :class="{ active: currentRouteName === 'unduhan' }">
+        <router-link v-if="authStore.canAccess('unduhan')" to="/unduhan" class="nav-item" :class="{ active: currentRouteName === 'unduhan' }">
           <span class="nav-icon"><BladeIcon name="arrow-down-tray" size="20" /></span>
           <span class="nav-label">Unduhan Dokumen</span>
         </router-link>
 
-        <div v-if="authStore.hasRole('super_admin', 'admin')" class="nav-divider"></div>
+        <div v-if="authStore.canAccess('settings') || authStore.canAccess('redirects') || authStore.canAccess('admins') || authStore.canAccess('audit-logs')" class="nav-divider"></div>
 
-        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/settings" class="nav-item" :class="{ active: currentRouteName === 'settings' }">
+        <router-link v-if="authStore.canAccess('settings')" to="/settings" class="nav-item" :class="{ active: currentRouteName === 'settings' }">
           <span class="nav-icon"><BladeIcon name="cog-6-tooth" size="20" /></span>
           <span class="nav-label">Pengaturan Web</span>
         </router-link>
 
-        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/redirects" class="nav-item" :class="{ active: currentRouteName === 'redirects' }">
+        <router-link v-if="authStore.canAccess('redirects')" to="/redirects" class="nav-item" :class="{ active: currentRouteName === 'redirects' }">
           <span class="nav-icon"><BladeIcon name="arrows-right-left" size="20" /></span>
           <span class="nav-label">URL Redirects</span>
         </router-link>
 
-        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/admins" class="nav-item" :class="{ active: currentRouteName === 'admins' }">
+        <router-link v-if="authStore.canAccess('admins')" to="/admins" class="nav-item" :class="{ active: currentRouteName === 'admins' }">
           <span class="nav-icon"><BladeIcon name="users" size="20" /></span>
           <span class="nav-label">Administrator</span>
         </router-link>
 
-        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/audit-logs" class="nav-item" :class="{ active: currentRouteName === 'audit-logs' }">
+        <router-link v-if="authStore.canAccess('audit-logs')" to="/audit-logs" class="nav-item" :class="{ active: currentRouteName === 'audit-logs' }">
           <span class="nav-icon"><BladeIcon name="shield-check" size="20" /></span>
           <span class="nav-label">Audit Trail</span>
         </router-link>

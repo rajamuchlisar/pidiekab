@@ -33,85 +33,85 @@ const routes: RouteRecordRaw[] = [
     path: '/dashboard',
     name: 'dashboard',
     component: DashboardView,
-    meta: { requiresAuth: true, title: 'Dashboard Operasional' },
+    meta: { requiresAuth: true, title: 'Dashboard Operasional', module: 'dashboard' },
   },
   {
     path: '/contents',
     name: 'contents',
     component: ContentListView,
-    meta: { requiresAuth: true, title: 'Daftar Konten' },
+    meta: { requiresAuth: true, title: 'Daftar Konten', module: 'contents' },
   },
   {
     path: '/contents/new',
     name: 'content-new',
     component: ContentEditorView,
-    meta: { requiresAuth: true, title: 'Tambah Konten Baru' },
+    meta: { requiresAuth: true, title: 'Tambah Konten Baru', module: 'contents' },
   },
   {
     path: '/contents/:id/edit',
     name: 'content-edit',
     component: ContentEditorView,
-    meta: { requiresAuth: true, title: 'Edit Konten' },
+    meta: { requiresAuth: true, title: 'Edit Konten', module: 'contents' },
   },
   {
     path: '/categories',
     name: 'categories',
     component: CategoryListView,
-    meta: { requiresAuth: true, title: 'Kategori Konten' },
+    meta: { requiresAuth: true, title: 'Kategori Konten', module: 'categories' },
   },
   {
     path: '/media',
     name: 'media',
     component: MediaLibraryView,
-    meta: { requiresAuth: true, title: 'Media Library' },
+    meta: { requiresAuth: true, title: 'Media Library', module: 'media' },
   },
   {
     path: '/curation',
     name: 'curation',
     component: CurationView,
-    meta: { requiresAuth: true, title: 'Kurasi Beranda' },
+    meta: { requiresAuth: true, title: 'Kurasi Beranda', module: 'curation' },
   },
   {
     path: '/static-pages',
     name: 'static-pages',
     component: StaticPagesView,
-    meta: { requiresAuth: true, title: 'Halaman Statis' },
+    meta: { requiresAuth: true, title: 'Halaman Statis', module: 'static-pages' },
   },
   {
     path: '/menus',
     name: 'menus',
     component: MenuView,
-    meta: { requiresAuth: true, title: 'Navigasi Menu Header' },
+    meta: { requiresAuth: true, title: 'Navigasi Menu Header', module: 'menus' },
   },
   {
     path: '/unduhan',
     name: 'unduhan',
     component: UnduhanView,
-    meta: { requiresAuth: true, title: 'Unduhan Dokumen' },
+    meta: { requiresAuth: true, title: 'Unduhan Dokumen', module: 'unduhan' },
   },
   {
     path: '/settings',
     name: 'settings',
     component: SettingsView,
-    meta: { requiresAuth: true, title: 'Pengaturan Website' },
+    meta: { requiresAuth: true, title: 'Pengaturan Website', module: 'settings' },
   },
   {
     path: '/admins',
     name: 'admins',
     component: AdminsView,
-    meta: { requiresAuth: true, title: 'Administrator' },
+    meta: { requiresAuth: true, title: 'Administrator', module: 'admins' },
   },
   {
     path: '/redirects',
     name: 'redirects',
     component: RedirectsView,
-    meta: { requiresAuth: true, title: 'URL Redirects' },
+    meta: { requiresAuth: true, title: 'URL Redirects', module: 'redirects' },
   },
   {
     path: '/audit-logs',
     name: 'audit-logs',
     component: AuditLogsView,
-    meta: { requiresAuth: true, title: 'Audit Trail' },
+    meta: { requiresAuth: true, title: 'Audit Trail', module: 'audit-logs' },
   },
   {
     path: '/403',
@@ -144,6 +144,8 @@ router.beforeEach(async (to, _from, next) => {
     next({ name: 'login' })
   } else if (to.meta.guestOnly && authStore.isAuthenticated) {
     next({ name: 'dashboard' })
+  } else if (to.meta.module && !authStore.canAccess(to.meta.module as string)) {
+    next({ name: 'forbidden' })
   } else {
     next()
   }

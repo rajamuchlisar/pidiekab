@@ -179,6 +179,10 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 		if requestTracker != nil {
 			requestTracker.TrackRequest(r)
 		}
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/id/", http.StatusFound)
+			return
+		}
 		rootDir := cfg.PublicStaticDir
 		if releaseLocator != nil {
 			if activeDir, err := releaseLocator.GetActiveReleaseDir(); err == nil && activeDir != "" {

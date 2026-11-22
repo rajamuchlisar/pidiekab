@@ -87,6 +87,14 @@ func (m *memAdminRepo) CountActiveSuperAdmins(ctx context.Context) (int, error) 
 	}
 	return count, nil
 }
+func (m *memAdminRepo) UpdatePermissions(ctx context.Context, id int64, permissions []string) error {
+	a, ok := m.admins[id]
+	if !ok {
+		return domain.ErrAdminNotFound
+	}
+	a.Permissions = permissions
+	return nil
+}
 func (m *memAdminRepo) UpdateRole(ctx context.Context, id int64, role string) error {
 	a, ok := m.admins[id]
 	if !ok {

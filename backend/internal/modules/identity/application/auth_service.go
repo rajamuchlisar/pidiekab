@@ -20,6 +20,7 @@ type AdminRepo interface {
 	GetByEmail(ctx context.Context, email string) (*domain.Admin, error)
 	UpdatePassword(ctx context.Context, id int64, passwordHash string) error
 	UpdateRole(ctx context.Context, id int64, role string) error
+	UpdatePermissions(ctx context.Context, id int64, permissions []string) error
 	UpdateLastLogin(ctx context.Context, id int64, loginTime time.Time) error
 	CountActive(ctx context.Context) (int, error)
 	CountActiveSuperAdmins(ctx context.Context) (int, error)
@@ -265,6 +266,7 @@ func (s *AuthService) BootstrapAdmin(ctx context.Context, email, displayName, pa
 		PasswordHash: hash,
 		DisplayName:  displayName,
 		Role:         domain.RoleSuperAdmin,
+		Permissions:  domain.AllModuleKeys(),
 		IsActive:     true,
 	}
 
@@ -319,8 +321,8 @@ func (s *AuthService) ListAdmins(ctx context.Context) ([]*domain.Admin, error) {
 	return s.admins.List(ctx)
 }
 
-// CreateAdmin creates a new administrator with a designated role by an existing active administrator.
-func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, displayName, role, password string, ipAddress *string) (*domain.Admin, error) {
+// CreateAdmin creates a new administrator with a designated role and checklist of authorized menu modules.
+func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, displayName, role string, permissions []string, password string, ipAddress *string) (*domain.Admin, error) {
 	normalizedEmail := domain.NormalizeEmail(email)
 	if normalizedEmail == "" {
 		return nil, errors.New("email cannot be empty")
@@ -336,6 +338,11 @@ func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, d
 		role = domain.RoleEditor
 	}
 
+	if len(permissions) == 0 {
+		permissions = domain.RoleDefaultModules(role)
+	}
+	permissions = domain.FilterValidModules(permissions)
+
 	hash, err := authn.HashPassword(password, s.argonParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -346,6 +353,7 @@ func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, d
 		PasswordHash: hash,
 		DisplayName:  strings.TrimSpace(displayName),
 		Role:         role,
+		Permissions:  permissions,
 		IsActive:     true,
 	}
 
@@ -354,11 +362,36 @@ func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, d
 	}
 
 	s.recordAudit(ctx, &creatorID, "admin.create", "admin", &admin.ID, map[string]any{
-		"email": admin.Email,
-		"role":  admin.Role,
+		"email":       admin.Email,
+		"role":        admin.Role,
+		"permissions": admin.Permissions,
 	}, ipAddress)
 
 	return admin, nil
+}
+
+// UpdateAdminPermissions updates the authorized checklist of modules for an administrator.
+func (s *AuthService) UpdateAdminPermissions(ctx context.Context, actorID, targetID int64, permissions []string, ipAddress *string) error {
+	target, err := s.admins.GetByID(ctx, targetID)
+	if err != nil {
+		return err
+	}
+
+	validPerms := domain.FilterValidModules(permissions)
+	if len(validPerms) == 0 {
+		validPerms = []string{"dashboard"}
+	}
+
+	if err := s.admins.UpdatePermissions(ctx, targetID, validPerms); err != nil {
+		return err
+	}
+
+	s.recordAudit(ctx, &actorID, "admin.permissions.update", "admin", &targetID, map[string]any{
+		"old_permissions": target.Permissions,
+		"new_permissions": validPerms,
+	}, ipAddress)
+
+	return nil
 }
 
 // UpdateAdminRole modifies the role of an administrator.

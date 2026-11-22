@@ -24,11 +24,13 @@ func NewAdminRepository(pool *pgxpool.Pool) *AdminRepository {
 	return repo
 }
 
-// EnsureSchema ensures role column exists in admins table.
+// EnsureSchema ensures role and permissions columns exist in admins table.
 func (r *AdminRepository) EnsureSchema(ctx context.Context) error {
 	query := `
 		ALTER TABLE admins ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'super_admin';
+		ALTER TABLE admins ADD COLUMN IF NOT EXISTS permissions TEXT[] NOT NULL DEFAULT '{dashboard,contents,categories,media,curation,static-pages,menus,unduhan,settings,redirects,admins,audit-logs}';
 		UPDATE admins SET role = 'super_admin' WHERE role IS NULL OR role = '';
+		UPDATE admins SET permissions = '{dashboard,contents,categories,media,curation,static-pages,menus,unduhan,settings,redirects,admins,audit-logs}' WHERE permissions IS NULL OR cardinality(permissions) = 0;
 	`
 	_, err := r.pool.Exec(ctx, query)
 	return err
@@ -42,13 +44,22 @@ func (r *AdminRepository) Create(ctx context.Context, a *domain.Admin) error {
 		role = domain.RoleEditor
 	}
 
+	perms := a.Permissions
+	if len(perms) == 0 {
+		perms = domain.RoleDefaultModules(role)
+	}
+	perms = domain.FilterValidModules(perms)
+	if len(perms) == 0 {
+		perms = []string{"dashboard", "contents", "media"}
+	}
+
 	query := `
-		INSERT INTO admins (email, password_hash, display_name, role, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+		INSERT INTO admins (email, password_hash, display_name, role, permissions, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 		RETURNING id, created_at, updated_at
 	`
 
-	row := r.pool.QueryRow(ctx, query, normalizedEmail, a.PasswordHash, a.DisplayName, role, a.IsActive)
+	row := r.pool.QueryRow(ctx, query, normalizedEmail, a.PasswordHash, a.DisplayName, role, perms, a.IsActive)
 	if err := row.Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
@@ -59,13 +70,14 @@ func (r *AdminRepository) Create(ctx context.Context, a *domain.Admin) error {
 
 	a.Email = normalizedEmail
 	a.Role = role
+	a.Permissions = perms
 	return nil
 }
 
 // GetByID finds an administrator by ID.
 func (r *AdminRepository) GetByID(ctx context.Context, id int64) (*domain.Admin, error) {
 	query := `
-		SELECT id, email, password_hash, display_name, COALESCE(role, 'super_admin'), is_active, last_login_at, created_at, updated_at
+		SELECT id, email, password_hash, display_name, COALESCE(role, 'super_admin'), COALESCE(permissions, '{dashboard,contents,categories,media,curation,static-pages,menus,unduhan,settings,redirects,admins,audit-logs}'), is_active, last_login_at, created_at, updated_at
 		FROM admins
 		WHERE id = $1
 	`
@@ -77,6 +89,7 @@ func (r *AdminRepository) GetByID(ctx context.Context, id int64) (*domain.Admin,
 		&a.PasswordHash,
 		&a.DisplayName,
 		&a.Role,
+		&a.Permissions,
 		&a.IsActive,
 		&a.LastLoginAt,
 		&a.CreatedAt,
@@ -96,7 +109,7 @@ func (r *AdminRepository) GetByID(ctx context.Context, id int64) (*domain.Admin,
 func (r *AdminRepository) GetByEmail(ctx context.Context, email string) (*domain.Admin, error) {
 	normalized := domain.NormalizeEmail(email)
 	query := `
-		SELECT id, email, password_hash, display_name, COALESCE(role, 'super_admin'), is_active, last_login_at, created_at, updated_at
+		SELECT id, email, password_hash, display_name, COALESCE(role, 'super_admin'), COALESCE(permissions, '{dashboard,contents,categories,media,curation,static-pages,menus,unduhan,settings,redirects,admins,audit-logs}'), is_active, last_login_at, created_at, updated_at
 		FROM admins
 		WHERE email = $1
 	`
@@ -108,6 +121,7 @@ func (r *AdminRepository) GetByEmail(ctx context.Context, email string) (*domain
 		&a.PasswordHash,
 		&a.DisplayName,
 		&a.Role,
+		&a.Permissions,
 		&a.IsActive,
 		&a.LastLoginAt,
 		&a.CreatedAt,
@@ -152,6 +166,24 @@ func (r *AdminRepository) UpdateRole(ctx context.Context, id int64, role string)
 	cmdTag, err := r.pool.Exec(ctx, query, role, id)
 	if err != nil {
 		return fmt.Errorf("failed to update admin role: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return domain.ErrAdminNotFound
+	}
+	return nil
+}
+
+// UpdatePermissions updates the authorized checklist of modules for an administrator.
+func (r *AdminRepository) UpdatePermissions(ctx context.Context, id int64, permissions []string) error {
+	query := `
+		UPDATE admins
+		SET permissions = $1, updated_at = NOW()
+		WHERE id = $2
+	`
+
+	cmdTag, err := r.pool.Exec(ctx, query, permissions, id)
+	if err != nil {
+		return fmt.Errorf("failed to update admin permissions: %w", err)
 	}
 	if cmdTag.RowsAffected() == 0 {
 		return domain.ErrAdminNotFound
@@ -218,7 +250,7 @@ func (r *AdminRepository) SetIsActive(ctx context.Context, id int64, isActive bo
 // List returns all administrators ordered by ID.
 func (r *AdminRepository) List(ctx context.Context) ([]*domain.Admin, error) {
 	query := `
-		SELECT id, email, password_hash, display_name, COALESCE(role, 'super_admin'), is_active, last_login_at, created_at, updated_at
+		SELECT id, email, password_hash, display_name, COALESCE(role, 'super_admin'), COALESCE(permissions, '{dashboard,contents,categories,media,curation,static-pages,menus,unduhan,settings,redirects,admins,audit-logs}'), is_active, last_login_at, created_at, updated_at
 		FROM admins
 		ORDER BY id ASC
 	`
@@ -238,6 +270,7 @@ func (r *AdminRepository) List(ctx context.Context) ([]*domain.Admin, error) {
 			&a.PasswordHash,
 			&a.DisplayName,
 			&a.Role,
+			&a.Permissions,
 			&a.IsActive,
 			&a.LastLoginAt,
 			&a.CreatedAt,

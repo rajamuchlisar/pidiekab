@@ -10,6 +10,14 @@ export interface RoleDefinition {
   permissions: string[]
 }
 
+export interface ModuleInfo {
+  key: string
+  name: string
+  path: string
+  icon: string
+  description: string
+}
+
 export interface AdminUser {
   id: number
   email: string

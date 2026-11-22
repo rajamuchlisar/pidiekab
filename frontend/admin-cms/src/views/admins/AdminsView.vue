@@ -3,7 +3,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { api } from '../../api/client'
 import { useAuthStore } from '../../stores/auth'
 import { useNotificationStore } from '../../stores/notification'
-import type { AdminRole, RoleDefinition } from '../../types'
+import type { AdminRole, RoleDefinition, ModuleInfo } from '../../types'
 import AppLayout from '../../components/layout/AppLayout.vue'
 
 const authStore = useAuthStore()
@@ -14,6 +14,114 @@ const admins = ref<any[]>([])
 const availableRoles = ref<RoleDefinition[]>([])
 const isLoading = ref(true)
 
+// Exact 12 real system modules currently in PidieKab Admin CMS (strictly no hallucinations)
+const systemModules: ModuleInfo[] = [
+  {
+    key: 'dashboard',
+    name: 'Dashboard',
+    path: '/dashboard',
+    icon: 'chart-bar',
+    description: 'Melihat statistik pengunjung, total artikel, dan ringkasan operasional',
+  },
+  {
+    key: 'contents',
+    name: 'Kelola Konten',
+    path: '/contents',
+    icon: 'document-text',
+    description: 'Membuat, mengedit, dan mempublikasikan artikel berita, budaya, dan potensi daerah',
+  },
+  {
+    key: 'categories',
+    name: 'Kategori',
+    path: '/categories',
+    icon: 'tag',
+    description: 'Mengelola taksonomi kategori konten (nama, slug bilingual, status aktif)',
+  },
+  {
+    key: 'media',
+    name: 'Media Library',
+    path: '/media',
+    icon: 'photo',
+    description: 'Mengunggah dan mengelola berkas gambar, foto ilustrasi, dan dokumen media',
+  },
+  {
+    key: 'curation',
+    name: 'Kurasi Beranda',
+    path: '/curation',
+    icon: 'sparkles',
+    description: 'Mengatur penempatan berita utama (Lead Story) dan konten unggulan di beranda publik',
+  },
+  {
+    key: 'static-pages',
+    name: 'Halaman Statis',
+    path: '/static-pages',
+    icon: 'document-duplicate',
+    description: 'Mengelola konten halaman Profil Daerah, Kontak, Kebijakan Privasi, dan Syarat Ketentuan',
+  },
+  {
+    key: 'menus',
+    name: 'Menu Navigasi',
+    path: '/menus',
+    icon: 'bars-3',
+    description: 'Mengatur susunan dan tautan navigasi header portal publik',
+  },
+  {
+    key: 'unduhan',
+    name: 'Unduhan Dokumen',
+    path: '/unduhan',
+    icon: 'arrow-down-tray',
+    description: 'Mengunggah dan mengelola berkas panduan publik, peta wisata, dan dokumen unduhan',
+  },
+  {
+    key: 'settings',
+    name: 'Pengaturan Web',
+    path: '/settings',
+    icon: 'cog-6-tooth',
+    description: 'Mengatur identitas website, meta SEO, kontak resmi, dan konfigurasi portal',
+  },
+  {
+    key: 'redirects',
+    name: 'URL Redirects',
+    path: '/redirects',
+    icon: 'arrows-right-left',
+    description: 'Mengelola pengalihan URL (301/302) untuk pencegahan tautan rusak',
+  },
+  {
+    key: 'admins',
+    name: 'Administrator',
+    path: '/admins',
+    icon: 'users',
+    description: 'Mengelola akun pengguna administrator dan konfigurasi hak akses menu',
+  },
+  {
+    key: 'audit-logs',
+    name: 'Audit Trail',
+    path: '/audit-logs',
+    icon: 'shield-check',
+    description: 'Memantau rekam jejak aktivitas, log keamanan, dan audit sistem',
+  },
+]
+
+const availableModules = ref<ModuleInfo[]>(systemModules)
+
+function getDefaultPermissionsForRole(role?: string): string[] {
+  switch (role) {
+    case 'super_admin':
+      return availableModules.value.map(m => m.key)
+    case 'admin':
+      return [
+        'dashboard', 'contents', 'categories', 'media', 'curation',
+        'static-pages', 'menus', 'unduhan', 'settings', 'redirects', 'audit-logs',
+      ]
+    case 'editor':
+      return ['dashboard', 'contents', 'categories', 'media', 'curation', 'unduhan']
+    case 'author':
+      return ['dashboard', 'contents', 'media']
+    default:
+      return ['dashboard', 'contents']
+  }
+}
+
 // Create Admin modal
 const showCreateModal = ref(false)
 const isSubmitting = ref(false)
@@ -22,13 +130,72 @@ const createForm = reactive({
   displayName: '',
   role: 'editor' as AdminRole,
   password: '',
+  permissions: ['dashboard', 'contents', 'categories', 'media', 'curation', 'unduhan'] as string[],
 })
+
+function onRoleChangeInCreate() {
+  createForm.permissions = getDefaultPermissionsForRole(createForm.role)
+}
+
+function selectAllCreatePermissions() {
+  createForm.permissions = availableModules.value.map(m => m.key)
+}
+
+function clearAllCreatePermissions() {
+  createForm.permissions = []
+}
 
 // Edit Role modal
 const showRoleModal = ref(false)
 const isUpdatingRole = ref(false)
 const roleEditTarget = ref<any>(null)
 const selectedRole = ref<AdminRole>('editor')
+
+// Permissions Checklist Modal
+const showPermissionsModal = ref(false)
+const isUpdatingPermissions = ref(false)
+const permissionsTarget = ref<any>(null)
+const selectedPermissions = ref<string[]>([])
+
+function openPermissionsModal(admin: any) {
+  permissionsTarget.value = admin
+  if (admin.role === 'super_admin') {
+    selectedPermissions.value = availableModules.value.map(m => m.key)
+  } else if (Array.isArray(admin.permissions) && admin.permissions.length > 0) {
+    selectedPermissions.value = [...admin.permissions]
+  } else {
+    selectedPermissions.value = getDefaultPermissionsForRole(admin.role)
+  }
+  showPermissionsModal.value = true
+}
+
+function selectAllPermissions() {
+  selectedPermissions.value = availableModules.value.map(m => m.key)
+}
+
+function clearAllPermissions() {
+  selectedPermissions.value = []
+}
+
+async function handleSavePermissions() {
+  if (!permissionsTarget.value) return
+  isUpdatingPermissions.value = true
+  try {
+    await api.put(`/api/v1/admin/admins/${permissionsTarget.value.id}/permissions`, {
+      permissions: selectedPermissions.value,
+    })
+    notification.success(
+      'Hak Akses Diperbarui',
+      `Hak akses menu untuk "${permissionsTarget.value.email}" berhasil disimpan (${selectedPermissions.value.length} dari ${availableModules.value.length} menu diizinkan).`
+    )
+    showPermissionsModal.value = false
+    loadAdmins()
+  } catch (err: any) {
+    notification.error('Gagal Mengubah Hak Akses', err.detail || 'Terjadi kesalahan sistem.', err.requestId)
+  } finally {
+    isUpdatingPermissions.value = false
+  }
+}
 
 // Change Password modal
 const showPasswordModal = ref(false)
@@ -44,68 +211,48 @@ const defaultRoles: RoleDefinition[] = [
   {
     key: 'super_admin',
     name: 'Super Administrator',
-    description: 'Akses penuh tanpa batasan ke seluruh modul sistem, termasuk kelola admin, role, dan konfigurasi inti.',
+    description: 'Akses penuh tanpa batasan ke seluruh 12 menu sistem, kelola admin, role, dan konfigurasi inti.',
     badge_color: 'purple',
-    permissions: [
-      'admins:manage', 'settings:manage', 'audit:view',
-      'content:read', 'content:write', 'content:publish', 'content:delete',
-      'category:manage', 'media:manage', 'curation:manage',
-      'pages:manage', 'menus:manage', 'downloads:manage',
-      'redirects:manage', 'analytics:view',
-    ],
+    permissions: systemModules.map(m => m.key),
   },
   {
     key: 'admin',
     name: 'Administrator',
-    description: 'Mengelola operasional konten, kategori, media library, kurasi beranda, halaman statis, menu, dan unduhan dokumen.',
+    description: 'Mengelola operasional konten, kategori, media, kurasi beranda, halaman statis, menu, unduhan, pengaturan web, dan audit trail.',
     badge_color: 'green',
     permissions: [
-      'settings:manage', 'audit:view',
-      'content:read', 'content:write', 'content:publish', 'content:delete',
-      'category:manage', 'media:manage', 'curation:manage',
-      'pages:manage', 'menus:manage', 'downloads:manage',
-      'redirects:manage', 'analytics:view',
+      'dashboard', 'contents', 'categories', 'media', 'curation',
+      'static-pages', 'menus', 'unduhan', 'settings', 'redirects', 'audit-logs',
     ],
   },
   {
     key: 'editor',
     name: 'Editor Konten',
-    description: 'Meninjau, mengedit, mempublikasikan artikel berita/budaya/wisata, kurasi beranda, serta mengelola media.',
+    description: 'Meninjau, mengedit, mempublikasikan artikel berita/budaya/wisata, kurasi beranda, dan media library.',
     badge_color: 'blue',
-    permissions: [
-      'content:read', 'content:write', 'content:publish',
-      'category:manage', 'media:manage', 'curation:manage',
-      'downloads:manage', 'analytics:view',
-    ],
+    permissions: ['dashboard', 'contents', 'categories', 'media', 'curation', 'unduhan'],
   },
   {
     key: 'author',
     name: 'Penulis Konten',
-    description: 'Menulis dan mengedit draf artikel sendiri dan mengunggah berkas foto/media pendukung liputan.',
+    description: 'Menulis dan mengedit draf artikel sendiri dan mengunggah berkas foto/media pendukung.',
     badge_color: 'amber',
-    permissions: [
-      'content:read', 'content:write',
-      'media:manage', 'analytics:view',
-    ],
+    permissions: ['dashboard', 'contents', 'media'],
   },
 ]
 
-const matrixModules = [
-  { name: 'Dashboard & Statistik Pengunjung', key: 'analytics:view', roles: ['super_admin', 'admin', 'editor', 'author'] },
-  { name: 'Tulis & Edit Draf Konten', key: 'content:write', roles: ['super_admin', 'admin', 'editor', 'author'] },
-  { name: 'Publikasikan Konten ke Publik', key: 'content:publish', roles: ['super_admin', 'admin', 'editor'] },
-  { name: 'Hapus Konten', key: 'content:delete', roles: ['super_admin', 'admin'] },
-  { name: 'Kelola Kategori Konten', key: 'category:manage', roles: ['super_admin', 'admin', 'editor'] },
-  { name: 'Media Library (Unggah & Kelola)', key: 'media:manage', roles: ['super_admin', 'admin', 'editor', 'author'] },
-  { name: 'Kurasi & Urutan Beranda (Lead Story)', key: 'curation:manage', roles: ['super_admin', 'admin', 'editor'] },
-  { name: 'Unduhan Dokumen Publik', key: 'downloads:manage', roles: ['super_admin', 'admin', 'editor'] },
-  { name: 'Halaman Statis & Legalitas', key: 'pages:manage', roles: ['super_admin', 'admin'] },
-  { name: 'Menu Navigasi Header', key: 'menus:manage', roles: ['super_admin', 'admin'] },
-  { name: 'URL Redirects & Aturan SEO', key: 'redirects:manage', roles: ['super_admin', 'admin'] },
-  { name: 'Audit Trail & Log Keamanan', key: 'audit:view', roles: ['super_admin', 'admin'] },
-  { name: 'Pengaturan Website & Konfigurasi', key: 'settings:manage', roles: ['super_admin', 'admin'] },
-  { name: 'Kelola Akun Admin & Penugasan Role (RBAC)', key: 'admins:manage', roles: ['super_admin'] },
-]
+const matrixModules = computed(() => {
+  return availableModules.value.map(mod => {
+    return {
+      name: mod.name,
+      key: mod.key,
+      path: mod.path,
+      icon: mod.icon,
+      description: mod.description,
+      roles: ['super_admin', ...(['admin', 'editor', 'author'].filter(r => getDefaultPermissionsForRole(r).includes(mod.key)))],
+    }
+  })
+})
 
 const activeCreateRoleMeta = computed<RoleDefinition>(() => {
   const list = availableRoles.value.length > 0 ? availableRoles.value : defaultRoles
@@ -152,6 +299,19 @@ async function loadRoles() {
   }
 }
 
+async function loadModules() {
+  try {
+    const res = await api.get<{ modules: ModuleInfo[] }>('/api/v1/admin/modules')
+    if (res?.modules && res.modules.length > 0) {
+      availableModules.value = res.modules
+    } else {
+      availableModules.value = systemModules
+    }
+  } catch {
+    availableModules.value = systemModules
+  }
+}
+
 async function loadAdmins() {
   isLoading.value = true
   try {
@@ -183,13 +343,15 @@ async function handleCreateAdmin() {
       display_name: createForm.displayName,
       role: createForm.role,
       password: createForm.password,
+      permissions: createForm.permissions,
     })
-    notification.success('Admin Dibuat', `Akun ${createForm.email} berhasil ditambahkan dengan peran "${getRoleName(createForm.role)}".`)
+    notification.success('Admin Dibuat', `Akun ${createForm.email} berhasil ditambahkan dengan peran "${getRoleName(createForm.role)}" dan ${createForm.permissions.length} menu diizinkan.`)
     showCreateModal.value = false
     createForm.email = ''
     createForm.displayName = ''
     createForm.role = 'editor'
     createForm.password = ''
+    createForm.permissions = getDefaultPermissionsForRole('editor')
     loadAdmins()
   } catch (err: any) {
     notification.error('Gagal Membuat Admin', err.detail || 'Terjadi kesalahan.', err.requestId)
@@ -272,6 +434,7 @@ async function handleChangePassword() {
 
 onMounted(() => {
   loadRoles()
+  loadModules()
   loadAdmins()
 })
 </script>
@@ -327,6 +490,7 @@ onMounted(() => {
               <th>Nama Tampilan</th>
               <th>Alamat Email</th>
               <th>Peran (Role)</th>
+              <th>Hak Akses Menu</th>
               <th>Status</th>
               <th>Login Terakhir</th>
               <th>Tanggal Dibuat</th>
@@ -346,6 +510,18 @@ onMounted(() => {
                 </span>
               </td>
               <td>
+                <div class="menu-perms-cell">
+                  <span v-if="adm.role === 'super_admin'" class="perm-badge-super" title="Super Administrator memiliki akses penuh ke seluruh 12 menu sistem">
+                    <BladeIcon name="shield-check" size="14" />
+                    <span>Akses Penuh (12 Menu)</span>
+                  </span>
+                  <span v-else class="perm-badge-custom" :class="{ 'perm-badge-empty': !(adm.permissions?.length) }">
+                    <BladeIcon name="bars-3" size="14" />
+                    <span>{{ (adm.permissions?.length) || 0 }} / {{ availableModules.length }} Menu</span>
+                  </span>
+                </div>
+              </td>
+              <td>
                 <span
                   class="badge"
                   :class="adm.isActive !== false && adm.is_active !== false ? 'badge-published' : 'badge-draft'"
@@ -360,6 +536,15 @@ onMounted(() => {
                 {{ adm.createdAt || adm.created_at ? new Date(adm.createdAt || adm.created_at).toLocaleDateString('id-ID') : '-' }}
               </td>
               <td class="text-right actions-cell">
+                <button
+                  v-if="authStore.canManageAdmins"
+                  class="btn-sm btn-outline btn-access"
+                  @click="openPermissionsModal(adm)"
+                  title="Atur Hak Akses Menu"
+                >
+                  <BladeIcon name="shield-check" size="14" />
+                  <span>Hak Akses Menu</span>
+                </button>
                 <button
                   v-if="authStore.canManageAdmins"
                   class="btn-sm btn-outline"
@@ -399,7 +584,7 @@ onMounted(() => {
             </div>
             <p class="role-card-desc">{{ role.description }}</p>
             <div class="role-card-footer">
-              <span class="perm-count">{{ role.permissions.length }} Hak Akses Terdaftar</span>
+              <span class="perm-count">{{ role.permissions.length }} Menu Terdaftar</span>
             </div>
           </div>
         </div>
@@ -407,13 +592,13 @@ onMounted(() => {
         <!-- Permission Comparison Matrix Table -->
         <div class="table-card matrix-card">
           <div class="matrix-header">
-            <h3>Matriks Perbandingan Perizinan Modul</h3>
-            <p>Rincian batasan operasional antarmuka dan API backend untuk setiap level peran.</p>
+            <h3>Matriks Hak Akses Menu Sistem (12 Menu Nyata)</h3>
+            <p>Rincian menu yang tersedia dan izin default setiap peran pengguna. Anda dapat mengatur checklist izin menu secara custom untuk setiap akun pada tab Daftar Administrator.</p>
           </div>
           <table class="data-table matrix-table">
             <thead>
               <tr>
-                <th style="width: 38%;">Modul & Fitur Sistem</th>
+                <th style="width: 38%;">Menu Sistem</th>
                 <th class="text-center" style="width: 15.5%;">Super Admin</th>
                 <th class="text-center" style="width: 15.5%;">Administrator</th>
                 <th class="text-center" style="width: 15.5%;">Editor Konten</th>
@@ -424,8 +609,11 @@ onMounted(() => {
               <tr v-for="mod in matrixModules" :key="mod.key">
                 <td class="font-medium text-slate-800">
                   <div class="mod-row">
-                    <span>{{ mod.name }}</span>
-                    <code class="mod-key">{{ mod.key }}</code>
+                    <div class="mod-title-group">
+                      <BladeIcon :name="mod.icon" size="18" />
+                      <span class="mod-name">{{ mod.name }}</span>
+                    </div>
+                    <code class="mod-key">{{ mod.path }}</code>
                   </div>
                 </td>
                 <td class="text-center">
@@ -452,52 +640,197 @@ onMounted(() => {
 
       <!-- Create Admin Modal -->
       <div v-if="showCreateModal" class="modal-backdrop" @click.self="showCreateModal = false">
-        <div class="modal-card">
+        <div class="modal-card modal-card-lg">
           <div class="modal-header">
-            <h3>Tambah Administrator Baru</h3>
+            <div>
+              <h3>Tambah Administrator Baru</h3>
+              <p class="modal-subtitle">Buat akun baru dan tentukan checklist menu apa saja yang boleh diakses akun ini.</p>
+            </div>
             <button class="modal-close" @click="showCreateModal = false" title="Tutup">
               <BladeIcon name="x-mark" size="20" />
             </button>
           </div>
           <form @submit.prevent="handleCreateAdmin" class="modal-form">
-            <div class="form-group">
-              <label>Nama Tampilan *</label>
-              <input v-model="createForm.displayName" type="text" class="input-control" placeholder="Contoh: Raja Muchlisar" required />
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>Nama Tampilan *</label>
+                <input v-model="createForm.displayName" type="text" class="input-control" placeholder="Contoh: Raja Muchlisar" required />
+              </div>
+
+              <div class="form-group flex-1">
+                <label>Alamat Email *</label>
+                <input v-model="createForm.email" type="email" class="input-control" placeholder="user@pidiekab.web.id" required />
+              </div>
             </div>
 
-            <div class="form-group">
-              <label>Alamat Email *</label>
-              <input v-model="createForm.email" type="email" class="input-control" placeholder="user@pidiekab.web.id" required />
-            </div>
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label>Peran / Role Pengguna *</label>
+                <select v-model="createForm.role" @change="onRoleChangeInCreate" class="input-control" required>
+                  <option value="editor">Editor Konten (Tulis, Edit & Publikasikan)</option>
+                  <option value="author">Penulis Konten (Draf & Media)</option>
+                  <option value="admin">Administrator (Kelola Modul Operasional)</option>
+                  <option value="super_admin">Super Administrator (Akses Penuh Tanpa Batas)</option>
+                </select>
+              </div>
 
-            <div class="form-group">
-              <label>Peran / Role Pengguna *</label>
-              <select v-model="createForm.role" class="input-control" required>
-                <option value="editor">Editor Konten (Tulis, Edit & Publikasikan)</option>
-                <option value="author">Penulis Konten (Draf & Media)</option>
-                <option value="admin">Administrator (Kelola Semua Modul Operasional)</option>
-                <option value="super_admin">Super Administrator (Akses Penuh Tanpa Batas)</option>
-              </select>
+              <div class="form-group flex-1">
+                <label>Kata Sandi (Minimal 8 karakter) *</label>
+                <input v-model="createForm.password" type="password" class="input-control" placeholder="••••••••" required />
+              </div>
             </div>
 
             <!-- Role Explainer Box -->
             <div class="role-explainer-box" :class="'explainer-' + createForm.role">
               <div class="explainer-header">
                 <span class="role-pill" :class="getRoleBadgeClass(createForm.role)">{{ activeCreateRoleMeta.name }}</span>
-                <span class="explainer-perm-count">{{ activeCreateRoleMeta.permissions.length }} izin aktif</span>
+                <span class="explainer-perm-count">{{ createForm.permissions.length }} menu dipilih</span>
               </div>
               <p class="explainer-desc">{{ activeCreateRoleMeta.description }}</p>
             </div>
 
-            <div class="form-group">
-              <label>Kata Sandi (Minimal 8 karakter) *</label>
-              <input v-model="createForm.password" type="password" class="input-control" placeholder="••••••••" required />
+            <!-- Custom Permissions Checklist for New Admin -->
+            <div class="checklist-section">
+              <div class="checklist-toolbar">
+                <div class="checklist-summary">
+                  <span class="font-semibold text-slate-800">Checklist Hak Akses Menu:</span>
+                  <span class="text-sm text-slate-500">Centang menu apa saja yang boleh diakses akun ini</span>
+                </div>
+                <div class="checklist-actions">
+                  <button type="button" class="btn-xs btn-outline" @click="selectAllCreatePermissions">
+                    <BladeIcon name="check" size="14" />
+                    <span>Pilih Semua (12 Menu)</span>
+                  </button>
+                  <button type="button" class="btn-xs btn-outline" @click="clearAllCreatePermissions">
+                    <BladeIcon name="x-mark" size="14" />
+                    <span>Kosongkan</span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="modules-checklist-grid">
+                <label
+                  v-for="mod in availableModules"
+                  :key="'create-' + mod.key"
+                  class="module-check-card"
+                  :class="{ active: createForm.permissions.includes(mod.key) }"
+                >
+                  <div class="card-check-col">
+                    <input
+                      type="checkbox"
+                      :value="mod.key"
+                      v-model="createForm.permissions"
+                      class="custom-checkbox"
+                    />
+                  </div>
+                  <div class="card-icon-col">
+                    <BladeIcon :name="mod.icon" size="20" />
+                  </div>
+                  <div class="card-content-col">
+                    <div class="card-top-row">
+                      <span class="card-title">{{ mod.name }}</span>
+                      <code class="card-path">{{ mod.path }}</code>
+                    </div>
+                    <p class="card-desc">{{ mod.description }}</p>
+                  </div>
+                </label>
+              </div>
             </div>
 
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" @click="showCreateModal = false">Batal</button>
               <button type="submit" class="btn btn-primary" :disabled="isSubmitting">
                 {{ isSubmitting ? 'Memproses...' : 'Buat Administrator' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Dedicated Permissions Checklist Modal -->
+      <div v-if="showPermissionsModal" class="modal-backdrop" @click.self="showPermissionsModal = false">
+        <div class="modal-card modal-card-lg">
+          <div class="modal-header">
+            <div>
+              <h3>Atur Hak Akses Menu Administrator</h3>
+              <p class="modal-subtitle">Tentukan menu mana saja yang boleh atau tidak boleh diakses oleh akun ini.</p>
+            </div>
+            <button class="modal-close" @click="showPermissionsModal = false" title="Tutup">
+              <BladeIcon name="x-mark" size="20" />
+            </button>
+          </div>
+
+          <form @submit.prevent="handleSavePermissions" class="modal-form">
+            <div class="user-summary-card">
+              <div class="summary-avatar">{{ permissionsTarget?.displayName?.charAt(0) || permissionsTarget?.display_name?.charAt(0) || 'A' }}</div>
+              <div class="summary-info">
+                <div class="summary-title-row">
+                  <h4 class="summary-name">{{ permissionsTarget?.displayName || permissionsTarget?.display_name }}</h4>
+                  <span class="role-pill" :class="getRoleBadgeClass(permissionsTarget?.role)">{{ getRoleName(permissionsTarget?.role) }}</span>
+                </div>
+                <p class="summary-email">{{ permissionsTarget?.email }}</p>
+              </div>
+            </div>
+
+            <div v-if="permissionsTarget?.role === 'super_admin'" class="alert-box alert-info">
+              <div class="alert-icon-wrap">
+                <BladeIcon name="shield-check" size="20" />
+              </div>
+              <div>
+                <strong>Super Administrator:</strong> Akun ini memiliki peran Super Administrator yang memiliki wewenang penuh ke seluruh 12 menu sistem tanpa batasan.
+              </div>
+            </div>
+
+            <div class="checklist-toolbar">
+              <div class="checklist-summary">
+                <span class="font-semibold text-slate-800">Daftar Menu Sistem (12 Menu):</span>
+                <span class="perm-counter-badge">{{ selectedPermissions.length }} dari {{ availableModules.length }} Menu Diizinkan</span>
+              </div>
+              <div class="checklist-actions">
+                <button type="button" class="btn-xs btn-outline" @click="selectAllPermissions">
+                  <BladeIcon name="check" size="14" />
+                  <span>Pilih Semua (12 Menu)</span>
+                </button>
+                <button type="button" class="btn-xs btn-outline" @click="clearAllPermissions">
+                  <BladeIcon name="x-mark" size="14" />
+                  <span>Kosongkan Semua</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 12 Modules Checklist Grid -->
+            <div class="modules-checklist-grid">
+              <label
+                v-for="mod in availableModules"
+                :key="mod.key"
+                class="module-check-card"
+                :class="{ active: selectedPermissions.includes(mod.key) }"
+              >
+                <div class="card-check-col">
+                  <input
+                    type="checkbox"
+                    :value="mod.key"
+                    v-model="selectedPermissions"
+                    class="custom-checkbox"
+                  />
+                </div>
+                <div class="card-icon-col">
+                  <BladeIcon :name="mod.icon" size="20" />
+                </div>
+                <div class="card-content-col">
+                  <div class="card-top-row">
+                    <span class="card-title">{{ mod.name }}</span>
+                    <code class="card-path">{{ mod.path }}</code>
+                  </div>
+                  <p class="card-desc">{{ mod.description }}</p>
+                </div>
+              </label>
+            </div>
+
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" @click="showPermissionsModal = false">Batal</button>
+              <button type="submit" class="btn btn-primary" :disabled="isUpdatingPermissions">
+                {{ isUpdatingPermissions ? 'Menyimpan...' : 'Simpan Hak Akses Menu' }}
               </button>
             </div>
           </form>
@@ -1172,5 +1505,254 @@ onMounted(() => {
   text-align: center;
   color: #64748b;
   font-size: 0.9rem;
+}
+
+/* Permissions & Checklist Styles */
+.modal-card-lg {
+  max-width: 820px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-card-lg .modal-form {
+  overflow-y: auto;
+  max-height: calc(90vh - 80px);
+}
+
+.modal-subtitle {
+  font-size: 0.825rem;
+  color: #64748b;
+  margin: 0.25rem 0 0 0;
+}
+
+.menu-perms-cell {
+  display: flex;
+  align-items: center;
+}
+
+.perm-badge-super {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #d8b4fe;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.perm-badge-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.perm-badge-empty {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.btn-access {
+  color: #047857;
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.btn-access:hover:not(:disabled) {
+  background: #d1fae5;
+  color: #064e3b;
+  border-color: #6ee7b7;
+}
+
+.btn-xs {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.form-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.flex-1 {
+  flex: 1;
+}
+
+.summary-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.summary-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.alert-info {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.alert-icon-wrap {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+  color: #2563eb;
+}
+
+.checklist-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.checklist-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.checklist-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.perm-counter-badge {
+  font-size: 0.75rem;
+  background: #e2e8f0;
+  color: #334155;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-weight: 700;
+}
+
+.checklist-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.modules-checklist-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 0.75rem;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.module-check-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border-radius: 8px;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.module-check-card:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.module-check-card.active {
+  border-color: #059669;
+  background: #f0fdf4;
+}
+
+.card-check-col {
+  padding-top: 0.1rem;
+}
+
+.custom-checkbox {
+  width: 17px;
+  height: 17px;
+  accent-color: #059669;
+  cursor: pointer;
+}
+
+.card-icon-col {
+  color: #059669;
+  padding-top: 0.1rem;
+  display: flex;
+  align-items: center;
+}
+
+.card-content-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.card-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.card-path {
+  font-size: 0.72rem;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.card-desc {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0.3rem 0 0 0;
+  line-height: 1.35;
+}
+
+.mod-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mod-name {
+  font-weight: 600;
+  color: #0f172a;
 }
 </style>

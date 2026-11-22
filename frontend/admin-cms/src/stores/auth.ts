@@ -54,6 +54,13 @@ export const useAuthStore = defineStore('auth', () => {
     return !!user.value.permissions?.includes(permission)
   }
 
+  function canAccess(moduleKey: string): boolean {
+    if (!user.value) return false
+    if (user.value.role === 'super_admin') return true
+    if (!user.value.permissions || user.value.permissions.length === 0) return false
+    return user.value.permissions.includes(moduleKey)
+  }
+
   function parseAdminData(adminData: any): AdminUser {
     return {
       id: Number(adminData.id),
@@ -126,6 +133,7 @@ export const useAuthStore = defineStore('auth', () => {
     roleBadgeClass,
     hasRole,
     can,
+    canAccess,
     checkSession,
     login,
     logout,

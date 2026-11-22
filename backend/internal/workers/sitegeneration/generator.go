@@ -200,7 +200,30 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	}
 
 	// 7. Render Root Redirect index.html (redirects / to /id/)
-	rootHTML := `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=/id/"><script>location.replace('/id/');</script></head><body><p>Redirecting to <a href="/id/">Bahasa Indonesia</a>...</p></body></html>`
+	rootTitle := "PidieKab — Cerita, Budaya, Kuliner & Potensi Daerah Pidie"
+	rootDesc := "Platform informasi independen, promosi warisan sejarah, pariwisata, kuliner, dan potensi daerah Kabupaten Pidie, Aceh."
+	if siteCtx != nil && siteCtx.TaglineID != "" {
+		rootDesc = siteCtx.TaglineID
+	}
+	rootHTML := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>%s</title>
+    <meta name="description" content="%s">
+    <link rel="canonical" href="%s/id/">
+    <meta http-equiv="refresh" content="0;url=/id/">
+    <script>location.replace('/id/');</script>
+</head>
+<body>
+    <p>Mengalihkan ke <a href="/id/">Bahasa Indonesia</a>...</p>
+</body>
+</html>`,
+		template.HTMLEscapeString(rootTitle),
+		template.HTMLEscapeString(rootDesc),
+		g.baseURL,
+	)
 	if err := os.WriteFile(filepath.Join(targetDir, "index.html"), []byte(rootHTML), 0644); err != nil {
 		return err
 	}
@@ -2856,6 +2879,17 @@ html {
 			},
 		})
 
+		articleMetaParts := make([]string, 0, 2)
+		if c.PublishedAt != nil && !c.PublishedAt.IsZero() {
+			isoDate := c.PublishedAt.Format(time.RFC3339)
+			displayDate := formatDisplayDate(*c.PublishedAt, locale)
+			articleMetaParts = append(articleMetaParts, fmt.Sprintf(`<time class="article-date" itemprop="datePublished" datetime="%s" style="display:inline-flex;align-items:center;gap:0.35rem;">🗓️ <span>%s</span></time>`, isoDate, template.HTMLEscapeString(displayDate)))
+		}
+		if strings.TrimSpace(c.Address) != "" {
+			articleMetaParts = append(articleMetaParts, fmt.Sprintf(`<span>📍 %s: %s</span>`, locationLabel, template.HTMLEscapeString(c.Address)))
+		}
+		articleMetaHTML := strings.Join(articleMetaParts, ` <span style="color:#cbd5e1;">•</span> `)
+
 		detailHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
 <head>
@@ -2876,7 +2910,7 @@ html {
                 <article class="article-header">
                     <span class="badge">%s</span>
                     <h1 class="article-title">%s</h1>
-                    <div class="article-meta">📍 %s: %s</div>
+                    <div class="article-meta" style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">%s</div>
                 </article>
                 <article class="article-body">
                     %s
@@ -2902,8 +2936,7 @@ html {
 			template.HTMLEscapeString(c.CategoryName),
 			template.HTMLEscapeString(c.CategoryName),
 			template.HTMLEscapeString(c.Title),
-			locationLabel,
-			template.HTMLEscapeString(c.Address),
+			articleMetaHTML,
 			processedBodyHTML,
 			sourcesHTML.String(),
 			tocSidebarHTML,
@@ -3971,4 +4004,20 @@ func slugifyHeading(s string) string {
 		res = strings.TrimRight(res, "-")
 	}
 	return res
+}
+
+func formatDisplayDate(t time.Time, locale string) string {
+	if locale == "en" {
+		return t.Format("02 January 2006")
+	}
+	months := [...]string{
+		"Januari", "Februari", "Maret", "April", "Mei", "Juni",
+		"Juli", "Agustus", "September", "Oktober", "November", "Desember",
+	}
+	monthIdx := int(t.Month()) - 1
+	mName := t.Month().String()
+	if monthIdx >= 0 && monthIdx < len(months) {
+		mName = months[monthIdx]
+	}
+	return fmt.Sprintf("%d %s %d", t.Day(), mName, t.Year())
 }
