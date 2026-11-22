@@ -51,10 +51,18 @@ func (h *Handler) RegisterRoutesWithLimiter(mux *http.ServeMux, rateLimiter *mid
 	mux.Handle("GET /api/v1/admin/auth/me", authMiddleware(http.HandlerFunc(h.handleMe)))
 	mux.Handle("POST /api/v1/admin/auth/password/change", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleChangePassword))))
 
-	// Admin management routes
-	mux.Handle("GET /api/v1/admin/admins", authMiddleware(http.HandlerFunc(h.handleListAdmins)))
-	mux.Handle("POST /api/v1/admin/admins", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleCreateAdmin))))
-	mux.Handle("PUT /api/v1/admin/admins/{id}/status", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleToggleAdminStatus))))
+	// RBAC Roles query route
+	mux.Handle("GET /api/v1/admin/roles", authMiddleware(http.HandlerFunc(h.handleListRoles)))
+
+	// Admin management routes with RBAC protection:
+	// Only super_admin can create, update role, or toggle status of admins
+	superAdminOnly := middleware.RequireRoles(domain.RoleSuperAdmin)
+	adminOrSuper := middleware.RequireRoles(domain.RoleSuperAdmin, domain.RoleAdmin)
+
+	mux.Handle("GET /api/v1/admin/admins", authMiddleware(adminOrSuper(http.HandlerFunc(h.handleListAdmins))))
+	mux.Handle("POST /api/v1/admin/admins", authMiddleware(superAdminOnly(csrfMiddleware(http.HandlerFunc(h.handleCreateAdmin)))))
+	mux.Handle("PUT /api/v1/admin/admins/{id}/role", authMiddleware(superAdminOnly(csrfMiddleware(http.HandlerFunc(h.handleUpdateAdminRole)))))
+	mux.Handle("PUT /api/v1/admin/admins/{id}/status", authMiddleware(superAdminOnly(csrfMiddleware(http.HandlerFunc(h.handleToggleAdminStatus)))))
 }
 
 type loginRequest struct {
@@ -116,14 +124,16 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 			"id":          result.Admin.ID,
 			"email":       result.Admin.Email,
 			"displayName": result.Admin.DisplayName,
-			"role":        "admin",
+			"role":        result.Admin.Role,
+			"permissions": domain.RolePermissions(result.Admin.Role),
 		},
 		"data": map[string]any{
 			"id":          strconv.FormatInt(result.Admin.ID, 10),
 			"email":       result.Admin.Email,
 			"displayName": result.Admin.DisplayName,
 			"name":        result.Admin.DisplayName,
-			"role":        "admin",
+			"role":        result.Admin.Role,
+			"permissions": domain.RolePermissions(result.Admin.Role),
 		},
 	})
 }
@@ -175,15 +185,26 @@ func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
 			"id":          admin.ID,
 			"email":       admin.Email,
 			"displayName": admin.DisplayName,
-			"role":        "admin",
+			"role":        admin.Role,
+			"permissions": domain.RolePermissions(admin.Role),
 		},
 		"data": map[string]any{
 			"id":          strconv.FormatInt(admin.ID, 10),
 			"email":       admin.Email,
 			"displayName": admin.DisplayName,
 			"name":        admin.DisplayName,
-			"role":        "admin",
+			"role":        admin.Role,
+			"permissions": domain.RolePermissions(admin.Role),
 		},
+	})
+}
+
+func (h *Handler) handleListRoles(w http.ResponseWriter, r *http.Request) {
+	roles := domain.GetAllRoles()
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"roles": roles,
+		"data":  roles,
 	})
 }
 
@@ -233,15 +254,42 @@ func (h *Handler) handleListAdmins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	type adminDTO struct {
+		ID          int64      `json:"id"`
+		Email       string     `json:"email"`
+		DisplayName string     `json:"display_name"`
+		Role        string     `json:"role"`
+		IsActive    bool       `json:"is_active"`
+		LastLoginAt *time.Time `json:"last_login_at,omitempty"`
+		CreatedAt   time.Time  `json:"created_at"`
+		UpdatedAt   time.Time  `json:"updated_at"`
+	}
+
+	dtos := make([]adminDTO, 0, len(admins))
+	for _, a := range admins {
+		dtos = append(dtos, adminDTO{
+			ID:          a.ID,
+			Email:       a.Email,
+			DisplayName: a.DisplayName,
+			Role:        a.Role,
+			IsActive:    a.IsActive,
+			LastLoginAt: a.LastLoginAt,
+			CreatedAt:   a.CreatedAt,
+			UpdatedAt:   a.UpdatedAt,
+		})
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": admins,
+		"admins": dtos,
+		"data":   dtos,
 	})
 }
 
 type createAdminRequest struct {
 	Email       string `json:"email"`
 	DisplayName string `json:"display_name"`
+	Role        string `json:"role"`
 	Password    string `json:"password"`
 }
 
@@ -259,13 +307,13 @@ func (h *Handler) handleCreateAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ip := extractClientIP(r)
-	created, err := h.authService.CreateAdmin(r.Context(), admin.ID, req.Email, req.DisplayName, req.Password, &ip)
+	created, err := h.authService.CreateAdmin(r.Context(), admin.ID, req.Email, req.DisplayName, req.Role, req.Password, &ip)
 	if err != nil {
 		if errors.Is(err, domain.ErrEmailAlreadyExists) {
 			writeProblem(w, r, http.StatusConflict, "EMAIL_EXISTS", "Email address is already in use.", nil)
 			return
 		}
-		if errors.Is(err, domain.ErrInvalidPassword) || errors.Is(err, domain.ErrEmptyDisplayName) {
+		if errors.Is(err, domain.ErrInvalidPassword) || errors.Is(err, domain.ErrEmptyDisplayName) || errors.Is(err, domain.ErrInvalidRole) {
 			writeProblem(w, r, http.StatusBadRequest, "VALIDATION_FAILED", err.Error(), nil)
 			return
 		}
@@ -278,6 +326,52 @@ func (h *Handler) handleCreateAdmin(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"data": created,
 	})
+}
+
+type updateRoleRequest struct {
+	Role string `json:"role"`
+}
+
+func (h *Handler) handleUpdateAdminRole(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok || admin == nil {
+		writeProblem(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Active admin session required.", nil)
+		return
+	}
+
+	targetID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || targetID <= 0 {
+		writeProblem(w, r, http.StatusBadRequest, "INVALID_ID", "Invalid administrator ID.", nil)
+		return
+	}
+
+	var req updateRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "BAD_REQUEST", "Malformed JSON request body.", nil)
+		return
+	}
+
+	if !domain.IsValidRole(req.Role) {
+		writeProblem(w, r, http.StatusBadRequest, "INVALID_ROLE", "Peran (role) yang dipilih tidak valid.", nil)
+		return
+	}
+
+	ip := extractClientIP(r)
+	err = h.authService.UpdateAdminRole(r.Context(), admin.ID, targetID, req.Role, &ip)
+	if err != nil {
+		if errors.Is(err, domain.ErrCannotChangeLastSuperAdmin) {
+			writeProblem(w, r, http.StatusConflict, "LAST_SUPER_ADMIN_PROTECTED", "Tidak dapat mengubah peran Super Administrator aktif terakhir.", nil)
+			return
+		}
+		if errors.Is(err, domain.ErrAdminNotFound) {
+			writeProblem(w, r, http.StatusNotFound, "NOT_FOUND", "Administrator tidak ditemukan.", nil)
+			return
+		}
+		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Gagal memperbarui peran administrator.", nil)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 type toggleStatusRequest struct {
@@ -311,7 +405,7 @@ func (h *Handler) handleToggleAdminStatus(w http.ResponseWriter, r *http.Request
 			return
 		}
 		if errors.Is(err, domain.ErrCannotDeactivateLastAdmin) {
-			writeProblem(w, r, http.StatusConflict, "LAST_ADMIN_PROTECTED", "Cannot deactivate the last active administrator.", nil)
+			writeProblem(w, r, http.StatusConflict, "LAST_ADMIN_PROTECTED", "Cannot deactivate the last active administrator or super administrator.", nil)
 			return
 		}
 		if errors.Is(err, domain.ErrAdminNotFound) {

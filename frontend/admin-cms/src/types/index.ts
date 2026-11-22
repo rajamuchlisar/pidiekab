@@ -1,11 +1,24 @@
 // Core TypeScript definitions for PidieKab Admin CMS
 
+export type AdminRole = 'super_admin' | 'admin' | 'editor' | 'author'
+
+export interface RoleDefinition {
+  key: AdminRole
+  name: string
+  description: string
+  badge_color: string
+  permissions: string[]
+}
+
 export interface AdminUser {
   id: number
   email: string
   displayName: string
+  role?: AdminRole
+  permissions?: string[]
   isActive?: boolean
   createdAt?: string
+  lastLoginAt?: string
 }
 
 export interface Category {

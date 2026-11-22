@@ -88,6 +88,26 @@ func (m *memoryAdminRepo) CountActive(ctx context.Context) (int, error) {
 	return count, nil
 }
 
+func (m *memoryAdminRepo) UpdateRole(ctx context.Context, id int64, role string) error {
+	a, ok := m.admins[id]
+	if !ok {
+		return domain.ErrAdminNotFound
+	}
+	a.Role = role
+	a.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+func (m *memoryAdminRepo) CountActiveSuperAdmins(ctx context.Context) (int, error) {
+	count := 0
+	for _, a := range m.admins {
+		if a.IsActive && a.Role == domain.RoleSuperAdmin {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (m *memoryAdminRepo) SetIsActive(ctx context.Context, id int64, isActive bool) error {
 	a, ok := m.admins[id]
 	if !ok {

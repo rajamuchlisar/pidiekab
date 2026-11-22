@@ -78,6 +78,23 @@ func (m *memAdminRepo) UpdateLastLogin(ctx context.Context, id int64, loginTime 
 }
 
 func (m *memAdminRepo) CountActive(ctx context.Context) (int, error) { return len(m.admins), nil }
+func (m *memAdminRepo) CountActiveSuperAdmins(ctx context.Context) (int, error) {
+	count := 0
+	for _, a := range m.admins {
+		if a.IsActive && a.Role == domain.RoleSuperAdmin {
+			count++
+		}
+	}
+	return count, nil
+}
+func (m *memAdminRepo) UpdateRole(ctx context.Context, id int64, role string) error {
+	a, ok := m.admins[id]
+	if !ok {
+		return domain.ErrAdminNotFound
+	}
+	a.Role = role
+	return nil
+}
 func (m *memAdminRepo) SetIsActive(ctx context.Context, id int64, isActive bool) error {
 	return nil
 }

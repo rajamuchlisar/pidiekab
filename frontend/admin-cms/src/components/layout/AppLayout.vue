@@ -40,7 +40,7 @@ async function handleLogout() {
           <span class="nav-label">Kelola Konten</span>
         </router-link>
 
-        <router-link to="/categories" class="nav-item" :class="{ active: currentRouteName === 'categories' }">
+        <router-link v-if="authStore.hasRole('super_admin', 'admin', 'editor')" to="/categories" class="nav-item" :class="{ active: currentRouteName === 'categories' }">
           <span class="nav-icon"><BladeIcon name="tag" size="20" /></span>
           <span class="nav-label">Kategori</span>
         </router-link>
@@ -50,44 +50,44 @@ async function handleLogout() {
           <span class="nav-label">Media Library</span>
         </router-link>
 
-        <router-link to="/curation" class="nav-item" :class="{ active: currentRouteName === 'curation' }">
+        <router-link v-if="authStore.hasRole('super_admin', 'admin', 'editor')" to="/curation" class="nav-item" :class="{ active: currentRouteName === 'curation' }">
           <span class="nav-icon"><BladeIcon name="sparkles" size="20" /></span>
           <span class="nav-label">Kurasi Beranda</span>
         </router-link>
 
-        <router-link to="/static-pages" class="nav-item" :class="{ active: currentRouteName === 'static-pages' }">
+        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/static-pages" class="nav-item" :class="{ active: currentRouteName === 'static-pages' }">
           <span class="nav-icon"><BladeIcon name="document-duplicate" size="20" /></span>
           <span class="nav-label">Halaman Statis</span>
         </router-link>
 
-        <router-link to="/menus" class="nav-item" :class="{ active: currentRouteName === 'menus' }">
+        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/menus" class="nav-item" :class="{ active: currentRouteName === 'menus' }">
           <span class="nav-icon"><BladeIcon name="bars-3" size="20" /></span>
           <span class="nav-label">Menu Navigasi</span>
         </router-link>
 
-        <router-link to="/unduhan" class="nav-item" :class="{ active: currentRouteName === 'unduhan' }">
+        <router-link v-if="authStore.hasRole('super_admin', 'admin', 'editor')" to="/unduhan" class="nav-item" :class="{ active: currentRouteName === 'unduhan' }">
           <span class="nav-icon"><BladeIcon name="arrow-down-tray" size="20" /></span>
           <span class="nav-label">Unduhan Dokumen</span>
         </router-link>
 
-        <div class="nav-divider"></div>
+        <div v-if="authStore.hasRole('super_admin', 'admin')" class="nav-divider"></div>
 
-        <router-link to="/settings" class="nav-item" :class="{ active: currentRouteName === 'settings' }">
+        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/settings" class="nav-item" :class="{ active: currentRouteName === 'settings' }">
           <span class="nav-icon"><BladeIcon name="cog-6-tooth" size="20" /></span>
           <span class="nav-label">Pengaturan Web</span>
         </router-link>
 
-        <router-link to="/redirects" class="nav-item" :class="{ active: currentRouteName === 'redirects' }">
+        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/redirects" class="nav-item" :class="{ active: currentRouteName === 'redirects' }">
           <span class="nav-icon"><BladeIcon name="arrows-right-left" size="20" /></span>
           <span class="nav-label">URL Redirects</span>
         </router-link>
 
-        <router-link to="/admins" class="nav-item" :class="{ active: currentRouteName === 'admins' }">
+        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/admins" class="nav-item" :class="{ active: currentRouteName === 'admins' }">
           <span class="nav-icon"><BladeIcon name="users" size="20" /></span>
           <span class="nav-label">Administrator</span>
         </router-link>
 
-        <router-link to="/audit-logs" class="nav-item" :class="{ active: currentRouteName === 'audit-logs' }">
+        <router-link v-if="authStore.hasRole('super_admin', 'admin')" to="/audit-logs" class="nav-item" :class="{ active: currentRouteName === 'audit-logs' }">
           <span class="nav-icon"><BladeIcon name="shield-check" size="20" /></span>
           <span class="nav-label">Audit Trail</span>
         </router-link>
@@ -112,7 +112,10 @@ async function handleLogout() {
           <div class="admin-badge">
             <div class="admin-avatar">{{ authStore.user?.displayName?.charAt(0) || 'A' }}</div>
             <div class="admin-details">
-              <span class="admin-name">{{ authStore.user?.displayName || 'Administrator' }}</span>
+              <div class="admin-title-row">
+                <span class="admin-name">{{ authStore.user?.displayName || 'Administrator' }}</span>
+                <span class="role-pill" :class="authStore.roleBadgeClass">{{ authStore.roleLabel }}</span>
+              </div>
               <span class="admin-email">{{ authStore.user?.email || 'admin@pidiekab.id' }}</span>
             </div>
           </div>
@@ -325,6 +328,45 @@ async function handleLogout() {
 .admin-details {
   display: flex;
   flex-direction: column;
+}
+
+.admin-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.role-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 9999px;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+
+.badge-role-super {
+  background: #f3e8ff;
+  color: #7e22ce;
+  border: 1px solid #d8b4fe;
+}
+
+.badge-role-admin {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.badge-role-editor {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.badge-role-author {
+  background: #fffbeb;
+  color: #b45309;
+  border: 1px solid #fde68a;
 }
 
 .admin-name {

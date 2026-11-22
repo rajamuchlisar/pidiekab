@@ -19,8 +19,10 @@ type AdminRepo interface {
 	GetByID(ctx context.Context, id int64) (*domain.Admin, error)
 	GetByEmail(ctx context.Context, email string) (*domain.Admin, error)
 	UpdatePassword(ctx context.Context, id int64, passwordHash string) error
+	UpdateRole(ctx context.Context, id int64, role string) error
 	UpdateLastLogin(ctx context.Context, id int64, loginTime time.Time) error
 	CountActive(ctx context.Context) (int, error)
+	CountActiveSuperAdmins(ctx context.Context) (int, error)
 	SetIsActive(ctx context.Context, id int64, isActive bool) error
 	List(ctx context.Context) ([]*domain.Admin, error)
 }
@@ -70,46 +72,58 @@ func NewAuthService(
 	}
 }
 
-// LoginResult contains the generated raw token and authenticated admin identity.
+// LoginResult contains the session token and authenticated administrator details.
 type LoginResult struct {
 	RawToken  string
 	ExpiresAt time.Time
 	Admin     *domain.Admin
 }
 
-// Login authenticates an admin by email and password, creating a secure session.
+// Login authenticates an administrator with email and password, establishing a new session.
 func (s *AuthService) Login(ctx context.Context, email, password string, ipAddress *string) (*LoginResult, error) {
 	normalizedEmail := domain.NormalizeEmail(email)
 	if normalizedEmail == "" || password == "" {
+		s.recordAudit(ctx, nil, "admin.login.failed", "admin", nil, map[string]any{
+			"email":  email,
+			"reason": "empty_credentials",
+		}, ipAddress)
 		return nil, domain.ErrInvalidCredentials
 	}
 
 	admin, err := s.admins.GetByEmail(ctx, normalizedEmail)
 	if err != nil {
 		if errors.Is(err, domain.ErrAdminNotFound) {
-			s.recordAudit(ctx, nil, "admin.login.failure", "admin", nil, map[string]any{"reason": "not_found", "email": normalizedEmail}, ipAddress)
+			s.recordAudit(ctx, nil, "admin.login.failed", "admin", nil, map[string]any{
+				"email":  normalizedEmail,
+				"reason": "not_found",
+			}, ipAddress)
 			return nil, domain.ErrInvalidCredentials
 		}
-		return nil, fmt.Errorf("failed to lookup admin: %w", err)
+		return nil, fmt.Errorf("failed to query admin: %w", err)
 	}
 
 	if !admin.IsActive {
-		s.recordAudit(ctx, &admin.ID, "admin.login.failure", "admin", &admin.ID, map[string]any{"reason": "inactive_account"}, ipAddress)
-		return nil, domain.ErrInvalidCredentials
+		s.recordAudit(ctx, &admin.ID, "admin.login.failed", "admin", &admin.ID, map[string]any{
+			"email":  normalizedEmail,
+			"reason": "inactive_account",
+		}, ipAddress)
+		return nil, domain.ErrInactiveAdmin
 	}
 
 	match, err := authn.VerifyPassword(password, admin.PasswordHash)
 	if err != nil {
-		s.logger.Error("password verification error", "admin_id", admin.ID, "error", err)
-		return nil, domain.ErrInvalidCredentials
+		return nil, fmt.Errorf("failed to verify password: %w", err)
 	}
 	if !match {
-		s.recordAudit(ctx, &admin.ID, "admin.login.failure", "admin", &admin.ID, map[string]any{"reason": "password_mismatch"}, ipAddress)
+		s.recordAudit(ctx, &admin.ID, "admin.login.failed", "admin", &admin.ID, map[string]any{
+			"email":  normalizedEmail,
+			"reason": "invalid_password",
+		}, ipAddress)
 		return nil, domain.ErrInvalidCredentials
 	}
 
-	// Password matched; generate secure opaque token
-	rawToken, err := authn.GenerateSessionToken()
+	// Generate high-entropy 256-bit session token
+	rawToken, err := authn.GenerateRandomToken(32)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate session token: %w", err)
 	}
@@ -118,21 +132,18 @@ func (s *AuthService) Login(ctx context.Context, email, password string, ipAddre
 	now := time.Now().UTC()
 	expiresAt := now.Add(s.sessionLifetime)
 
-	sess := &domain.Session{
+	session := &domain.Session{
 		AdminID:   admin.ID,
 		TokenHash: tokenHash,
 		ExpiresAt: expiresAt,
+		CreatedAt: now,
 	}
 
-	if err := s.sessions.Create(ctx, sess); err != nil {
-		return nil, fmt.Errorf("failed to persist admin session: %w", err)
+	if err := s.sessions.Create(ctx, session); err != nil {
+		return nil, fmt.Errorf("failed to store session: %w", err)
 	}
 
-	if err := s.admins.UpdateLastLogin(ctx, admin.ID, now); err != nil {
-		s.logger.Warn("failed to update admin last login", "admin_id", admin.ID, "error", err)
-	}
-
-	admin.LastLoginAt = &now
+	_ = s.admins.UpdateLastLogin(ctx, admin.ID, now)
 	s.recordAudit(ctx, &admin.ID, "admin.login.success", "admin", &admin.ID, nil, ipAddress)
 
 	return &LoginResult{
@@ -142,29 +153,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string, ipAddre
 	}, nil
 }
 
-// Logout revokes the session associated with the provided raw token.
-func (s *AuthService) Logout(ctx context.Context, rawToken string, ipAddress *string) error {
-	if rawToken == "" {
-		return domain.ErrSessionNotFound
-	}
-
-	tokenHash := authn.HashToken(rawToken)
-	now := time.Now().UTC()
-
-	sess, err := s.sessions.GetActiveByTokenHash(ctx, tokenHash, now)
-	if err != nil {
-		return domain.ErrSessionNotFound
-	}
-
-	if err := s.sessions.RevokeByTokenHash(ctx, tokenHash, now); err != nil {
-		return fmt.Errorf("failed to revoke session: %w", err)
-	}
-
-	s.recordAudit(ctx, &sess.AdminID, "admin.logout", "admin_session", &sess.ID, nil, ipAddress)
-	return nil
-}
-
-// AuthenticateSession validates a raw token and returns the corresponding active admin.
+// AuthenticateSession validates a raw bearer/cookie session token and returns the administrator.
 func (s *AuthService) AuthenticateSession(ctx context.Context, rawToken string) (*domain.Admin, *domain.Session, error) {
 	if rawToken == "" {
 		return nil, nil, domain.ErrSessionNotFound
@@ -173,12 +162,12 @@ func (s *AuthService) AuthenticateSession(ctx context.Context, rawToken string) 
 	tokenHash := authn.HashToken(rawToken)
 	now := time.Now().UTC()
 
-	sess, err := s.sessions.GetActiveByTokenHash(ctx, tokenHash, now)
+	session, err := s.sessions.GetActiveByTokenHash(ctx, tokenHash, now)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	admin, err := s.admins.GetByID(ctx, sess.AdminID)
+	admin, err := s.admins.GetByID(ctx, session.AdminID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -187,10 +176,32 @@ func (s *AuthService) AuthenticateSession(ctx context.Context, rawToken string) 
 		return nil, nil, domain.ErrInactiveAdmin
 	}
 
-	return admin, sess, nil
+	return admin, session, nil
 }
 
-// ChangePassword updates an admin's password and revokes all active sessions for security.
+// Logout revokes the session corresponding to the provided raw token.
+func (s *AuthService) Logout(ctx context.Context, rawToken string, ipAddress *string) error {
+	if rawToken == "" {
+		return nil
+	}
+
+	tokenHash := authn.HashToken(rawToken)
+	now := time.Now().UTC()
+
+	session, err := s.sessions.GetActiveByTokenHash(ctx, tokenHash, now)
+	if err != nil {
+		return nil
+	}
+
+	if err := s.sessions.RevokeByTokenHash(ctx, tokenHash, now); err != nil {
+		return fmt.Errorf("failed to revoke session: %w", err)
+	}
+
+	s.recordAudit(ctx, &session.AdminID, "admin.logout", "session", &session.ID, nil, ipAddress)
+	return nil
+}
+
+// ChangePassword updates an admin's password after validating current password.
 func (s *AuthService) ChangePassword(ctx context.Context, adminID int64, currentPassword, newPassword string, ipAddress *string) error {
 	if len(newPassword) < 8 {
 		return domain.ErrInvalidPassword
@@ -201,12 +212,14 @@ func (s *AuthService) ChangePassword(ctx context.Context, adminID int64, current
 		return err
 	}
 
-	if !admin.IsActive {
-		return domain.ErrInactiveAdmin
-	}
-
 	match, err := authn.VerifyPassword(currentPassword, admin.PasswordHash)
-	if err != nil || !match {
+	if err != nil {
+		return fmt.Errorf("failed to verify current password: %w", err)
+	}
+	if !match {
+		s.recordAudit(ctx, &adminID, "admin.password.change.failed", "admin", &adminID, map[string]any{
+			"reason": "invalid_current_password",
+		}, ipAddress)
 		return domain.ErrInvalidCredentials
 	}
 
@@ -229,7 +242,7 @@ func (s *AuthService) ChangePassword(ctx context.Context, adminID int64, current
 	return nil
 }
 
-// BootstrapAdmin creates an initial administrator account.
+// BootstrapAdmin creates an initial administrator account with super_admin role.
 func (s *AuthService) BootstrapAdmin(ctx context.Context, email, displayName, password string) (*domain.Admin, error) {
 	normalizedEmail := domain.NormalizeEmail(email)
 	if normalizedEmail == "" {
@@ -251,6 +264,7 @@ func (s *AuthService) BootstrapAdmin(ctx context.Context, email, displayName, pa
 		Email:        normalizedEmail,
 		PasswordHash: hash,
 		DisplayName:  displayName,
+		Role:         domain.RoleSuperAdmin,
 		IsActive:     true,
 	}
 
@@ -305,8 +319,8 @@ func (s *AuthService) ListAdmins(ctx context.Context) ([]*domain.Admin, error) {
 	return s.admins.List(ctx)
 }
 
-// CreateAdmin creates a new administrator by an existing active administrator.
-func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, displayName, password string, ipAddress *string) (*domain.Admin, error) {
+// CreateAdmin creates a new administrator with a designated role by an existing active administrator.
+func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, displayName, role, password string, ipAddress *string) (*domain.Admin, error) {
 	normalizedEmail := domain.NormalizeEmail(email)
 	if normalizedEmail == "" {
 		return nil, errors.New("email cannot be empty")
@@ -318,6 +332,10 @@ func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, d
 		return nil, domain.ErrInvalidPassword
 	}
 
+	if role == "" || !domain.IsValidRole(role) {
+		role = domain.RoleEditor
+	}
+
 	hash, err := authn.HashPassword(password, s.argonParams)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -327,6 +345,7 @@ func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, d
 		Email:        normalizedEmail,
 		PasswordHash: hash,
 		DisplayName:  strings.TrimSpace(displayName),
+		Role:         role,
 		IsActive:     true,
 	}
 
@@ -336,9 +355,44 @@ func (s *AuthService) CreateAdmin(ctx context.Context, creatorID int64, email, d
 
 	s.recordAudit(ctx, &creatorID, "admin.create", "admin", &admin.ID, map[string]any{
 		"email": admin.Email,
+		"role":  admin.Role,
 	}, ipAddress)
 
 	return admin, nil
+}
+
+// UpdateAdminRole modifies the role of an administrator.
+func (s *AuthService) UpdateAdminRole(ctx context.Context, actorID, targetID int64, newRole string, ipAddress *string) error {
+	if !domain.IsValidRole(newRole) {
+		return domain.ErrInvalidRole
+	}
+
+	target, err := s.admins.GetByID(ctx, targetID)
+	if err != nil {
+		return err
+	}
+
+	// Protect against demoting the last active super_admin
+	if target.Role == domain.RoleSuperAdmin && newRole != domain.RoleSuperAdmin {
+		count, err := s.admins.CountActiveSuperAdmins(ctx)
+		if err != nil {
+			return err
+		}
+		if count <= 1 {
+			return domain.ErrCannotChangeLastSuperAdmin
+		}
+	}
+
+	if err := s.admins.UpdateRole(ctx, targetID, newRole); err != nil {
+		return err
+	}
+
+	s.recordAudit(ctx, &actorID, "admin.role.update", "admin", &targetID, map[string]any{
+		"old_role": target.Role,
+		"new_role": newRole,
+	}, ipAddress)
+
+	return nil
 }
 
 // ToggleAdminStatus activates or deactivates an administrator with self-lockout and last-active protections.
@@ -354,6 +408,17 @@ func (s *AuthService) ToggleAdminStatus(ctx context.Context, currentAdminID, tar
 		}
 		if activeCount <= 1 {
 			return domain.ErrCannotDeactivateLastAdmin
+		}
+
+		target, err := s.admins.GetByID(ctx, targetAdminID)
+		if err == nil && target.Role == domain.RoleSuperAdmin {
+			superCount, err := s.admins.CountActiveSuperAdmins(ctx)
+			if err != nil {
+				return err
+			}
+			if superCount <= 1 {
+				return domain.ErrCannotDeactivateLastAdmin
+			}
 		}
 	}
 

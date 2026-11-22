@@ -45,6 +45,47 @@ func RequireAdminSession(auth SessionAuthenticator) func(http.Handler) http.Hand
 	}
 }
 
+// RequireRoles enforces that the authenticated administrator has at least one of the specified roles.
+// SuperAdmin always satisfies all role requirements.
+func RequireRoles(roles ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			admin, ok := AdminFromContext(r.Context())
+			if !ok || admin == nil {
+				writeUnauthorized(w, r, "Authentication required.")
+				return
+			}
+
+			if !admin.HasRole(roles...) {
+				writeAccessForbidden(w, r, "Akses ditolak: peran Anda tidak memiliki hak akses untuk tindakan ini.")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequirePermission enforces that the authenticated administrator has a specific permission.
+func RequirePermission(perm string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			admin, ok := AdminFromContext(r.Context())
+			if !ok || admin == nil {
+				writeUnauthorized(w, r, "Authentication required.")
+				return
+			}
+
+			if !admin.HasPermission(perm) {
+				writeAccessForbidden(w, r, "Akses ditolak: izin tidak mencukupi untuk tindakan ini.")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // AdminFromContext retrieves the authenticated administrator from request context.
 func AdminFromContext(ctx context.Context) (*domain.Admin, bool) {
 	admin, ok := ctx.Value(AdminContextKey).(*domain.Admin)
@@ -66,6 +107,20 @@ func writeUnauthorized(w http.ResponseWriter, r *http.Request, detail string) {
 		"title":      "Unauthorized",
 		"status":     http.StatusUnauthorized,
 		"code":       "UNAUTHORIZED",
+		"detail":     detail,
+		"request_id": reqID,
+	})
+}
+
+func writeAccessForbidden(w http.ResponseWriter, r *http.Request, detail string) {
+	reqID := r.Header.Get("X-Request-Id")
+	w.Header().Set("Content-Type", "application/problem+json; charset=utf-8")
+	w.WriteHeader(http.StatusForbidden)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"type":       "about:blank",
+		"title":      "Forbidden",
+		"status":     http.StatusForbidden,
+		"code":       "FORBIDDEN",
 		"detail":     detail,
 		"request_id": reqID,
 	})
