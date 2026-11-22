@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	identityApp "pidiekab/internal/modules/identity/application"
 	"pidiekab/internal/modules/download"
@@ -213,12 +214,38 @@ func (h *DownloadHandler) HandlePublicDownloadFile(w http.ResponseWriter, r *htt
 	if stream != nil {
 		defer stream.Close()
 		w.Header().Set("Content-Type", mimeType)
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", sanitizeFilename(filename)))
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+
+		// Relax restrictive security headers so browser PDF viewer and media render properly
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		w.Header().Set("Content-Security-Policy", "default-src 'self' blob:; object-src 'self' blob:; img-src 'self' data: https: blob:; frame-ancestors 'self'")
+		w.Header().Set("Cross-Origin-Resource-Policy", "cross-origin")
+		w.Header().Del("Cross-Origin-Opener-Policy")
+
+		if r.URL.Query().Get("download") == "1" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", sanitizeFilename(filename)))
+		} else if strings.HasSuffix(strings.ToLower(filename), ".pdf") || mimeType == "application/pdf" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", sanitizeFilename(filename)))
+		} else {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", sanitizeFilename(filename)))
+		}
+
+		if seeker, ok := stream.(io.ReadSeeker); ok {
+			modTime := item.UpdatedAt
+			if modTime.IsZero() {
+				modTime = item.CreatedAt
+			}
+			if modTime.IsZero() {
+				modTime = time.Now()
+			}
+			http.ServeContent(w, r, sanitizeFilename(filename), modTime, seeker)
+			return
+		}
+
 		if item.FileSize > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(item.FileSize, 10))
 		}
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("Cache-Control", "private, no-cache, no-store, must-revalidate")
 		_, _ = io.Copy(w, stream)
 		return
 	}

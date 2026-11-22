@@ -132,19 +132,8 @@ func main() {
 	// Step 1: Initial Diagnosis
 	fmt.Println("\n[1/5] Memeriksa Status Awal Server (RAM, Swap, Disk)...")
 	diagScript := `
-echo "=== OS & Kernel ==="
-uname -a
-lsb_release -d || cat /etc/os-release | grep PRETTY_NAME
-
-echo -e "\n=== RAM & Swap ==="
-free -h
-swapon --show
-
-echo -e "\n=== Disk Space ==="
-df -h /
-
-echo -e "\n=== Top Memory Processes ==="
-ps aux --sort=-%mem | head -n 11
+echo "=== Cloudflared Config ==="
+cat /etc/cloudflared/config.yml 2>/dev/null
 `
 	out, err := exec.Sudo(diagScript)
 	if err != nil {

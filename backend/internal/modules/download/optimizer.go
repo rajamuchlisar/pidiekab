@@ -105,11 +105,8 @@ func OptimizeDownloadFile(filename string, data []byte) ([]byte, string, int64, 
 		return data, fileType, int64(len(data)), nil
 
 	case "pdf":
-		// Compress uncompressed PDF streams if present
-		compressed := compressPDFStreams(data)
-		if len(compressed) > 0 && len(compressed) < len(data) {
-			return compressed, fileType, int64(len(compressed)), nil
-		}
+		// Do not mutate raw PDF binary streams: modifying uncompressed streams without
+		// updating cross-reference tables (xref) corrupts PDF structures and breaks multi-page rendering.
 		return data, fileType, int64(len(data)), nil
 
 	default:

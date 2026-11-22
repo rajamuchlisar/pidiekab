@@ -52,13 +52,12 @@ func (r *DownloadRepository) EnsureSchema(ctx context.Context) error {
 		return fmt.Errorf("failed to ensure downloads table: %w", err)
 	}
 
-	// Clean up any legacy or dead asset URLs and ensure community portal branding (not government)
+	// Ensure community portal branding (not government)
 	_, _ = r.pool.Exec(ctx, `
 		UPDATE downloads 
-		SET file_url = '/api/v1/public/downloads/' || id || '/file',
-		    title_id = REPLACE(title_id, 'Resmi ', ''),
+		SET title_id = REPLACE(title_id, 'Resmi ', ''),
 		    title_en = REPLACE(title_en, 'Official ', '')
-		WHERE file_url LIKE '%/assets/%' OR title_id LIKE '%Resmi%' OR title_en LIKE '%Official%' OR id IN (1, 2, 3);
+		WHERE title_id LIKE '%Resmi%' OR title_en LIKE '%Official%';
 	`)
 
 	// Seed baseline download if empty
