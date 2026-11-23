@@ -36,6 +36,7 @@ type Config struct {
 	TLSCertFile               string
 	TLSKeyFile                string
 	HTTPRedirectAddr          string
+	AllowedHosts              []string
 }
 
 // Load reads configuration from environment variables, applies validated defaults,
@@ -179,6 +180,19 @@ func Load() (Config, error) {
 		httpRedirectAddr = ":80"
 	}
 
+	allowedHostsStr := env("PIDIEKAB_ALLOWED_HOSTS", "")
+	var allowedHosts []string
+	if allowedHostsStr != "" {
+		for _, h := range strings.Split(allowedHostsStr, ",") {
+			h = strings.ToLower(strings.TrimSpace(h))
+			if h != "" {
+				allowedHosts = append(allowedHosts, h)
+			}
+		}
+	} else if envName == "production" {
+		allowedHosts = []string{"pidiekab.web.id", "www.pidiekab.web.id", "localhost", "127.0.0.1", "::1"}
+	}
+
 	return Config{
 		Environment:               envName,
 		Address:                   addr,
@@ -205,7 +219,35 @@ func Load() (Config, error) {
 		TLSCertFile:               tlsCertFile,
 		TLSKeyFile:                tlsKeyFile,
 		HTTPRedirectAddr:          httpRedirectAddr,
+		AllowedHosts:              allowedHosts,
 	}, nil
+}
+
+// IsHostAllowed reports whether the given hostname is permitted to access the application.
+// If AllowedHosts is empty, all hosts are allowed (convenient for local unit tests).
+func (c Config) IsHostAllowed(host string) bool {
+	if len(c.AllowedHosts) == 0 {
+		return true
+	}
+	if colonIdx := strings.Index(host, ":"); colonIdx != -1 {
+		host = host[:colonIdx]
+	}
+	host = strings.ToLower(strings.TrimSpace(host))
+	if host == "" {
+		return false
+	}
+	for _, allowed := range c.AllowedHosts {
+		if allowed == "*" || allowed == host {
+			return true
+		}
+		if strings.HasPrefix(allowed, "*.") {
+			suffix := allowed[1:]
+			if strings.HasSuffix(host, suffix) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func env(key, fallback string) string {

@@ -303,7 +303,7 @@ func main() {
 	}()
 
 	if cfg.TLSCertFile != "" && cfg.HTTPRedirectAddr != "" {
-		redirectServer = httpserver.NewHTTPToHTTPSRedirectServer(cfg.HTTPRedirectAddr, logger)
+		redirectServer = httpserver.NewHTTPToHTTPSRedirectServer(cfg.HTTPRedirectAddr, cfg, logger)
 		go func() {
 			logger.Info("starting HTTP-to-HTTPS redirect server", "addr", cfg.HTTPRedirectAddr)
 			if err := redirectServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

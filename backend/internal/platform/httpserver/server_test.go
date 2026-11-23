@@ -265,8 +265,12 @@ func TestSecurityHeadersHardening(t *testing.T) {
 
 func TestHTTPToHTTPSRedirectServer(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
-	redirectSrv := httpserver.NewHTTPToHTTPSRedirectServer(":80", logger)
+	cfg := config.Config{
+		AllowedHosts: []string{"pidiekab.web.id", "www.pidiekab.web.id"},
+	}
+	redirectSrv := httpserver.NewHTTPToHTTPSRedirectServer(":80", cfg, logger)
 
+	// 1. Allowed host redirects properly
 	req := httptest.NewRequest(http.MethodGet, "/id/wisata-destinasi?page=1", nil)
 	req.Host = "pidiekab.web.id:80"
 	rec := httptest.NewRecorder()
@@ -280,6 +284,48 @@ func TestHTTPToHTTPSRedirectServer(t *testing.T) {
 	expected := "https://pidiekab.web.id/id/wisata-destinasi?page=1"
 	if location != expected {
 		t.Errorf("expected redirect location %q, got %q", expected, location)
+	}
+
+	// 2. Disallowed host (e.g. iplku.id) is rejected with 404
+	reqBad := httptest.NewRequest(http.MethodGet, "/id/wisata-destinasi", nil)
+	reqBad.Host = "iplku.id"
+	recBad := httptest.NewRecorder()
+	redirectSrv.Handler.ServeHTTP(recBad, reqBad)
+
+	if recBad.Code != http.StatusNotFound {
+		t.Errorf("expected 404 Not Found for foreign domain iplku.id on redirect server, got %d", recBad.Code)
+	}
+}
+
+func TestHostFilterMiddleware(t *testing.T) {
+	cfg := config.Config{
+		Environment:       "production",
+		Address:           ":443",
+		AllowedHosts:      []string{"pidiekab.web.id", "www.pidiekab.web.id", "127.0.0.1", "localhost"},
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	handler := httpserver.BuildHandler(cfg, logger, nil)
+
+	// Test allowed host
+	reqOk := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	reqOk.Host = "pidiekab.web.id"
+	recOk := httptest.NewRecorder()
+	handler.ServeHTTP(recOk, reqOk)
+	if recOk.Code != http.StatusOK {
+		t.Errorf("expected 200 OK for allowed host, got %d", recOk.Code)
+	}
+
+	// Test disallowed foreign host (e.g. iplku.id)
+	reqDisallowed := httptest.NewRequest(http.MethodGet, "/health/live", nil)
+	reqDisallowed.Host = "iplku.id"
+	recDisallowed := httptest.NewRecorder()
+	handler.ServeHTTP(recDisallowed, reqDisallowed)
+	if recDisallowed.Code != http.StatusNotFound {
+		t.Errorf("expected 404 Not Found for foreign host iplku.id, got %d", recDisallowed.Code)
 	}
 }
 

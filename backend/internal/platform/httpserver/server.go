@@ -193,15 +193,26 @@ func BuildHandler(cfg config.Config, logger *slog.Logger, db DatabasePinger, reg
 	})
 
 	// Standard middleware wrapping order:
-	// RequestID -> Recovery -> Logger -> SecurityHeaders -> Gzip -> ServeMux
+	// RequestID -> Recovery -> HostFilter -> Logger -> SecurityHeaders -> Gzip -> ServeMux
 	var handler http.Handler = mux
 	handler = middleware.Gzip(handler)
 	handler = middleware.SecurityHeaders(handler)
 	handler = middleware.Logger(logger)(handler)
+	handler = hostFilter(cfg, handler)
 	handler = middleware.Recovery(logger)(handler)
 	handler = middleware.RequestID(handler)
 
 	return handler
+}
+
+func hostFilter(cfg config.Config, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !cfg.IsHostAllowed(r.Host) {
+			http.Error(w, "Not Found", http.StatusNotFound)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // New creates and configures an http.Server with explicit timeouts, database pinger, and middleware.
@@ -217,8 +228,19 @@ func New(cfg config.Config, logger *slog.Logger, db DatabasePinger, registrars .
 	}
 
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
+		if err != nil {
+			logger.Error("failed to load TLS certificate", "error", err)
+		}
 		srv.TLSConfig = &tls.Config{
 			MinVersion: tls.VersionTLS12,
+			GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				sni := strings.ToLower(strings.TrimSpace(hello.ServerName))
+				if sni != "" && !cfg.IsHostAllowed(sni) {
+					return nil, fmt.Errorf("unrecognized server name %q", sni)
+				}
+				return &cert, nil
+			},
 			CurvePreferences: []tls.CurveID{
 				tls.X25519,
 				tls.CurveP256,
@@ -237,12 +259,18 @@ func New(cfg config.Config, logger *slog.Logger, db DatabasePinger, registrars .
 	return srv
 }
 
-// NewHTTPToHTTPSRedirectServer creates an HTTP server that unconditionally redirects all traffic to HTTPS.
-func NewHTTPToHTTPSRedirectServer(addr string, logger *slog.Logger) *http.Server {
+// NewHTTPToHTTPSRedirectServer creates an HTTP server that unconditionally redirects allowed hosts to HTTPS.
+// Foreign or disallowed hosts are rejected with 404 Not Found to prevent hijacking or domain association.
+func NewHTTPToHTTPSRedirectServer(addr string, cfg config.Config, logger *slog.Logger) *http.Server {
 	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host := r.Host
 		if colonIdx := strings.Index(host, ":"); colonIdx != -1 {
 			host = host[:colonIdx]
+		}
+		host = strings.ToLower(strings.TrimSpace(host))
+		if !cfg.IsHostAllowed(host) {
+			http.NotFound(w, r)
+			return
 		}
 		target := "https://" + host + r.URL.RequestURI()
 		http.Redirect(w, r, target, http.StatusMovedPermanently)
