@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1613,30 +1614,201 @@ body {
     text-decoration: underline;
 }
 
-/* Article Layout with Floating Sticky TOC */
+/* Article Layout with Left Floating Share & Right Sticky TOC */
 .article-page-container {
-    max-width: 1200px;
+    max-width: 1260px;
     padding-top: 1.5rem;
     padding-bottom: 3.5rem;
 }
 .article-layout {
     display: flex;
     flex-direction: column;
-    gap: 2rem;
+    gap: 1.5rem;
     align-items: flex-start;
+    position: relative;
 }
 @media (min-width: 1024px) {
     .article-layout {
         flex-direction: row;
-        gap: 3.5rem;
+        gap: 2.25rem;
         align-items: flex-start;
     }
 }
 .article-main-col {
     flex: 1;
     min-width: 0;
-    max-width: 800px;
+    max-width: 780px;
     width: 100%;
+}
+
+/* Left Social Share Sidebar (Mobile: Horizontal / Desktop: Sticky Vertical) */
+.article-share-sidebar {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.65rem 0.85rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    overflow-x: auto;
+    width: 100%;
+    margin-bottom: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+}
+
+.share-title-wrap {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    color: #475569;
+    padding-right: 0.65rem;
+    border-right: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.share-title-icon {
+    width: 18px;
+    height: 18px;
+    color: #475569;
+}
+
+.share-title-text {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #475569;
+}
+
+.share-buttons-stack {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.share-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffffff;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+    flex-shrink: 0;
+}
+
+.share-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    opacity: 0.92;
+}
+
+.share-btn:active {
+    transform: translateY(0);
+}
+
+.share-btn svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+/* Specific Platform Colors */
+.share-btn-native { background: #059669; }
+.share-btn-facebook { background: #1877F2; }
+.share-btn-x { background: #0f172a; }
+.share-btn-whatsapp { background: #25D366; }
+.share-btn-telegram { background: #229ED9; }
+.share-btn-pinterest { background: #E60023; }
+.share-btn-email { background: #EA4335; }
+
+/* Desktop Floating Vertical Sticky Bar */
+@media (min-width: 1024px) {
+    .article-share-sidebar {
+        width: 54px;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.75rem;
+        position: sticky;
+        top: 6.5rem;
+        padding: 0.85rem 0.45rem;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        background: #ffffff;
+        box-shadow: 0 4px 14px rgba(15,23,42,0.06);
+        margin-bottom: 0;
+        z-index: 25;
+        overflow-x: visible;
+        flex-shrink: 0;
+    }
+
+    .share-title-wrap {
+        flex-direction: column;
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+        padding-right: 0;
+        padding-bottom: 0.6rem;
+        width: 100%;
+        text-align: center;
+    }
+
+    .share-title-icon {
+        width: 20px;
+        height: 20px;
+    }
+
+    .share-title-text {
+        font-size: 0.7rem;
+        margin-top: 0.25rem;
+    }
+
+    .share-buttons-stack {
+        flex-direction: column;
+        gap: 0.55rem;
+        width: 100%;
+        align-items: center;
+    }
+
+    .share-btn {
+        width: 40px;
+        height: 40px;
+    }
+
+    .share-btn svg {
+        width: 19px;
+        height: 19px;
+    }
+}
+
+.share-toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.65rem 1.25rem;
+    border-radius: 9999px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    animation: fadeInToast 0.2s ease-out;
+}
+@keyframes fadeInToast {
+    from { opacity: 0; transform: translate(-50%, 10px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
 }
 
 /* Floating Sticky TOC Sidebar */
@@ -2890,6 +3062,8 @@ html {
 		}
 		articleMetaHTML := strings.Join(articleMetaParts, ` <span style="color:#cbd5e1;">•</span> `)
 
+		shareSidebarHTML, shareScriptHTML := renderArticleShareSidebar(c.Title, canonical, contentImageURL, locale)
+
 		detailHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
 <head>
@@ -2906,6 +3080,7 @@ html {
             <a href="/%s/%s/" class="back-btn" style="margin-bottom:0;">%s</a>
         </p>
         <div class="article-layout">
+            %s
             <div class="article-main-col">
                 <article class="article-header">
                     <span class="badge">%s</span>
@@ -2922,6 +3097,7 @@ html {
     </main>
 %s
 %s
+%s
 </body>
 </html>`,
 			locale,
@@ -2934,6 +3110,7 @@ html {
 			locale,
 			c.CategorySlug,
 			template.HTMLEscapeString(c.CategoryName),
+			shareSidebarHTML,
 			template.HTMLEscapeString(c.CategoryName),
 			template.HTMLEscapeString(c.Title),
 			articleMetaHTML,
@@ -2941,6 +3118,7 @@ html {
 			sourcesHTML.String(),
 			tocSidebarHTML,
 			footerHTML,
+			shareScriptHTML,
 			tocScriptHTML,
 		)
 
@@ -4020,4 +4198,115 @@ func formatDisplayDate(t time.Time, locale string) string {
 		mName = months[monthIdx]
 	}
 	return fmt.Sprintf("%d %s %d", t.Day(), mName, t.Year())
+}
+
+func renderArticleShareSidebar(title, canonicalURL, imageURL, locale string) (string, string) {
+	encURL := url.QueryEscape(canonicalURL)
+	encTitle := url.QueryEscape(title)
+	encImage := url.QueryEscape(imageURL)
+
+	shareTitle := "Share"
+	copyLabel := "Salin Tautan / Bagikan"
+	toastCopied := "Tautan berhasil disalin ke clipboard!"
+	if locale == "en" {
+		copyLabel = "Copy Link / Share"
+		toastCopied = "Link copied to clipboard!"
+	}
+
+	fbURL := fmt.Sprintf("https://www.facebook.com/sharer/sharer.php?u=%s", encURL)
+	xURL := fmt.Sprintf("https://twitter.com/intent/tweet?url=%s&text=%s", encURL, encTitle)
+	waURL := fmt.Sprintf("https://api.whatsapp.com/send?text=%s%%20%s", encTitle, encURL)
+	tgURL := fmt.Sprintf("https://t.me/share/url?url=%s&text=%s", encURL, encTitle)
+	pinURL := fmt.Sprintf("https://pinterest.com/pin/create/button/?url=%s&description=%s&media=%s", encURL, encTitle, encImage)
+	mailURL := fmt.Sprintf("mailto:?subject=%s&body=%s%%0A%%0A%s", encTitle, encTitle, encURL)
+
+	sidebarHTML := fmt.Sprintf(`
+        <aside class="article-share-sidebar" aria-label="%s">
+            <div class="share-title-wrap" title="%s">
+                <svg class="share-title-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="18" cy="5" r="3"></circle>
+                    <circle cx="6" cy="12" r="3"></circle>
+                    <circle cx="18" cy="19" r="3"></circle>
+                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                </svg>
+                <span class="share-title-text">%s</span>
+            </div>
+            <div class="share-buttons-stack">
+                <button type="button" class="share-btn share-btn-native" onclick="handleShareOrCopy('%s', '%s')" title="%s" aria-label="%s">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="18" cy="5" r="3"></circle>
+                        <circle cx="6" cy="12" r="3"></circle>
+                        <circle cx="18" cy="19" r="3"></circle>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+                    </svg>
+                </button>
+                <a href="%s" target="_blank" rel="noopener noreferrer" class="share-btn share-btn-facebook" title="Facebook" aria-label="Bagikan ke Facebook">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+                </a>
+                <a href="%s" target="_blank" rel="noopener noreferrer" class="share-btn share-btn-x" title="X (Twitter)" aria-label="Bagikan ke X">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                </a>
+                <a href="%s" target="_blank" rel="noopener noreferrer" class="share-btn share-btn-whatsapp" title="WhatsApp" aria-label="Bagikan ke WhatsApp">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.24-8.24 8.24-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.2-.31a8.196 8.196 0 0 1-1.26-4.38c0-4.54 3.7-8.24 8.24-8.24m4.52 11.66c-.25-.13-1.47-.72-1.7-.81-.23-.08-.39-.13-.56.13-.17.25-.64.81-.79.97-.14.17-.29.19-.54.06-.25-.13-1.06-.39-2.03-1.25-.75-.67-1.26-1.5-1.41-1.75-.15-.25-.02-.39.11-.51.11-.11.25-.29.37-.43.13-.15.17-.25.25-.42.08-.17.04-.31-.02-.44-.06-.13-.56-1.34-.76-1.84-.2-.48-.41-.42-.56-.43h-.48c-.17 0-.44.06-.67.31-.23.25-.88.86-.88 2.1 0 1.24.9 2.44 1.03 2.61.13.17 1.77 2.71 4.3 3.79.6.26 1.07.41 1.44.53.61.19 1.16.17 1.6.1.49-.07 1.47-.6 1.68-1.18.21-.58.21-1.07.15-1.18-.06-.12-.22-.19-.47-.32z"/></svg>
+                </a>
+                <a href="%s" target="_blank" rel="noopener noreferrer" class="share-btn share-btn-telegram" title="Telegram" aria-label="Bagikan ke Telegram">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 0 0-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.51 2.78-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+                </a>
+                <a href="%s" target="_blank" rel="noopener noreferrer" class="share-btn share-btn-pinterest" title="Pinterest" aria-label="Bagikan ke Pinterest">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.663.967-2.911 2.168-2.911 1.024 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 0 1 .083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.631-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146 1.124.347 2.317.535 3.554.535 6.627 0 12-5.373 12-12 0-6.628-5.373-12-12-12z"/></svg>
+                </a>
+                <a href="%s" class="share-btn share-btn-email" title="Email" aria-label="Bagikan via Email">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg>
+                </a>
+            </div>
+        </aside>`,
+		shareTitle, shareTitle, shareTitle,
+		template.JSEscapeString(title), template.JSEscapeString(canonicalURL), copyLabel, copyLabel,
+		fbURL, xURL, waURL, tgURL, pinURL, mailURL,
+	)
+
+	scriptHTML := fmt.Sprintf(`
+    <div id="share-toast" class="share-toast" style="display:none;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span>%s</span>
+    </div>
+    <script>
+    function handleShareOrCopy(title, url) {
+        if (navigator.share) {
+            navigator.share({ title: title, url: url }).catch(function(){});
+        } else if (navigator.clipboard) {
+            navigator.clipboard.writeText(url).then(function() {
+                showShareToast();
+            }).catch(function() {
+                fallbackCopyText(url);
+            });
+        } else {
+            fallbackCopyText(url);
+        }
+    }
+    function fallbackCopyText(text) {
+        var input = document.createElement('input');
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        try {
+            document.execCommand('copy');
+            showShareToast();
+        } catch (e) {}
+        document.body.removeChild(input);
+    }
+    function showShareToast() {
+        var t = document.getElementById('share-toast');
+        if (!t) return;
+        t.style.display = 'flex';
+        clearTimeout(window.__shareTimer);
+        window.__shareTimer = setTimeout(function() {
+            t.style.display = 'none';
+        }, 2600);
+    }
+    </script>`, toastCopied)
+
+	return sidebarHTML, scriptHTML
 }
