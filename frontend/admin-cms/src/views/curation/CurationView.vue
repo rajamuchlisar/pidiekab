@@ -29,14 +29,29 @@ function getCategoryName(catId: any): string {
   return categoryMap.value[String(catId)] || 'Umum'
 }
 
+function isContentPublished(content: any, locale?: 'id' | 'en'): boolean {
+  if (!content || !content.translations) return false
+  if (locale) {
+    return content.translations[locale]?.status === 'published'
+  }
+  return content.translations.id?.status === 'published' || content.translations.en?.status === 'published'
+}
+
+const publishedContents = computed(() => {
+  const reqLocale = activeTab.value === 'stories' ? activeLocale.value : undefined
+  return availableContents.value.filter((c: any) => isContentPublished(c, reqLocale))
+})
+
 const filteredContents = computed(() => {
-  if (!searchQuery.value.trim()) return availableContents.value
+  const pool = publishedContents.value
+  if (!searchQuery.value.trim()) return pool
   const q = searchQuery.value.toLowerCase()
-  return availableContents.value.filter((c: any) => {
+  return pool.filter((c: any) => {
+    const tActive = c.translations?.[activeLocale.value]?.title?.toLowerCase() || ''
     const tID = c.translations?.id?.title?.toLowerCase() || ''
     const tEN = c.translations?.en?.title?.toLowerCase() || ''
     const cat = (c.categoryName || '').toLowerCase()
-    return tID.includes(q) || tEN.includes(q) || cat.includes(q)
+    return tActive.includes(q) || tID.includes(q) || tEN.includes(q) || cat.includes(q)
   })
 })
 
@@ -44,7 +59,7 @@ async function loadData() {
   isLoading.value = true
   try {
     const [contentsRes, featRes, storiesRes, catRes] = await Promise.all([
-      api.get<{ items: any[] }>('/api/v1/admin/contents?per_page=100'),
+      api.get<{ items: any[] }>('/api/v1/admin/contents?per_page=100&status=published'),
       api.get<{ items: any[] }>('/api/v1/admin/curation/featured'),
       api.get<any>('/api/v1/admin/curation/stories'),
       api.get<{ items: any[] }>('/api/v1/admin/categories').catch(() => ({ items: [] })),
@@ -107,6 +122,10 @@ function switchLocale(loc: 'id' | 'en') {
 }
 
 function addFeatured(content: any) {
+  if (!isContentPublished(content)) {
+    notification.show('error', 'Tidak Dapat Dipilih', 'Artikel belum berstatus Terbit (Published).')
+    return
+  }
   if (featuredList.value.some((f) => f.contentId === content.id)) {
     notification.show('warning', 'Sudah Ada', 'Artikel ini sudah ada di daftar Unggulan.')
     return
@@ -139,6 +158,10 @@ function moveFeatured(index: number, direction: 'up' | 'down') {
 }
 
 function setLeadStory(content: any) {
+  if (!isContentPublished(content, activeLocale.value)) {
+    notification.show('error', 'Tidak Dapat Dipilih', `Artikel belum berstatus Terbit dalam bahasa ${activeLocale.value === 'id' ? 'Indonesia' : 'Inggris'}.`)
+    return
+  }
   leadContentId.value = content.id
   // If this item was in supporting, remove it from supporting
   const existingIdx = supportingList.value.findIndex((s) => s.contentId === content.id)
@@ -148,6 +171,10 @@ function setLeadStory(content: any) {
 }
 
 function addSupporting(content: any) {
+  if (!isContentPublished(content, activeLocale.value)) {
+    notification.show('error', 'Tidak Dapat Dipilih', `Artikel belum berstatus Terbit dalam bahasa ${activeLocale.value === 'id' ? 'Indonesia' : 'Inggris'}.`)
+    return
+  }
   if (content.id === leadContentId.value) {
     notification.show('warning', 'Perhatian', 'Artikel yang dipilih saat ini adalah Cerita Utama (Lead Story).')
     return
@@ -302,8 +329,11 @@ onMounted(() => {
 
           <!-- Content Picker Pool -->
           <div class="card pool-card">
-            <h3 class="card-title">Pilih dari Artikel Tersedia</h3>
-            <p class="card-sub">Hanya artikel yang sudah terbit (Published) yang dapat diunggulkan.</p>
+            <div class="pool-header">
+              <h3 class="card-title">Pilih dari Artikel Terbit</h3>
+              <span class="badge-filter-status">Hanya Artikel Terbit</span>
+            </div>
+            <p class="card-sub">Menampilkan artikel yang sudah berstatus <strong>Terbit (Published)</strong> agar valid disimpan ke beranda.</p>
 
             <div class="search-box">
               <input
@@ -314,12 +344,20 @@ onMounted(() => {
               />
             </div>
 
-            <ul class="pool-items">
+            <div v-if="filteredContents.length === 0" class="empty-pool">
+              <BladeIcon name="information-circle" size="22" class="empty-icon" />
+              <span>Tidak ada artikel berstatus Terbit yang cocok dengan pencarian.</span>
+            </div>
+
+            <ul v-else class="pool-items">
               <li v-for="c in filteredContents" :key="c.id" class="pool-item">
                 <div class="pool-info">
-                  <span class="pool-title">
-                    {{ c.translations?.id?.title || c.translations?.en?.title || 'Tanpa Judul' }}
-                  </span>
+                  <div class="pool-title-row">
+                    <span class="pool-title">
+                      {{ c.translations?.id?.title || c.translations?.en?.title || 'Tanpa Judul' }}
+                    </span>
+                    <span class="pill-terbit">Terbit</span>
+                  </div>
                   <span class="pool-cat">{{ c.categoryName }}</span>
                 </div>
                 <button class="btn-sm btn-outline" @click="addFeatured(c)">+ Pilih</button>
@@ -405,8 +443,11 @@ onMounted(() => {
 
           <!-- Pool for Stories -->
           <div class="card pool-card">
-            <h3 class="card-title">Artikel Tersedia ({{ activeLocale.toUpperCase() }})</h3>
-            <p class="card-sub">Pilih artikel untuk dijadikan Lead Story atau Supporting Story.</p>
+            <div class="pool-header">
+              <h3 class="card-title">Artikel Terbit ({{ activeLocale.toUpperCase() }})</h3>
+              <span class="badge-filter-status">Terbit: {{ activeLocale === 'id' ? 'Indonesia' : 'English' }}</span>
+            </div>
+            <p class="card-sub">Hanya artikel yang berstatus <strong>Terbit (Published)</strong> dalam bahasa {{ activeLocale === 'id' ? 'Indonesia' : 'Inggris' }} yang dapat dijadikan cerita beranda.</p>
 
             <div class="search-box">
               <input
@@ -417,10 +458,18 @@ onMounted(() => {
               />
             </div>
 
-            <ul class="pool-items">
+            <div v-if="filteredContents.length === 0" class="empty-pool">
+              <BladeIcon name="information-circle" size="22" class="empty-icon" />
+              <span>Tidak ada artikel terbit dalam bahasa {{ activeLocale === 'id' ? 'Indonesia' : 'Inggris' }}. Terbitkan artikel terlebih dahulu di menu Kelola Konten.</span>
+            </div>
+
+            <ul v-else class="pool-items">
               <li v-for="c in filteredContents" :key="c.id" class="pool-item">
                 <div class="pool-info">
-                  <span class="pool-title">{{ c.translations?.[activeLocale]?.title || c.translations?.id?.title || 'Tanpa Judul' }}</span>
+                  <div class="pool-title-row">
+                    <span class="pool-title">{{ c.translations?.[activeLocale]?.title || c.translations?.id?.title || 'Tanpa Judul' }}</span>
+                    <span class="pill-terbit">Terbit ({{ activeLocale.toUpperCase() }})</span>
+                  </div>
                   <span class="pool-cat">{{ c.categoryName }}</span>
                 </div>
                 <div class="pool-actions">
@@ -525,6 +574,64 @@ onMounted(() => {
   align-items: flex-start;
   margin-bottom: 1.25rem;
   gap: 1rem;
+}
+
+.pool-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.badge-filter-status {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.pool-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.pill-terbit {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.empty-pool {
+  padding: 1.75rem 1rem;
+  text-align: center;
+  color: #64748b;
+  font-size: 0.85rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  line-height: 1.4;
+}
+
+.empty-icon {
+  color: #94a3b8;
 }
 
 .card-title { margin: 0 0 0.25rem 0; font-size: 1.05rem; font-weight: 700; color: #0f172a; }

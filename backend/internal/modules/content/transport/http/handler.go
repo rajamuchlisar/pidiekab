@@ -95,7 +95,7 @@ func (h *Handler) handleListContents(w http.ResponseWriter, r *http.Request) {
 
 	perPage := 12
 	if ppStr := q.Get("per_page"); ppStr != "" {
-		if pp, err := strconv.Atoi(ppStr); err == nil && pp > 0 && pp <= 50 {
+		if pp, err := strconv.Atoi(ppStr); err == nil && pp > 0 && pp <= 200 {
 			perPage = pp
 		}
 	}
