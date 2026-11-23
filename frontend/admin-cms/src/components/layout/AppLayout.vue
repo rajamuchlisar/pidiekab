@@ -122,17 +122,17 @@ async function handleLogout() {
         </div>
         <div class="topbar-right">
           <router-link to="/profil" class="admin-badge admin-badge-link" title="Buka Profil Saya">
-            <div class="admin-avatar">{{ authStore.user?.displayName?.charAt(0) || 'A' }}</div>
+            <div class="admin-avatar">{{ authStore.user?.displayName?.charAt(0) || 'S' }}</div>
             <div class="admin-details">
-              <div class="admin-title-row">
-                <span class="admin-name">{{ authStore.user?.displayName || 'Administrator' }}</span>
+              <span class="admin-name">{{ authStore.user?.displayName || 'Super Administrator' }}</span>
+              <span class="admin-email">{{ authStore.user?.email || 'admin@pidiekab.web.id' }}</span>
+              <div class="admin-role-wrap">
                 <span class="role-pill" :class="authStore.roleBadgeClass">{{ authStore.roleLabel }}</span>
               </div>
-              <span class="admin-email">{{ authStore.user?.email || 'admin@pidiekab.id' }}</span>
             </div>
           </router-link>
           <button class="btn-logout" @click="handleLogout" title="Keluar">
-            <BladeIcon name="arrow-left-on-rectangle" size="16" />
+            <BladeIcon name="arrow-right-on-rectangle" size="16" />
             <span>Keluar</span>
           </button>
         </div>
@@ -297,12 +297,12 @@ async function handleLogout() {
 
 .topbar {
   background-color: #ffffff;
-  height: 64px;
+  min-height: 72px;
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 2rem;
+  padding: 0.5rem 2rem;
 }
 
 .page-title {
@@ -321,9 +321,9 @@ async function handleLogout() {
 .admin-badge {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.75rem;
   padding: 0.35rem 0.65rem;
-  border-radius: 10px;
+  border-radius: 8px;
   border: 1px solid transparent;
 }
 
@@ -334,45 +334,62 @@ async function handleLogout() {
 }
 
 .admin-badge-link:hover {
-  background: #f1f5f9;
+  background: #f8fafc;
   border-color: #e2e8f0;
 }
 
 .admin-avatar {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   background: #064e3b;
   color: #ffffff;
-  font-weight: 600;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-size: 0.9rem;
+  font-size: 1.05rem;
+  flex-shrink: 0;
 }
 
 .admin-details {
   display: flex;
   flex-direction: column;
+  gap: 0.1rem;
 }
 
-.admin-title-row {
+.admin-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.25;
+}
+
+.admin-email {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.25;
+}
+
+.admin-role-wrap {
+  margin-top: 0.2rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
 }
 
 .role-pill {
-  font-size: 0.65rem;
+  font-size: 0.62rem;
   font-weight: 700;
-  padding: 0.15rem 0.45rem;
+  padding: 0.12rem 0.55rem;
   border-radius: 9999px;
-  letter-spacing: 0.025em;
+  letter-spacing: 0.035em;
   text-transform: uppercase;
+  display: inline-block;
+  line-height: 1.3;
 }
 
 .badge-role-super {
-  background: #f3e8ff;
+  background: #f5f3ff;
   color: #7e22ce;
   border: 1px solid #d8b4fe;
 }
@@ -395,35 +412,27 @@ async function handleLogout() {
   border: 1px solid #fde68a;
 }
 
-.admin-name {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.admin-email {
-  font-size: 0.75rem;
-  color: #64748b;
-}
-
 .btn-logout {
-  background: #fee2e2;
+  background: #fef2f2;
   color: #991b1b;
   border: 1px solid #fecaca;
-  padding: 0.4rem 0.85rem;
+  padding: 0.45rem 0.9rem;
   font-size: 0.85rem;
   font-weight: 600;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.45rem;
   transition: all 0.15s ease;
+  line-height: 1;
 }
 
 .btn-logout:hover {
-  background: #fca5a5;
+  background: #fee2e2;
+  border-color: #fca5a5;
   color: #7f1d1d;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .page-content {
