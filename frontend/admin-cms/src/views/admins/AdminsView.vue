@@ -73,6 +73,13 @@ const systemModules: ModuleInfo[] = [
     description: 'Mengunggah dan mengelola berkas panduan publik, peta wisata, dan dokumen unduhan',
   },
   {
+    key: 'tata-letak',
+    name: 'Tata Letak & Banner',
+    path: '/tata-letak',
+    icon: 'rectangle-group',
+    description: 'Mengatur banner promosi, sponsor, dan slot iklan AdSense pada tata letak situs',
+  },
+  {
     key: 'settings',
     name: 'Pengaturan Web',
     path: '/settings',
@@ -111,10 +118,10 @@ function getDefaultPermissionsForRole(role?: string): string[] {
     case 'admin':
       return [
         'dashboard', 'contents', 'categories', 'media', 'curation',
-        'static-pages', 'menus', 'unduhan', 'settings', 'redirects', 'audit-logs',
+        'static-pages', 'menus', 'unduhan', 'tata-letak', 'settings', 'redirects', 'audit-logs',
       ]
     case 'editor':
-      return ['dashboard', 'contents', 'categories', 'media', 'curation', 'unduhan']
+      return ['dashboard', 'contents', 'categories', 'media', 'curation', 'unduhan', 'tata-letak']
     case 'author':
       return ['dashboard', 'contents', 'media']
     default:
@@ -222,7 +229,7 @@ const defaultRoles: RoleDefinition[] = [
     badge_color: 'green',
     permissions: [
       'dashboard', 'contents', 'categories', 'media', 'curation',
-      'static-pages', 'menus', 'unduhan', 'settings', 'redirects', 'audit-logs',
+      'static-pages', 'menus', 'unduhan', 'tata-letak', 'settings', 'redirects', 'audit-logs',
     ],
   },
   {
@@ -230,7 +237,7 @@ const defaultRoles: RoleDefinition[] = [
     name: 'Editor Konten',
     description: 'Meninjau, mengedit, mempublikasikan artikel berita/budaya/wisata, kurasi beranda, dan media library.',
     badge_color: 'blue',
-    permissions: ['dashboard', 'contents', 'categories', 'media', 'curation', 'unduhan'],
+    permissions: ['dashboard', 'contents', 'categories', 'media', 'curation', 'unduhan', 'tata-letak'],
   },
   {
     key: 'author',

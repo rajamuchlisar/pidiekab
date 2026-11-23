@@ -32,6 +32,9 @@ import (
 	identityApp "pidiekab/internal/modules/identity/application"
 	identityPostgres "pidiekab/internal/modules/identity/infrastructure/postgres"
 	identityHttp "pidiekab/internal/modules/identity/transport/http"
+	layoutApp "pidiekab/internal/modules/layout/application"
+	layoutPostgres "pidiekab/internal/modules/layout/infrastructure/postgres"
+	layoutHttp "pidiekab/internal/modules/layout/transport/http"
 	locationPostgres "pidiekab/internal/modules/location/infrastructure/postgres"
 	locationHttp "pidiekab/internal/modules/location/transport/http"
 	mediaApp "pidiekab/internal/modules/media/application"
@@ -264,6 +267,13 @@ func main() {
 		analyticsService := analyticsApp.NewAnalyticsService(analyticsRepo)
 		analyticsHandler := analyticsHttp.NewAnalyticsHandler(analyticsService, authService)
 		registrars = append(registrars, analyticsHandler)
+
+		// 16. Layout, Promotional Banners & AdSense Slots
+		layoutRepo := layoutPostgres.NewBannerRepository(dbPool)
+		layoutService := layoutApp.NewLayoutService(layoutRepo, auditRepo)
+		layoutService.SetJobEnqueuer(jobRepo)
+		layoutHandler := layoutHttp.NewLayoutHandler(layoutService, authService)
+		registrars = append(registrars, layoutHandler)
 	} else {
 		logger.Warn("PIDIEKAB_DATABASE_URL is not configured; running without database connection pool")
 	}

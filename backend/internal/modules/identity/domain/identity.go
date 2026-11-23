@@ -98,6 +98,13 @@ var AvailableModules = []ModuleInfo{
 		Description: "Mengunggah dan mengelola berkas panduan publik, peta wisata, dan dokumen unduhan",
 	},
 	{
+		Key:         "tata-letak",
+		Name:        "Tata Letak & Banner",
+		Path:        "/tata-letak",
+		Icon:        "rectangle-group",
+		Description: "Mengatur banner promosi, sponsor, dan slot iklan AdSense pada tata letak situs",
+	},
+	{
 		Key:         "settings",
 		Name:        "Pengaturan Web",
 		Path:        "/settings",
@@ -168,11 +175,11 @@ func RoleDefaultModules(role string) []string {
 	case RoleAdmin:
 		return []string{
 			"dashboard", "contents", "categories", "media", "curation",
-			"static-pages", "menus", "unduhan", "settings", "redirects", "audit-logs",
+			"static-pages", "menus", "unduhan", "tata-letak", "settings", "redirects", "audit-logs",
 		}
 	case RoleEditor:
 		return []string{
-			"dashboard", "contents", "categories", "media", "curation", "unduhan",
+			"dashboard", "contents", "categories", "media", "curation", "unduhan", "tata-letak",
 		}
 	case RoleAuthor:
 		return []string{

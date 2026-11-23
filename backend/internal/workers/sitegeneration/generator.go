@@ -121,6 +121,18 @@ type DownloadRender struct {
 	DownloadCount int64
 }
 
+type BannerRender struct {
+	ID           int64
+	Title        string
+	Placement    string
+	BannerType   string
+	ImageURL     string
+	TargetURL    string
+	HTMLCode     string
+	OpenInNewTab bool
+	SortOrder    int
+}
+
 func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	// 1. Fetch site settings
 	siteCtx, err := g.fetchSiteContext(ctx)
@@ -162,6 +174,9 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	// 4d. Fetch active downloads
 	downloads, _ := g.fetchDownloads(ctx)
 
+	// 4e. Fetch active layout promotional banners and adsense slots
+	banners, _ := g.fetchLayoutBanners(ctx)
+
 	// Build counterpart lookup maps for hreflang and cross-linking
 	contentMapEN := make(map[int64]ContentRender)
 	for _, c := range contentsEN {
@@ -182,12 +197,12 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	}
 
 	// 5. Render Indonesian site
-	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, contentMapEN, pagesID, pageMapEN, menuItems, curationID, downloads); err != nil {
+	if err := g.renderLocaleSite(targetDir, "id", siteCtx, categoriesID, categoriesEN, contentsID, contentMapEN, pagesID, pageMapID, menuItems, curationID, downloads, banners); err != nil {
 		return fmt.Errorf("failed to render ID site: %w", err)
 	}
 
 	// 6. Render English site
-	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, contentMapID, pagesEN, pageMapID, menuItems, curationEN, downloads); err != nil {
+	if err := g.renderLocaleSite(targetDir, "en", siteCtx, categoriesEN, categoriesID, contentsEN, contentMapID, pagesEN, pageMapID, menuItems, curationEN, downloads, banners); err != nil {
 		return fmt.Errorf("failed to render EN site: %w", err)
 	}
 
@@ -369,6 +384,33 @@ func (g *Generator) fetchMenuItems(ctx context.Context) ([]MenuItemRender, error
 		}
 	}
 	return items, nil
+}
+
+func (g *Generator) fetchLayoutBanners(ctx context.Context) ([]BannerRender, error) {
+	query := `
+		SELECT id, title, placement, banner_type, image_url, target_url, html_code, open_in_new_tab, sort_order
+		FROM layout_banners
+		WHERE is_active = TRUE
+		  AND (start_date IS NULL OR start_date <= NOW())
+		  AND (end_date IS NULL OR end_date >= NOW())
+		ORDER BY sort_order ASC, id ASC
+	`
+	rows, err := g.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var banners []BannerRender
+	for rows.Next() {
+		var b BannerRender
+		if err := rows.Scan(
+			&b.ID, &b.Title, &b.Placement, &b.BannerType, &b.ImageURL, &b.TargetURL, &b.HTMLCode, &b.OpenInNewTab, &b.SortOrder,
+		); err == nil {
+			banners = append(banners, b)
+		}
+	}
+	return banners, nil
 }
 
 func (g *Generator) fetchCategories(ctx context.Context) (map[int64]CategoryRender, map[int64]CategoryRender, error) {
@@ -744,6 +786,57 @@ func buildHeaderNavHTML(
 	return sb.String()
 }
 
+func renderBanners(banners []BannerRender, placement string) string {
+	var filtered []BannerRender
+	for _, b := range banners {
+		if b.Placement == placement {
+			filtered = append(filtered, b)
+		}
+	}
+	if len(filtered) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	for _, b := range filtered {
+		if b.BannerType == "image" && b.ImageURL != "" {
+			targetAttr := ""
+			relAttr := ""
+			if b.OpenInNewTab {
+				targetAttr = ` target="_blank"`
+				relAttr = ` rel="noopener noreferrer"`
+			}
+			href := b.TargetURL
+			if href == "" {
+				href = "#"
+			}
+			sb.WriteString(fmt.Sprintf(`
+        <div class="site-banner-wrapper banner-placement-%s">
+            <a href="%s"%s%s title="%s" class="site-banner-link">
+                <img src="%s" alt="%s" class="site-banner-img" loading="lazy" />
+            </a>
+        </div>`,
+				template.HTMLEscapeString(b.Placement),
+				template.HTMLEscapeString(href),
+				targetAttr,
+				relAttr,
+				template.HTMLEscapeString(b.Title),
+				template.HTMLEscapeString(b.ImageURL),
+				template.HTMLEscapeString(b.Title),
+			))
+		} else if b.BannerType == "adsense" && b.HTMLCode != "" {
+			sb.WriteString(fmt.Sprintf(`
+        <div class="site-banner-wrapper site-ad-wrapper banner-placement-%s">
+            %s
+        </div>`,
+				template.HTMLEscapeString(b.Placement),
+				b.HTMLCode,
+			))
+		}
+	}
+	return sb.String()
+}
+
 func (g *Generator) renderLocaleSite(
 	targetDir, locale string,
 	sc *SiteContext,
@@ -756,6 +849,7 @@ func (g *Generator) renderLocaleSite(
 	menus []MenuItemRender,
 	curation *CurationData,
 	downloads []DownloadRender,
+	banners []BannerRender,
 ) error {
 	localeDir := filepath.Join(targetDir, locale)
 	if err := os.MkdirAll(localeDir, 0755); err != nil {
@@ -800,12 +894,68 @@ body {
 }
 .site-wrapper {
     width: 100%;
-    max-width: 1040px;
+    max-width: 1320px;
     margin: 0 auto;
-    padding: 0 1rem;
+    padding: 0 1.25rem;
 }
 @media (min-width: 640px) {
-    .site-wrapper { padding: 0 1.5rem; }
+    .site-wrapper { padding: 0 1.75rem; }
+}
+@media (min-width: 1280px) {
+    .site-wrapper { padding: 0 2.25rem; max-width: 1380px; }
+}
+@media (min-width: 1536px) {
+    .site-wrapper { max-width: 1440px; }
+}
+
+/* Layout Banners & AdSense Slots */
+.site-banner-wrapper {
+    width: 100%;
+    margin: 1.25rem auto;
+    text-align: center;
+    overflow: hidden;
+    border-radius: 12px;
+}
+.site-banner-wrapper.banner-placement-header_top {
+    margin: 0.75rem auto;
+}
+.site-banner-wrapper.banner-placement-below_hero {
+    margin: 1.5rem auto;
+}
+.site-banner-wrapper.banner-placement-content_sidebar {
+    margin: 1.25rem 0;
+}
+.site-banner-wrapper.banner-placement-footer_top {
+    margin: 2rem auto 1.5rem;
+}
+.site-banner-link {
+    display: inline-block;
+    max-width: 100%;
+    text-decoration: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.site-banner-link:hover {
+    opacity: 0.92;
+    transform: translateY(-1px);
+}
+.site-banner-img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 12px;
+    display: block;
+    margin: 0 auto;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.site-ad-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 90px;
+    background: #f8fafc;
+    border: 1px dashed #cbd5e1;
+    border-radius: 12px;
+    padding: 0.75rem;
+    overflow-x: auto;
 }
 .site-header {
     background: #ffffff;
@@ -1042,6 +1192,9 @@ body {
 @media (min-width: 1024px) {
     .card-grid { grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
 }
+@media (min-width: 1440px) {
+    .card-grid { grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+}
 .card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
@@ -1156,6 +1309,12 @@ body {
     .stories-grid {
         grid-template-columns: 1.4fr 1fr;
         gap: 1.5rem;
+    }
+}
+@media (min-width: 1280px) {
+    .stories-grid {
+        grid-template-columns: 1.55fr 1fr;
+        gap: 1.85rem;
     }
 }
 .lead-card {
@@ -1616,7 +1775,7 @@ body {
 
 /* Article Layout with Left Floating Share & Right Sticky TOC */
 .article-page-container {
-    max-width: 1260px;
+    max-width: 1380px;
     padding-top: 1.5rem;
     padding-bottom: 3.5rem;
 }
@@ -2369,7 +2528,12 @@ html {
 		socialLinksHTML.WriteString(`<a href="https://instagram.com" target="_blank" rel="nofollow noopener noreferrer" class="social-btn" title="Instagram" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg></a>`)
 	}
 
-	footerHTML := fmt.Sprintf(`
+	footerTopBannerHTML := renderBanners(banners, "footer_top")
+	if footerTopBannerHTML != "" {
+		footerTopBannerHTML = fmt.Sprintf(`<div class="site-wrapper">%s</div>`, footerTopBannerHTML)
+	}
+
+	footerHTML := footerTopBannerHTML + fmt.Sprintf(`
     <footer class="site-footer">
         <div class="site-wrapper">
             <div class="footer-grid">
@@ -2574,6 +2738,9 @@ html {
 					template.HTMLEscapeString(ss.Summary),
 				))
 			}
+			if sidebarBanner := renderBanners(banners, "content_sidebar"); sidebarBanner != "" {
+				storiesHTML.WriteString(sidebarBanner)
+			}
 			storiesHTML.WriteString(`
                     </div>
                 </div>`)
@@ -2694,6 +2861,12 @@ html {
 		Locale:       locale,
 	})
 
+	headerTopBanners := renderBanners(banners, "header_top")
+	if headerTopBanners != "" {
+		headerTopBanners = fmt.Sprintf(`<div class="site-wrapper" style="padding-top:0.5rem;">%s</div>`, headerTopBanners)
+	}
+	belowHeroBanners := renderBanners(banners, "below_hero")
+
 	homeHTML := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="%s">
 <head>
@@ -2703,11 +2876,13 @@ html {
 </head>
 <body>
 %s
+%s
     <main class="site-wrapper">
         <section class="hero">
             <h2>%s</h2>
             <p>%s</p>
         </section>
+%s
         <section class="category-nav-section" aria-label="Kategori">
             <div class="category-chips">
 %s
@@ -2724,9 +2899,11 @@ html {
 		homeSEO,
 		faviconTag,
 		commonCSS,
+		headerTopBanners,
 		headerHTML,
 		template.HTMLEscapeString(tagline),
 		template.HTMLEscapeString(heroSubtitle),
+		belowHeroBanners,
 		catChipsBuilder.String(),
 		storiesHTML.String(),
 		featuredHTML.String(),

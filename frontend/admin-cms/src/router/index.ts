@@ -11,6 +11,7 @@ import CurationView from '../views/curation/CurationView.vue'
 import StaticPagesView from '../views/staticpages/StaticPagesView.vue'
 import MenuView from '../views/menus/MenuView.vue'
 import UnduhanView from '../views/unduhan/UnduhanView.vue'
+import LayoutView from '../views/layout/LayoutView.vue'
 import SettingsView from '../views/settings/SettingsView.vue'
 import AdminsView from '../views/admins/AdminsView.vue'
 import RedirectsView from '../views/redirects/RedirectsView.vue'
@@ -88,6 +89,12 @@ const routes: RouteRecordRaw[] = [
     name: 'unduhan',
     component: UnduhanView,
     meta: { requiresAuth: true, title: 'Unduhan Dokumen', module: 'unduhan' },
+  },
+  {
+    path: '/tata-letak',
+    name: 'layout',
+    component: LayoutView,
+    meta: { requiresAuth: true, title: 'Tata Letak & Banner Promosi', module: 'tata-letak' },
   },
   {
     path: '/settings',

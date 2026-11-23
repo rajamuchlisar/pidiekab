@@ -70,6 +70,11 @@ async function handleLogout() {
           <span class="nav-label">Unduhan Dokumen</span>
         </router-link>
 
+        <router-link v-if="authStore.canAccess('tata-letak')" to="/tata-letak" class="nav-item" :class="{ active: currentRouteName === 'layout' }">
+          <span class="nav-icon"><BladeIcon name="rectangle-group" size="20" /></span>
+          <span class="nav-label">Tata Letak & Promosi</span>
+        </router-link>
+
         <div v-if="authStore.canAccess('settings') || authStore.canAccess('redirects') || authStore.canAccess('admins') || authStore.canAccess('audit-logs')" class="nav-divider"></div>
 
         <router-link v-if="authStore.canAccess('settings')" to="/settings" class="nav-item" :class="{ active: currentRouteName === 'settings' }">
