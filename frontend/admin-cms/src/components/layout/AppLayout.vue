@@ -96,6 +96,13 @@ async function handleLogout() {
           <span class="nav-icon"><BladeIcon name="shield-check" size="20" /></span>
           <span class="nav-label">Audit Trail</span>
         </router-link>
+
+        <div class="nav-divider"></div>
+
+        <router-link to="/profil" class="nav-item" :class="{ active: currentRouteName === 'profile' }">
+          <span class="nav-icon"><BladeIcon name="user-circle" size="20" /></span>
+          <span class="nav-label">Profil Saya</span>
+        </router-link>
       </nav>
 
       <div class="sidebar-footer">
@@ -114,7 +121,7 @@ async function handleLogout() {
           <h1 class="page-title">{{ route.meta?.title || 'Admin Panel' }}</h1>
         </div>
         <div class="topbar-right">
-          <div class="admin-badge">
+          <router-link to="/profil" class="admin-badge admin-badge-link" title="Buka Profil Saya">
             <div class="admin-avatar">{{ authStore.user?.displayName?.charAt(0) || 'A' }}</div>
             <div class="admin-details">
               <div class="admin-title-row">
@@ -123,7 +130,7 @@ async function handleLogout() {
               </div>
               <span class="admin-email">{{ authStore.user?.email || 'admin@pidiekab.id' }}</span>
             </div>
-          </div>
+          </router-link>
           <button class="btn-logout" @click="handleLogout" title="Keluar">
             <BladeIcon name="arrow-left-on-rectangle" size="16" />
             <span>Keluar</span>
@@ -315,6 +322,20 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   gap: 0.65rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+.admin-badge-link {
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-badge-link:hover {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
 }
 
 .admin-avatar {

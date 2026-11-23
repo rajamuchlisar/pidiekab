@@ -16,6 +16,7 @@ import SettingsView from '../views/settings/SettingsView.vue'
 import AdminsView from '../views/admins/AdminsView.vue'
 import RedirectsView from '../views/redirects/RedirectsView.vue'
 import AuditLogsView from '../views/audit/AuditLogsView.vue'
+import ProfileView from '../views/profile/ProfileView.vue'
 import NotFoundView from '../views/errors/NotFoundView.vue'
 import ForbiddenView from '../views/errors/ForbiddenView.vue'
 
@@ -119,6 +120,12 @@ const routes: RouteRecordRaw[] = [
     name: 'audit-logs',
     component: AuditLogsView,
     meta: { requiresAuth: true, title: 'Audit Trail', module: 'audit-logs' },
+  },
+  {
+    path: '/profil',
+    name: 'profile',
+    component: ProfileView,
+    meta: { requiresAuth: true, title: 'Profil Administrator' },
   },
   {
     path: '/403',

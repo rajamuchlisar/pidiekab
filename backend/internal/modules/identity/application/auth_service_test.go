@@ -69,6 +69,16 @@ func (m *memoryAdminRepo) UpdatePassword(ctx context.Context, id int64, password
 	return nil
 }
 
+func (m *memoryAdminRepo) UpdateProfile(ctx context.Context, id int64, displayName string) error {
+	a, ok := m.admins[id]
+	if !ok {
+		return domain.ErrAdminNotFound
+	}
+	a.DisplayName = displayName
+	a.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
 func (m *memoryAdminRepo) UpdateLastLogin(ctx context.Context, id int64, loginTime time.Time) error {
 	a, ok := m.admins[id]
 	if !ok {

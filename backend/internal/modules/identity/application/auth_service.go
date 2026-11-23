@@ -19,6 +19,7 @@ type AdminRepo interface {
 	GetByID(ctx context.Context, id int64) (*domain.Admin, error)
 	GetByEmail(ctx context.Context, email string) (*domain.Admin, error)
 	UpdatePassword(ctx context.Context, id int64, passwordHash string) error
+	UpdateProfile(ctx context.Context, id int64, displayName string) error
 	UpdateRole(ctx context.Context, id int64, role string) error
 	UpdatePermissions(ctx context.Context, id int64, permissions []string) error
 	UpdateLastLogin(ctx context.Context, id int64, loginTime time.Time) error
@@ -241,6 +242,29 @@ func (s *AuthService) ChangePassword(ctx context.Context, adminID int64, current
 
 	s.recordAudit(ctx, &adminID, "admin.password.change", "admin", &adminID, nil, ipAddress)
 	return nil
+}
+
+// UpdateProfile updates the display name of an administrator.
+func (s *AuthService) UpdateProfile(ctx context.Context, adminID int64, displayName string, ipAddress *string) (*domain.Admin, error) {
+	cleanName := strings.TrimSpace(displayName)
+	if cleanName == "" {
+		return nil, domain.ErrEmptyDisplayName
+	}
+
+	if err := s.admins.UpdateProfile(ctx, adminID, cleanName); err != nil {
+		return nil, err
+	}
+
+	admin, err := s.admins.GetByID(ctx, adminID)
+	if err != nil {
+		return nil, err
+	}
+
+	s.recordAudit(ctx, &adminID, "UPDATE_PROFILE", "admin", &adminID, map[string]any{
+		"display_name": cleanName,
+	}, ipAddress)
+
+	return admin, nil
 }
 
 // BootstrapAdmin creates an initial administrator account with super_admin role.

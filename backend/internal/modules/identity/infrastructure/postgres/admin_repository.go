@@ -155,6 +155,24 @@ func (r *AdminRepository) UpdatePassword(ctx context.Context, id int64, password
 	return nil
 }
 
+// UpdateProfile updates an administrator's display name and updated_at timestamp.
+func (r *AdminRepository) UpdateProfile(ctx context.Context, id int64, displayName string) error {
+	query := `
+		UPDATE admins
+		SET display_name = $1, updated_at = NOW()
+		WHERE id = $2
+	`
+
+	cmdTag, err := r.pool.Exec(ctx, query, displayName, id)
+	if err != nil {
+		return fmt.Errorf("failed to update admin profile: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return domain.ErrAdminNotFound
+	}
+	return nil
+}
+
 // UpdateRole updates an administrator's role.
 func (r *AdminRepository) UpdateRole(ctx context.Context, id int64, role string) error {
 	query := `

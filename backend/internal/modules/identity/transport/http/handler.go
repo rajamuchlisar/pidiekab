@@ -49,6 +49,7 @@ func (h *Handler) RegisterRoutesWithLimiter(mux *http.ServeMux, rateLimiter *mid
 
 	mux.Handle("POST /api/v1/admin/auth/logout", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleLogout))))
 	mux.Handle("GET /api/v1/admin/auth/me", authMiddleware(http.HandlerFunc(h.handleMe)))
+	mux.Handle("PUT /api/v1/admin/auth/profile", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleUpdateProfile))))
 	mux.Handle("POST /api/v1/admin/auth/password/change", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleChangePassword))))
 
 	// RBAC Roles and Available Modules query routes
@@ -186,24 +187,88 @@ func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
 		perms = domain.AllModuleKeys()
 	}
 
+	createdStr := ""
+	if !admin.CreatedAt.IsZero() {
+		createdStr = admin.CreatedAt.Format(time.RFC3339)
+	}
+	updatedStr := ""
+	if !admin.UpdatedAt.IsZero() {
+		updatedStr = admin.UpdatedAt.Format(time.RFC3339)
+	}
+	var lastLoginStr *string
+	if admin.LastLoginAt != nil {
+		s := admin.LastLoginAt.Format(time.RFC3339)
+		lastLoginStr = &s
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"admin": map[string]any{
-			"id":          admin.ID,
-			"email":       admin.Email,
-			"displayName": admin.DisplayName,
-			"role":        admin.Role,
-			"permissions": perms,
+			"id":            admin.ID,
+			"email":         admin.Email,
+			"displayName":   admin.DisplayName,
+			"display_name":  admin.DisplayName,
+			"role":          admin.Role,
+			"permissions":   perms,
+			"is_active":     admin.IsActive,
+			"isActive":      admin.IsActive,
+			"last_login_at": lastLoginStr,
+			"created_at":    createdStr,
+			"updated_at":    updatedStr,
 		},
 		"data": map[string]any{
-			"id":          strconv.FormatInt(admin.ID, 10),
-			"email":       admin.Email,
-			"displayName": admin.DisplayName,
-			"name":        admin.DisplayName,
-			"role":        admin.Role,
-			"permissions": perms,
+			"id":            strconv.FormatInt(admin.ID, 10),
+			"email":         admin.Email,
+			"displayName":   admin.DisplayName,
+			"name":          admin.DisplayName,
+			"role":          admin.Role,
+			"permissions":   perms,
+			"is_active":     admin.IsActive,
+			"isActive":      admin.IsActive,
+			"last_login_at": lastLoginStr,
+			"created_at":    createdStr,
+			"updated_at":    updatedStr,
 		},
+	})
+}
+
+type updateProfileRequest struct {
+	DisplayName string `json:"display_name"`
+}
+
+func (h *Handler) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required.", nil)
+		return
+	}
+
+	var req updateProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "BAD_REQUEST", "Malformed JSON request body.", nil)
+		return
+	}
+
+	req.DisplayName = strings.TrimSpace(req.DisplayName)
+	if req.DisplayName == "" {
+		writeProblem(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "Nama tampilan tidak boleh kosong.", map[string][]string{
+			"display_name": {"Nama tampilan tidak boleh kosong."},
+		})
+		return
+	}
+
+	ip := extractClientIP(r)
+	updated, err := h.authService.UpdateProfile(r.Context(), admin.ID, req.DisplayName, &ip)
+	if err != nil {
+		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Gagal memperbarui profil: "+err.Error(), nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"admin":   updated,
+		"message": "Profil berhasil diperbarui.",
 	})
 }
 
