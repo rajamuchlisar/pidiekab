@@ -17,6 +17,12 @@ type Worker struct {
 	logger       *slog.Logger
 	stopOnce     sync.Once
 	doneCh       chan struct{}
+	promoter     func(context.Context) (int64, error)
+}
+
+// SetScheduledPromoter registers a callback to auto-promote due scheduled content to published.
+func (w *Worker) SetScheduledPromoter(fn func(context.Context) (int64, error)) {
+	w.promoter = fn
 }
 
 func NewWorker(
@@ -64,6 +70,11 @@ func (w *Worker) Start(ctx context.Context) {
 			w.logger.Info("site generation worker received shutdown signal")
 			return
 		case <-ticker.C:
+			if w.promoter != nil {
+				if count, err := w.promoter(ctx); err == nil && count > 0 {
+					w.logger.Info("auto-promoted matured scheduled articles to published", "count", count)
+				}
+			}
 			w.processNextJob(ctx)
 		}
 	}

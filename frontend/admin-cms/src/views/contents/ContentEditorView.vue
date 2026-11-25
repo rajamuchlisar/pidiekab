@@ -45,7 +45,8 @@ const form = reactive({
       bodyHtml: '',
       seoTitle: '',
       seoDescription: '',
-      status: 'draft' as 'draft' | 'published' | 'archived',
+      status: 'draft' as 'draft' | 'scheduled' | 'published' | 'archived',
+      scheduledAt: null as string | null,
     },
     en: {
       title: '',
@@ -54,10 +55,109 @@ const form = reactive({
       bodyHtml: '',
       seoTitle: '',
       seoDescription: '',
-      status: 'draft' as 'draft' | 'published' | 'archived',
+      status: 'draft' as 'draft' | 'scheduled' | 'published' | 'archived',
+      scheduledAt: null as string | null,
     },
   },
 })
+
+// Scheduling Modal state
+const showScheduleModal = ref(false)
+const scheduleDateTime = ref('')
+const schedulingLocale = ref<'id' | 'en'>('id')
+
+function openScheduleModal(locale: 'id' | 'en') {
+  schedulingLocale.value = locale
+  const existing = form.translations[locale].scheduledAt
+  if (existing) {
+    const d = new Date(existing)
+    const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+    scheduleDateTime.value = localIso
+  } else {
+    // Default to tomorrow at 08:00 AM local time
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    tomorrow.setHours(8, 0, 0, 0)
+    const localIso = new Date(tomorrow.getTime() - tomorrow.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+    scheduleDateTime.value = localIso
+  }
+  showScheduleModal.value = true
+}
+
+function setSchedulePreset(hoursAhead: number) {
+  const d = new Date()
+  d.setHours(d.getHours() + hoursAhead, 0, 0, 0)
+  const localIso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+  scheduleDateTime.value = localIso
+}
+
+async function confirmSchedule() {
+  if (!scheduleDateTime.value) {
+    alert('Silakan pilih tanggal dan jam publikasi.')
+    return
+  }
+
+  const selectedDate = new Date(scheduleDateTime.value)
+  if (selectedDate.getTime() <= Date.now()) {
+    alert('Waktu penjadwalan harus di masa depan.')
+    return
+  }
+
+  const locale = schedulingLocale.value
+  const localeTitle = locale === 'id' ? 'Bahasa Indonesia' : 'English'
+
+  isSaving.value = true
+  try {
+    // Always save draft first
+    await saveDraft()
+
+    // Now schedule
+    const scheduledIso = selectedDate.toISOString()
+    await api.post(`/api/v1/admin/contents/${contentId.value}/schedule`, {
+      locale,
+      scheduled_at: scheduledIso,
+    }).catch(() => {
+      return api.post(`/api/v1/admin/contents/${contentId.value}/translations/${locale}/schedule`, {
+        scheduled_at: scheduledIso,
+      })
+    })
+
+    form.translations[locale].status = 'scheduled'
+    form.translations[locale].scheduledAt = scheduledIso
+    showScheduleModal.value = false
+    notification.success(
+      'Artikel Dijadwalkan',
+      `Versi [${localeTitle}] akan dipublikasikan otomatis pada ${selectedDate.toLocaleString('id-ID')}.`
+    )
+  } catch (err: any) {
+    notification.error('Gagal Menjadwalkan', err.detail || 'Terjadi kesalahan saat menjadwalkan artikel.', err.requestId)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+async function cancelSchedule(locale: 'id' | 'en') {
+  if (!contentId.value) return
+  const localeTitle = locale === 'id' ? 'Bahasa Indonesia' : 'English'
+  const confirmed = confirm(
+    `Apakah Anda yakin ingin membatalkan jadwal publikasi untuk [${localeTitle}]?\n\nStatus artikel akan dikembalikan menjadi Draft.`
+  )
+  if (!confirmed) return
+
+  isSaving.value = true
+  try {
+    await api.post(`/api/v1/admin/contents/${contentId.value}/cancel-schedule`, { locale }).catch(() => {
+      return api.post(`/api/v1/admin/contents/${contentId.value}/translations/${locale}/cancel-schedule`)
+    })
+    form.translations[locale].status = 'draft'
+    form.translations[locale].scheduledAt = null
+    notification.success('Jadwal Dibatalkan', `Publikasi terjadwal [${localeTitle}] dibatalkan. Status kini Draft.`)
+  } catch (err: any) {
+    notification.error('Gagal Membatalkan Jadwal', err.detail || 'Tidak dapat membatalkan jadwal artikel.', err.requestId)
+  } finally {
+    isSaving.value = false
+  }
+}
 
 // New source temporary input
 const newSource = reactive({
@@ -164,7 +264,8 @@ async function loadContent() {
               bodyHtml: bodyText,
               seoTitle: t.seoTitle || t.seo_title || t.SEOTitle || '',
               seoDescription: t.seoDescription || t.seo_description || t.SEODescription || '',
-              status: (t.status || t.Status || 'draft') as 'draft' | 'published' | 'archived',
+              status: (t.status || t.Status || 'draft') as 'draft' | 'scheduled' | 'published' | 'archived',
+              scheduledAt: t.scheduled_at || t.scheduledAt || t.ScheduledAt || null,
             }
           }
         })
@@ -383,26 +484,76 @@ onMounted(async () => {
             <BladeIcon name="bookmark" size="16" />
             <span>Simpan Draft</span>
           </button>
-          <button
-            v-if="form.translations[activeTab].status !== 'published'"
-            type="button"
-            class="btn btn-primary"
-            :disabled="isSaving"
-            @click="publishLocale(activeTab)"
-          >
-            <BladeIcon name="rocket-launch" size="16" />
-            <span>Publikasikan ({{ activeTab.toUpperCase() }})</span>
-          </button>
-          <button
-            v-else
-            type="button"
-            class="btn btn-archive"
-            :disabled="isSaving"
-            @click="archiveLocale(activeTab)"
-          >
-            <BladeIcon name="archive-box" size="16" />
-            <span>Tarik / Arsipkan ({{ activeTab.toUpperCase() }})</span>
-          </button>
+
+          <!-- Scheduled Status Actions -->
+          <template v-if="form.translations[activeTab].status === 'scheduled'">
+            <button
+              type="button"
+              class="btn btn-warning-outline"
+              :disabled="isSaving"
+              @click="cancelSchedule(activeTab)"
+              title="Batalkan jadwal dan kembalikan status ke draft"
+            >
+              <BladeIcon name="x-mark" size="16" />
+              <span>Batal Jadwal</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-scheduled"
+              :disabled="isSaving"
+              @click="openScheduleModal(activeTab)"
+              title="Ubah waktu publikasi terjadwal"
+            >
+              <BladeIcon name="clock" size="16" />
+              <span>Ubah Jadwal</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="isSaving"
+              @click="publishLocale(activeTab)"
+              title="Terbitkan sekarang tanpa menunggu jadwal"
+            >
+              <BladeIcon name="rocket-launch" size="16" />
+              <span>Terbitkan Sekarang</span>
+            </button>
+          </template>
+
+          <!-- Draft Status Actions -->
+          <template v-else-if="form.translations[activeTab].status !== 'published'">
+            <button
+              type="button"
+              class="btn btn-scheduled"
+              :disabled="isSaving"
+              @click="openScheduleModal(activeTab)"
+              title="Jadwalkan artikel untuk otomatis dipublikasikan di masa depan"
+            >
+              <BladeIcon name="clock" size="16" />
+              <span>Jadwalkan</span>
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              :disabled="isSaving"
+              @click="publishLocale(activeTab)"
+            >
+              <BladeIcon name="rocket-launch" size="16" />
+              <span>Publikasikan ({{ activeTab.toUpperCase() }})</span>
+            </button>
+          </template>
+
+          <!-- Published Status Action -->
+          <template v-else>
+            <button
+              type="button"
+              class="btn btn-archive"
+              :disabled="isSaving"
+              @click="archiveLocale(activeTab)"
+            >
+              <BladeIcon name="archive-box" size="16" />
+              <span>Tarik / Arsipkan ({{ activeTab.toUpperCase() }})</span>
+            </button>
+          </template>
         </div>
       </div>
 
@@ -413,6 +564,25 @@ onMounted(async () => {
       <div v-else class="editor-grid">
         <!-- Main Form (Left / Center) -->
         <div class="main-column">
+          <!-- Scheduled Notice Banner -->
+          <div v-if="form.translations[activeTab].status === 'scheduled'" class="scheduled-banner">
+            <div class="banner-icon"><BladeIcon name="clock" size="22" /></div>
+            <div class="banner-content">
+              <strong class="banner-title">Publikasi Terjadwal Aktif ({{ activeTab.toUpperCase() }})</strong>
+              <p class="banner-text">
+                Artikel versi <strong>{{ activeTab === 'id' ? 'Bahasa Indonesia' : 'English' }}</strong> dijadwalkan terbit otomatis pada:
+                <span class="scheduled-highlight">
+                  {{ form.translations[activeTab].scheduledAt ? new Date(form.translations[activeTab].scheduledAt!).toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' }) : '-' }} WIB
+                </span>.
+                Mesin SSG akan otomatis membangun dan merilis artikel ini ke publik saat waktu tercapai.
+              </p>
+            </div>
+            <div class="banner-actions">
+              <button type="button" class="btn-sm btn-outline" @click="openScheduleModal(activeTab)">Ubah Waktu</button>
+              <button type="button" class="btn-sm btn-danger-outline" @click="cancelSchedule(activeTab)">Batalkan</button>
+            </div>
+          </div>
+
           <!-- Language Tabs -->
           <div class="lang-tabs">
             <button
@@ -424,7 +594,7 @@ onMounted(async () => {
               <span>Bahasa Indonesia</span>
               <span
                 class="tab-status"
-                :class="form.translations.id.status === 'published' ? 'status-pub' : 'status-draft'"
+                :class="form.translations.id.status === 'published' ? 'status-pub' : (form.translations.id.status === 'scheduled' ? 'status-scheduled' : 'status-draft')"
               >
                 {{ form.translations.id.status }}
               </span>
@@ -438,7 +608,7 @@ onMounted(async () => {
               <span>English</span>
               <span
                 class="tab-status"
-                :class="form.translations.en.status === 'published' ? 'status-pub' : 'status-draft'"
+                :class="form.translations.en.status === 'published' ? 'status-pub' : (form.translations.en.status === 'scheduled' ? 'status-scheduled' : 'status-draft')"
               >
                 {{ form.translations.en.status }}
               </span>
@@ -700,11 +870,234 @@ onMounted(async () => {
           </div>
         </div>
       </div>
+
+      <!-- Schedule Modal -->
+      <div v-if="showScheduleModal" class="modal-backdrop" @click.self="showScheduleModal = false">
+        <div class="modal-card modal-schedule-card">
+          <div class="modal-header">
+            <div class="modal-title-with-icon">
+              <BladeIcon name="clock" size="20" class="text-purple" />
+              <h3>Jadwalkan Publikasi ({{ schedulingLocale === 'id' ? 'Bahasa Indonesia' : 'English' }})</h3>
+            </div>
+            <button class="modal-close" @click="showScheduleModal = false" title="Tutup">
+              <BladeIcon name="x-mark" size="20" />
+            </button>
+          </div>
+          <div class="modal-body">
+            <p class="modal-desc">
+              Tentukan waktu publikasi otomatis. Pada waktu yang ditentukan, artikel akan otomatis dipublikasikan dan situs publik akan dibangun ulang oleh sistem SSG.
+            </p>
+
+            <div class="form-group mt-3">
+              <label>Waktu Terbit (WIB / Waktu Lokal) *</label>
+              <input
+                v-model="scheduleDateTime"
+                type="datetime-local"
+                class="input-control datetime-input"
+              />
+            </div>
+
+            <div class="preset-section">
+              <span class="preset-label">Pilihan Preset Cepat:</span>
+              <div class="preset-chips">
+                <button type="button" class="chip-btn" @click="setSchedulePreset(3)">+3 Jam Lagi</button>
+                <button type="button" class="chip-btn" @click="setSchedulePreset(12)">+12 Jam Lagi</button>
+                <button type="button" class="chip-btn" @click="setSchedulePreset(24)">Besok</button>
+                <button type="button" class="chip-btn" @click="setSchedulePreset(48)">2 Hari Lagi</button>
+                <button type="button" class="chip-btn" @click="setSchedulePreset(72)">3 Hari Lagi</button>
+                <button type="button" class="chip-btn" @click="setSchedulePreset(168)">1 Minggu Lagi</button>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" @click="showScheduleModal = false">Batal</button>
+            <button type="button" class="btn btn-primary btn-save-schedule" :disabled="isSaving" @click="confirmSchedule">
+              <BladeIcon name="check" size="16" />
+              <span>Simpan & Jadwalkan</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </AppLayout>
 </template>
 
 <style scoped>
+/* Scheduled Banner */
+.scheduled-banner {
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.banner-icon {
+  width: 40px;
+  height: 40px;
+  background: #ede9fe;
+  color: #7c3aed;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.banner-content {
+  flex: 1;
+}
+
+.banner-title {
+  display: block;
+  font-size: 0.95rem;
+  color: #5b21b6;
+  margin-bottom: 0.2rem;
+}
+
+.banner-text {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #4c1d95;
+  line-height: 1.4;
+}
+
+.scheduled-highlight {
+  font-weight: 700;
+  color: #6d28d9;
+}
+
+.banner-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-scheduled {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid #c4b5fd;
+}
+
+.btn-scheduled:hover:not(:disabled) {
+  background: #ddd6fe;
+  color: #5b21b6;
+}
+
+.btn-warning-outline {
+  background: #ffffff;
+  color: #b45309;
+  border: 1px solid #fcd34d;
+}
+
+.btn-warning-outline:hover:not(:disabled) {
+  background: #fffbeb;
+}
+
+.btn-danger-outline {
+  background: #ffffff;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-danger-outline:hover {
+  background: #fef2f2;
+}
+
+.status-scheduled {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.tab-btn.active .status-scheduled {
+  background: #ffffff;
+  color: #6d28d9;
+}
+
+.modal-schedule-card {
+  max-width: 520px;
+}
+
+.modal-title-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.text-purple {
+  color: #7c3aed;
+}
+
+.modal-desc {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0 0 1rem 0;
+  line-height: 1.45;
+}
+
+.datetime-input {
+  font-size: 0.95rem;
+  padding: 0.55rem 0.75rem;
+}
+
+.preset-section {
+  margin-top: 1rem;
+}
+
+.preset-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 0.45rem;
+}
+
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chip-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.chip-btn:hover {
+  background: #ede9fe;
+  border-color: #c4b5fd;
+  color: #6d28d9;
+}
+
+.modal-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.btn-save-schedule {
+  background: #7c3aed;
+  border-color: #6d28d9;
+}
+
+.btn-save-schedule:hover:not(:disabled) {
+  background: #6d28d9;
+}
 .content-editor-page {
   display: flex;
   flex-direction: column;

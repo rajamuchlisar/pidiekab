@@ -184,6 +184,50 @@ func TestContentLifecycleIntegration(t *testing.T) {
 		t.Errorf("expected EN locale to remain draft, got %s", publishedEN.Status)
 	}
 
+	// Test J2: Schedule EN translation in past fails
+	pastTime := time.Now().UTC().Add(-1 * time.Hour)
+	err = contentSvc.ScheduleLocale(ctx, content.ID, "en", pastTime, admin.ID, &ip)
+	if err != domain.ErrScheduledAtMustBeFuture {
+		t.Errorf("expected ErrScheduledAtMustBeFuture, got %v", err)
+	}
+
+	// Test J3: Schedule EN translation in future succeeds
+	futureTime := time.Now().UTC().Add(2 * time.Hour)
+	err = contentSvc.ScheduleLocale(ctx, content.ID, "en", futureTime, admin.ID, &ip)
+	if err != nil {
+		t.Fatalf("failed to schedule EN translation: %v", err)
+	}
+	scheduledEN, err := contentSvc.GetTranslation(ctx, content.ID, "en")
+	if err != nil || scheduledEN.Status != domain.StatusScheduled {
+		t.Fatalf("expected scheduled status for EN, got %s", scheduledEN.Status)
+	}
+
+	// Test J4: Cancel schedule reverts to draft
+	err = contentSvc.CancelScheduleLocale(ctx, content.ID, "en", admin.ID, &ip)
+	if err != nil {
+		t.Fatalf("failed to cancel schedule: %v", err)
+	}
+	canceledEN, _ := contentSvc.GetTranslation(ctx, content.ID, "en")
+	if canceledEN.Status != domain.StatusDraft {
+		t.Fatalf("expected draft after cancellation, got %s", canceledEN.Status)
+	}
+
+	// Test J5: Schedule EN for immediate promotion test
+	dueTime := time.Now().UTC().Add(100 * time.Millisecond)
+	_ = contentSvc.ScheduleLocale(ctx, content.ID, "en", dueTime, admin.ID, &ip)
+	time.Sleep(150 * time.Millisecond)
+	promotedCount, err := contentSvc.PromoteDueScheduledTranslations(ctx)
+	if err != nil {
+		t.Fatalf("failed to promote due scheduled: %v", err)
+	}
+	if promotedCount < 1 {
+		t.Errorf("expected at least 1 promoted translation, got %d", promotedCount)
+	}
+	promotedEN, _ := contentSvc.GetTranslation(ctx, content.ID, "en")
+	if promotedEN.Status != domain.StatusPublished {
+		t.Errorf("expected promoted status published, got %s", promotedEN.Status)
+	}
+
 	// Test K: Archive ID Translation
 	err = contentSvc.ArchiveLocale(ctx, content.ID, "id", admin.ID, &ip)
 	if err != nil {

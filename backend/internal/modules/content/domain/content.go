@@ -24,8 +24,10 @@ var (
 	ErrBodyEmpty                = errors.New("content body cannot be empty")
 	ErrInvalidSourceType        = errors.New("source type must be one of: research, visit, official, social")
 	ErrSourceNameEmpty          = errors.New("source name cannot be empty")
-	ErrInvalidStatus            = errors.New("status must be draft, published, or archived")
+	ErrInvalidStatus            = errors.New("status must be draft, scheduled, published, or archived")
 	ErrCannotArchiveUnpublished = errors.New("cannot archive content translation that has never been published")
+	ErrScheduledAtRequired      = errors.New("scheduled_at must be provided when status is scheduled")
+	ErrScheduledAtMustBeFuture  = errors.New("scheduled time must be in the future")
 )
 
 var slugRegex = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
@@ -91,6 +93,7 @@ const (
 	LocaleEN = "en"
 
 	StatusDraft     TranslationStatus = "draft"
+	StatusScheduled TranslationStatus = "scheduled"
 	StatusPublished TranslationStatus = "published"
 	StatusArchived  TranslationStatus = "archived"
 )
@@ -109,6 +112,7 @@ type ContentTranslation struct {
 	SEODescription *string           `json:"seo_description,omitempty"`
 	Status         TranslationStatus `json:"status"`
 	PublishedAt    *time.Time        `json:"published_at,omitempty"`
+	ScheduledAt    *time.Time        `json:"scheduled_at,omitempty"`
 	CreatedBy      *int64            `json:"created_by,omitempty"`
 	UpdatedBy      *int64            `json:"updated_by,omitempty"`
 	PublishedBy    *int64            `json:"published_by,omitempty"`
@@ -149,8 +153,9 @@ type ContentListItem struct {
 
 // ContentTranslationListSummary summarizes translation title and status for list views.
 type ContentTranslationListSummary struct {
-	Title  *string           `json:"title"`
-	Status TranslationStatus `json:"status"`
+	Title       *string           `json:"title"`
+	Status      TranslationStatus `json:"status"`
+	ScheduledAt *time.Time        `json:"scheduled_at,omitempty"`
 }
 
 // ValidatePublishEligibility verifies all strict business invariants before publishing a locale.

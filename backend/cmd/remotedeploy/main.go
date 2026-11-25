@@ -230,6 +230,14 @@ git log -1 --oneline
 	}
 	fmt.Printf("Git state:\n%s\n", out)
 
+	fmt.Println("\n=== 1b. Running Goose Migrations on Production DB ===")
+	migrateCmd := `
+export PATH="/snap/bin:/usr/local/bin:$PATH"
+goose -dir /home/ubuntu/pidiekab/migrations postgres "postgres://pidiekab:pidiekab_strong_pass_2026!@127.0.0.1:5432/pidiekab_production?sslmode=disable" up
+`
+	out, err = exec.Sudo(migrateCmd)
+	fmt.Printf("Migration output:\n%s\n", out)
+
 	fmt.Println("\n=== 2. Compiling Go binary on server ===")
 	compileCmd := `
 export PATH="/snap/bin:/usr/local/bin:$PATH"

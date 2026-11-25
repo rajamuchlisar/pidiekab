@@ -42,14 +42,14 @@ func (r *TranslationRepository) Upsert(ctx context.Context, t *domain.ContentTra
 	query := `
 		INSERT INTO content_translations (
 			content_id, locale, title, slug, summary, body, extra_data,
-			seo_title, seo_description, status, search_vector,
+			seo_title, seo_description, status, scheduled_at, search_vector,
 			created_by, updated_by, created_at, updated_at
 		)
 		VALUES (
 			$1, $2, $3, $4, $5, $6, $7,
-			$8, $9, $10,
+			$8, $9, $10, $11,
 			setweight(to_tsvector('simple', COALESCE($3, '')), 'A') || setweight(to_tsvector('simple', COALESCE($5, '')), 'B'),
-			$11, $11, NOW(), NOW()
+			$12, $12, NOW(), NOW()
 		)
 		ON CONFLICT (content_id, locale) DO UPDATE
 		SET title = EXCLUDED.title,
@@ -60,9 +60,11 @@ func (r *TranslationRepository) Upsert(ctx context.Context, t *domain.ContentTra
 		    seo_title = EXCLUDED.seo_title,
 		    seo_description = EXCLUDED.seo_description,
 		    search_vector = EXCLUDED.search_vector,
+		    status = CASE WHEN EXCLUDED.status = 'scheduled' THEN EXCLUDED.status ELSE content_translations.status END,
+		    scheduled_at = CASE WHEN EXCLUDED.status = 'scheduled' THEN EXCLUDED.scheduled_at ELSE content_translations.scheduled_at END,
 		    updated_by = EXCLUDED.updated_by,
 		    updated_at = NOW()
-		RETURNING id, status, published_at, created_at, updated_at
+		RETURNING id, status, published_at, scheduled_at, created_at, updated_at
 	`
 
 	err = r.pool.QueryRow(ctx, query,
@@ -76,8 +78,9 @@ func (r *TranslationRepository) Upsert(ctx context.Context, t *domain.ContentTra
 		t.SEOTitle,
 		t.SEODescription,
 		t.Status,
+		t.ScheduledAt,
 		t.CreatedBy,
-	).Scan(&t.ID, &t.Status, &t.PublishedAt, &t.CreatedAt, &t.UpdatedAt)
+	).Scan(&t.ID, &t.Status, &t.PublishedAt, &t.ScheduledAt, &t.CreatedAt, &t.UpdatedAt)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -94,7 +97,7 @@ func (r *TranslationRepository) Upsert(ctx context.Context, t *domain.ContentTra
 func (r *TranslationRepository) GetByContentAndLocale(ctx context.Context, contentID int64, locale string) (*domain.ContentTranslation, error) {
 	query := `
 		SELECT id, content_id, locale, title, slug, summary, body, extra_data,
-		       seo_title, seo_description, status, published_at, created_by, updated_by, published_by, created_at, updated_at
+		       seo_title, seo_description, status, published_at, scheduled_at, created_by, updated_by, published_by, created_at, updated_at
 		FROM content_translations
 		WHERE content_id = $1 AND locale = $2
 	`
@@ -116,6 +119,7 @@ func (r *TranslationRepository) GetByContentAndLocale(ctx context.Context, conte
 		&t.SEODescription,
 		&statusStr,
 		&t.PublishedAt,
+		&t.ScheduledAt,
 		&t.CreatedBy,
 		&t.UpdatedBy,
 		&t.PublishedBy,
@@ -144,7 +148,7 @@ func (r *TranslationRepository) GetByContentAndLocale(ctx context.Context, conte
 func (r *TranslationRepository) ListByContentID(ctx context.Context, contentID int64) (map[string]*domain.ContentTranslation, error) {
 	query := `
 		SELECT id, content_id, locale, title, slug, summary, body, extra_data,
-		       seo_title, seo_description, status, published_at, created_by, updated_by, published_by, created_at, updated_at
+		       seo_title, seo_description, status, published_at, scheduled_at, created_by, updated_by, published_by, created_at, updated_at
 		FROM content_translations
 		WHERE content_id = $1
 	`
@@ -174,6 +178,7 @@ func (r *TranslationRepository) ListByContentID(ctx context.Context, contentID i
 			&t.SEODescription,
 			&statusStr,
 			&t.PublishedAt,
+			&t.ScheduledAt,
 			&t.CreatedBy,
 			&t.UpdatedBy,
 			&t.PublishedBy,
@@ -208,7 +213,7 @@ func (r *TranslationRepository) UpdateStatus(
 ) error {
 	query := `
 		UPDATE content_translations
-		SET status = $1, published_by = $2, published_at = $3, updated_at = NOW()
+		SET status = $1, published_by = $2, published_at = $3, scheduled_at = NULL, updated_at = NOW()
 		WHERE content_id = $4 AND locale = $5
 	`
 	cmdTag, err := r.pool.Exec(ctx, query, string(status), publishedBy, publishedAt, contentID, locale)
@@ -219,4 +224,73 @@ func (r *TranslationRepository) UpdateStatus(
 		return domain.ErrTranslationNotFound
 	}
 	return nil
+}
+
+// UpdateSchedule updates translation status to 'scheduled' and sets scheduled_at.
+func (r *TranslationRepository) UpdateSchedule(
+	ctx context.Context,
+	contentID int64,
+	locale string,
+	status domain.TranslationStatus,
+	updatedBy *int64,
+	scheduledAt *time.Time,
+) error {
+	query := `
+		UPDATE content_translations
+		SET status = $1, scheduled_at = $2, published_by = $3, updated_by = $3, updated_at = NOW()
+		WHERE content_id = $4 AND locale = $5
+	`
+	cmdTag, err := r.pool.Exec(ctx, query, string(status), scheduledAt, updatedBy, contentID, locale)
+	if err != nil {
+		return fmt.Errorf("failed to update translation schedule: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return domain.ErrTranslationNotFound
+	}
+	return nil
+}
+
+// CancelSchedule cancels a scheduled translation and reverts it to draft.
+func (r *TranslationRepository) CancelSchedule(
+	ctx context.Context,
+	contentID int64,
+	locale string,
+	updatedBy *int64,
+) error {
+	query := `
+		UPDATE content_translations
+		SET status = 'draft', scheduled_at = NULL, updated_by = $1, updated_at = NOW()
+		WHERE content_id = $2 AND locale = $3 AND status = 'scheduled'
+	`
+	cmdTag, err := r.pool.Exec(ctx, query, updatedBy, contentID, locale)
+	if err != nil {
+		return fmt.Errorf("failed to cancel translation schedule: %w", err)
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return domain.ErrTranslationNotFound
+	}
+	return nil
+}
+
+// PromoteDueScheduled automatically promotes all scheduled translations whose scheduled_at <= now to published.
+func (r *TranslationRepository) PromoteDueScheduled(ctx context.Context, now time.Time) (int64, error) {
+	query := `
+		WITH promoted AS (
+			UPDATE content_translations
+			SET status = 'published',
+			    published_at = COALESCE(scheduled_at, NOW()),
+			    published_by = COALESCE(published_by, updated_by, created_by),
+			    scheduled_at = NULL,
+			    updated_at = NOW()
+			WHERE status = 'scheduled' AND scheduled_at <= $1
+			RETURNING id
+		)
+		SELECT COUNT(*) FROM promoted
+	`
+	var count int64
+	err := r.pool.QueryRow(ctx, query, now).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("failed to promote due scheduled translations: %w", err)
+	}
+	return count, nil
 }

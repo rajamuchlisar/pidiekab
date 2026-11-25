@@ -297,12 +297,12 @@ async function handleLogout() {
 
 .topbar {
   background-color: #ffffff;
-  min-height: 72px;
+  min-height: 76px;
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.5rem 2rem;
+  padding: 0.65rem 2rem;
 }
 
 .page-title {
@@ -322,7 +322,7 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.35rem 0.65rem;
+  padding: 0.4rem 0.75rem;
   border-radius: 8px;
   border: 1px solid transparent;
 }
@@ -339,8 +339,8 @@ async function handleLogout() {
 }
 
 .admin-avatar {
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   background: #064e3b;
   color: #ffffff;
   font-weight: 700;
@@ -348,14 +348,14 @@ async function handleLogout() {
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   flex-shrink: 0;
 }
 
 .admin-details {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.15rem;
 }
 
 .admin-name {
@@ -372,20 +372,24 @@ async function handleLogout() {
 }
 
 .admin-role-wrap {
-  margin-top: 0.2rem;
+  margin-top: 0.25rem;
   display: flex;
   align-items: center;
 }
 
 .role-pill {
-  font-size: 0.62rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  padding: 0.12rem 0.55rem;
+  padding: 0.18rem 0.65rem;
   border-radius: 9999px;
-  letter-spacing: 0.035em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  display: inline-block;
-  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+  box-sizing: border-box;
+  white-space: nowrap;
 }
 
 .badge-role-super {

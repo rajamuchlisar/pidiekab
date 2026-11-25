@@ -92,6 +92,21 @@ function onSearchSubmit() {
   loadContents()
 }
 
+function getStatusBadgeClass(status?: string) {
+  if (status === 'published') return 'badge-published'
+  if (status === 'scheduled') return 'badge-scheduled'
+  if (status === 'archived') return 'badge-archived'
+  return 'badge-draft'
+}
+
+function formatStatus(status?: string) {
+  if (status === 'published') return 'Published'
+  if (status === 'scheduled') return 'Dijadwalkan'
+  if (status === 'archived') return 'Diarsipkan'
+  if (status === 'draft') return 'Draft'
+  return 'Draft'
+}
+
 onMounted(() => {
   loadCategories()
   loadContents()
@@ -139,6 +154,7 @@ onMounted(() => {
           <select v-model="selectedStatus" class="select-control">
             <option value="">Semua Status</option>
             <option value="draft">Draft</option>
+            <option value="scheduled">Dijadwalkan</option>
             <option value="published">Published</option>
             <option value="archived">Archived</option>
           </select>
@@ -189,20 +205,34 @@ onMounted(() => {
                   <span class="badge badge-category">{{ item.categoryName || getCategoryName(item.category_id || item.categoryId) || 'Umum' }}</span>
                 </td>
                 <td>
-                  <span
-                    class="badge"
-                    :class="item.translations?.id?.status === 'published' ? 'badge-published' : 'badge-draft'"
-                  >
-                    {{ item.translations?.id?.status || 'none' }}
-                  </span>
+                  <div class="status-cell">
+                    <span
+                      class="badge"
+                      :class="getStatusBadgeClass(item.translations?.id?.status)"
+                      :title="item.translations?.id?.scheduled_at ? `Dijadwalkan: ${new Date(item.translations?.id?.scheduled_at).toLocaleString('id-ID')}` : ''"
+                    >
+                      <BladeIcon v-if="item.translations?.id?.status === 'scheduled'" name="clock" size="12" />
+                      <span>{{ formatStatus(item.translations?.id?.status) }}</span>
+                    </span>
+                    <span v-if="item.translations?.id?.status === 'scheduled' && item.translations?.id?.scheduled_at" class="scheduled-time">
+                      {{ new Date(item.translations.id.scheduled_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}
+                    </span>
+                  </div>
                 </td>
                 <td>
-                  <span
-                    class="badge"
-                    :class="item.translations?.en?.status === 'published' ? 'badge-published' : 'badge-draft'"
-                  >
-                    {{ item.translations?.en?.status || 'none' }}
-                  </span>
+                  <div class="status-cell">
+                    <span
+                      class="badge"
+                      :class="getStatusBadgeClass(item.translations?.en?.status)"
+                      :title="item.translations?.en?.scheduled_at ? `Dijadwalkan: ${new Date(item.translations?.en?.scheduled_at).toLocaleString('id-ID')}` : ''"
+                    >
+                      <BladeIcon v-if="item.translations?.en?.status === 'scheduled'" name="clock" size="12" />
+                      <span>{{ formatStatus(item.translations?.en?.status) }}</span>
+                    </span>
+                    <span v-if="item.translations?.en?.status === 'scheduled' && item.translations?.en?.scheduled_at" class="scheduled-time">
+                      {{ new Date(item.translations.en.scheduled_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) }}
+                    </span>
+                  </div>
                 </td>
                 <td class="text-muted">
                   {{ new Date(item.updatedAt || item.updated_at || item.createdAt || item.created_at).toLocaleDateString('id-ID') }}
@@ -398,8 +428,23 @@ onMounted(() => {
   gap: 0.25rem;
 }
 
+.status-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-start;
+}
+
+.scheduled-time {
+  font-size: 0.72rem;
+  color: #7c3aed;
+  font-weight: 500;
+}
+
 .badge {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
   font-size: 0.75rem;
@@ -410,6 +455,17 @@ onMounted(() => {
 .badge-published {
   background: #d1fae5;
   color: #065f46;
+}
+
+.badge-scheduled {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid #c4b5fd;
+}
+
+.badge-archived {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .badge-draft {

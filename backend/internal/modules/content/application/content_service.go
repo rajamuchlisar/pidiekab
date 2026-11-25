@@ -372,6 +372,111 @@ func (s *ContentService) ArchiveLocale(ctx context.Context, contentID int64, loc
 	return nil
 }
 
+// ScheduleLocale performs validation and schedules a content translation for future publication.
+func (s *ContentService) ScheduleLocale(
+	ctx context.Context,
+	contentID int64,
+	locale string,
+	scheduledAt time.Time,
+	adminID int64,
+	ip *string,
+) error {
+	locale = strings.ToLower(strings.TrimSpace(locale))
+
+	now := time.Now().UTC()
+	if !scheduledAt.After(now) {
+		return domain.ErrScheduledAtMustBeFuture
+	}
+
+	c, err := s.contentRepo.GetByID(ctx, contentID)
+	if err != nil {
+		return err
+	}
+
+	cat, err := s.categoryChecker.GetCategory(ctx, c.CategoryID)
+	if err != nil {
+		return err
+	}
+
+	t, err := s.translationRepo.GetByContentAndLocale(ctx, contentID, locale)
+	if err != nil {
+		return err
+	}
+
+	sources, err := s.sourceRepo.ListByContentID(ctx, contentID)
+	if err != nil {
+		return err
+	}
+
+	// Validate publication eligibility so invalid drafts cannot be scheduled
+	if err := domain.ValidatePublishEligibility(c, t, sources, cat.IsActive); err != nil {
+		return err
+	}
+
+	schedUTC := scheduledAt.UTC()
+	if err := s.translationRepo.UpdateSchedule(ctx, contentID, locale, domain.StatusScheduled, &adminID, &schedUTC); err != nil {
+		return err
+	}
+
+	s.recordAudit(ctx, &adminID, "content.locale.schedule", "content_translation", &t.ID, map[string]any{
+		"content_id":   contentID,
+		"locale":       locale,
+		"scheduled_at": schedUTC.Format(time.RFC3339),
+	}, ip)
+
+	return nil
+}
+
+// CancelScheduleLocale reverts a scheduled translation back to draft.
+func (s *ContentService) CancelScheduleLocale(
+	ctx context.Context,
+	contentID int64,
+	locale string,
+	adminID int64,
+	ip *string,
+) error {
+	locale = strings.ToLower(strings.TrimSpace(locale))
+
+	t, err := s.translationRepo.GetByContentAndLocale(ctx, contentID, locale)
+	if err != nil {
+		return err
+	}
+
+	if t.Status != domain.StatusScheduled {
+		return fmt.Errorf("hanya konten berstatus 'scheduled' yang dapat dibatalkan penjadwalannya (status saat ini: %s)", t.Status)
+	}
+
+	if err := s.translationRepo.CancelSchedule(ctx, contentID, locale, &adminID); err != nil {
+		return err
+	}
+
+	s.recordAudit(ctx, &adminID, "content.locale.cancel_schedule", "content_translation", &t.ID, map[string]any{
+		"content_id": contentID,
+		"locale":     locale,
+	}, ip)
+
+	return nil
+}
+
+// PromoteDueScheduledTranslations publishes any scheduled translations whose scheduled_at <= now,
+// and triggers SSG site build if any articles were promoted.
+func (s *ContentService) PromoteDueScheduledTranslations(ctx context.Context) (int64, error) {
+	now := time.Now().UTC()
+	promotedCount, err := s.translationRepo.PromoteDueScheduled(ctx, now)
+	if err != nil {
+		return 0, err
+	}
+
+	if promotedCount > 0 && s.enqueuer != nil {
+		_, _ = s.enqueuer.Enqueue(ctx, nil, "site.build", map[string]any{
+			"trigger":        "scheduled_publishing",
+			"promoted_count": promotedCount,
+		})
+	}
+
+	return promotedCount, nil
+}
+
 // AddSource records a citation or reference for content.
 func (s *ContentService) AddSource(
 	ctx context.Context,

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -203,7 +204,7 @@ func (r *ContentRepository) List(ctx context.Context, p FilterParams) ([]*domain
 	// Fetch translations for these content IDs
 	if len(contentIDs) > 0 {
 		transQuery := `
-			SELECT content_id, locale, title, status
+			SELECT content_id, locale, title, status, scheduled_at
 			FROM content_translations
 			WHERE content_id = ANY($1)
 		`
@@ -218,13 +219,15 @@ func (r *ContentRepository) List(ctx context.Context, p FilterParams) ([]*domain
 			var locale string
 			var title *string
 			var status string
-			if err := tRows.Scan(&contentID, &locale, &title, &status); err != nil {
+			var scheduledAt *time.Time
+			if err := tRows.Scan(&contentID, &locale, &title, &status, &scheduledAt); err != nil {
 				return nil, 0, fmt.Errorf("failed to scan translation summary: %w", err)
 			}
 			if item, exists := itemMap[contentID]; exists {
 				item.Translations[locale] = &domain.ContentTranslationListSummary{
-					Title:  title,
-					Status: domain.TranslationStatus(status),
+					Title:       title,
+					Status:      domain.TranslationStatus(status),
+					ScheduledAt: scheduledAt,
 				}
 			}
 		}

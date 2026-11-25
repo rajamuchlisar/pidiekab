@@ -45,12 +45,16 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Publish / Archive direct routes
 	mux.Handle("POST /api/v1/admin/contents/{content_id}/publish", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handlePublishLocaleDirect))))
 	mux.Handle("POST /api/v1/admin/contents/{content_id}/archive", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleArchiveLocaleDirect))))
+	mux.Handle("POST /api/v1/admin/contents/{content_id}/schedule", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleScheduleLocaleDirect))))
+	mux.Handle("POST /api/v1/admin/contents/{content_id}/cancel-schedule", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleCancelScheduleLocaleDirect))))
 
 	// Translations
 	mux.Handle("GET /api/v1/admin/contents/{content_id}/translations/{locale}", authMiddleware(http.HandlerFunc(h.handleGetTranslation)))
 	mux.Handle("PUT /api/v1/admin/contents/{content_id}/translations/{locale}", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleSaveTranslation))))
 	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/publish", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handlePublishLocaleDirect))))
 	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/archive", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleArchiveLocaleDirect))))
+	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/schedule", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleScheduleLocaleDirect))))
+	mux.Handle("POST /api/v1/admin/contents/{content_id}/translations/{locale}/cancel-schedule", authMiddleware(csrfMiddleware(http.HandlerFunc(h.handleCancelScheduleLocaleDirect))))
 
 	// Preview
 	mux.Handle("GET /api/v1/admin/preview/contents/{content_id}", authMiddleware(http.HandlerFunc(h.handlePreviewContent)))
@@ -186,6 +190,8 @@ type translationPayloadRequest struct {
 	BodyHtml       string         `json:"body_html"`
 	SEOTitle       *string        `json:"seo_title"`
 	SEODescription *string        `json:"seo_description"`
+	Status         *string        `json:"status"`
+	ScheduledAt    *time.Time     `json:"scheduled_at"`
 }
 
 func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
@@ -243,6 +249,9 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 					body = map[string]any{"html": "", "markdown": ""}
 				}
 				_, _ = h.service.SaveTranslation(r.Context(), c.ID, loc, t.Title, slug, t.Summary, body, t.SEOTitle, t.SEODescription, admin.ID, &ip)
+				if t.Status != nil && *t.Status == string(domain.StatusScheduled) && t.ScheduledAt != nil {
+					_ = h.service.ScheduleLocale(r.Context(), c.ID, loc, *t.ScheduledAt, admin.ID, &ip)
+				}
 			}
 		}
 	}
@@ -406,6 +415,9 @@ func (h *Handler) handleUpdateShared(w http.ResponseWriter, r *http.Request) {
 					body = map[string]any{"html": "", "markdown": ""}
 				}
 				_, _ = h.service.SaveTranslation(r.Context(), id, loc, t.Title, slug, t.Summary, body, t.SEOTitle, t.SEODescription, admin.ID, &ip)
+				if t.Status != nil && *t.Status == string(domain.StatusScheduled) && t.ScheduledAt != nil {
+					_ = h.service.ScheduleLocale(r.Context(), id, loc, *t.ScheduledAt, admin.ID, &ip)
+				}
 			}
 		}
 	}
@@ -603,6 +615,109 @@ func (h *Handler) handleArchiveLocaleDirect(w http.ResponseWriter, r *http.Reque
 
 	// 202 Accepted per OpenAPI specification
 	w.WriteHeader(http.StatusAccepted)
+}
+
+func (h *Handler) handleScheduleLocaleDirect(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required.")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("content_id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeProblem(w, r, http.StatusBadRequest, "BAD_REQUEST", "Invalid content ID.")
+		return
+	}
+
+	var req struct {
+		Locale      string     `json:"locale"`
+		ScheduledAt *time.Time `json:"scheduled_at"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeProblem(w, r, http.StatusBadRequest, "BAD_REQUEST", "Malformed JSON request body.")
+		return
+	}
+
+	locale := r.PathValue("locale")
+	if locale == "" {
+		locale = req.Locale
+	}
+	if locale == "" {
+		locale = domain.LocaleID
+	}
+
+	if req.ScheduledAt == nil {
+		writeProblem(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", "scheduled_at is required.")
+		return
+	}
+
+	ip := extractClientIP(r)
+	err = h.service.ScheduleLocale(r.Context(), id, locale, *req.ScheduledAt, admin.ID, &ip)
+	if err != nil {
+		if errors.Is(err, domain.ErrContentNotFound) || errors.Is(err, domain.ErrTranslationNotFound) {
+			writeProblem(w, r, http.StatusNotFound, "NOT_FOUND", err.Error())
+			return
+		}
+		if errors.Is(err, domain.ErrScheduledAtMustBeFuture) || errors.Is(err, domain.ErrCategoryInactive) || errors.Is(err, domain.ErrNoSourcesRecorded) || errors.Is(err, domain.ErrTitleEmpty) || errors.Is(err, domain.ErrBodyEmpty) {
+			writeProblem(w, r, http.StatusUnprocessableEntity, "SCHEDULE_VALIDATION_ERROR", err.Error())
+			return
+		}
+		writeProblem(w, r, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to schedule locale: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":       "scheduled",
+		"locale":       locale,
+		"scheduled_at": req.ScheduledAt.UTC().Format(time.RFC3339),
+	})
+}
+
+func (h *Handler) handleCancelScheduleLocaleDirect(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok {
+		writeProblem(w, r, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required.")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("content_id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeProblem(w, r, http.StatusBadRequest, "BAD_REQUEST", "Invalid content ID.")
+		return
+	}
+
+	locale := r.PathValue("locale")
+	if locale == "" {
+		var req struct {
+			Locale string `json:"locale"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		locale = req.Locale
+	}
+	if locale == "" {
+		locale = domain.LocaleID
+	}
+
+	ip := extractClientIP(r)
+	err = h.service.CancelScheduleLocale(r.Context(), id, locale, admin.ID, &ip)
+	if err != nil {
+		if errors.Is(err, domain.ErrTranslationNotFound) {
+			writeProblem(w, r, http.StatusNotFound, "NOT_FOUND", "Translation not found.")
+			return
+		}
+		writeProblem(w, r, http.StatusUnprocessableEntity, "VALIDATION_ERROR", err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status": "draft",
+		"locale": locale,
+	})
 }
 
 func (h *Handler) handleListSources(w http.ResponseWriter, r *http.Request) {

@@ -222,6 +222,7 @@ func main() {
 
 		generator := sitegeneration.NewGenerator(dbPool, cfg.PublicBaseURL)
 		ssgWorker := sitegeneration.NewWorker(jobRepo, generator, releaseMgr, cfg.SSGWorkerPollInterval, cfg.SSGJobMaxAttempts, logger)
+		ssgWorker.SetScheduledPromoter(contentService.PromoteDueScheduledTranslations)
 
 		// Run background SSG worker lifecycle
 		go ssgWorker.Start(ctx)
