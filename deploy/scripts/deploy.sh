@@ -11,7 +11,7 @@ RELEASE_TAG=$(date +%Y%m%d_%H%M%S)
 NEW_RELEASE_DIR="${APP_DIR}/releases/${RELEASE_TAG}"
 CURRENT_LINK="${APP_DIR}/current"
 SERVICE_NAME="pidiekab.service"
-HEALTH_URL="${PIDIEKAB_HEALTH_URL:-http://127.0.0.1:8080/health/ready}"
+HEALTH_URL="${PIDIEKAB_HEALTH_URL:-https://127.0.0.1/health/ready}"
 
 echo "=================================================="
 echo "Starting PidieKab Deployment: ${RELEASE_TAG}"
@@ -88,7 +88,7 @@ systemctl restart "${SERVICE_NAME}"
 echo "--> Waiting for service readiness (${HEALTH_URL})..."
 READY=0
 for i in {1..15}; do
-    if curl -s -f "${HEALTH_URL}" > /dev/null 2>&1; then
+    if curl -k -s -L -f "${HEALTH_URL}" > /dev/null 2>&1; then
         READY=1
         break
     fi
