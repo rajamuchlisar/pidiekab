@@ -518,6 +518,11 @@ func handleSeedDraftsCLI(cfg config.Config, logger *slog.Logger) {
 		logger.Error("failed to publish kerupuk mulieng story", "error", err)
 	}
 
+	// 9. Publish Comprehensive Guha Tujoh Laweung Editorial Story & Hero Image
+	if err := publishGuhaTujohStory(ctx, dbPool, adminID, storagePath, logger); err != nil {
+		logger.Error("failed to publish guha tujoh story", "error", err)
+	}
+
 	fmt.Printf("==================================================\n")
 	fmt.Printf("Draft Seeding Summary:\n")
 	fmt.Printf(" - Newly Created Drafts : %d\n", createdCount)
