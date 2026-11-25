@@ -297,12 +297,13 @@ async function handleLogout() {
 
 .topbar {
   background-color: #ffffff;
-  min-height: 76px;
+  min-height: 84px;
   border-bottom: 1px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.65rem 2rem;
+  padding: 0.85rem 2rem;
+  box-sizing: border-box;
 }
 
 .page-title {
@@ -322,9 +323,10 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.4rem 0.75rem;
+  padding: 0.45rem 0.75rem;
   border-radius: 8px;
   border: 1px solid transparent;
+  overflow: visible;
 }
 
 .admin-badge-link {
@@ -355,7 +357,7 @@ async function handleLogout() {
 .admin-details {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
 }
 
 .admin-name {
@@ -372,22 +374,21 @@ async function handleLogout() {
 }
 
 .admin-role-wrap {
-  margin-top: 0.25rem;
+  margin-top: 0.2rem;
   display: flex;
   align-items: center;
+  line-height: normal;
 }
 
 .role-pill {
   font-size: 0.68rem;
   font-weight: 700;
-  padding: 0.18rem 0.65rem;
+  padding: 0.22rem 0.65rem;
   border-radius: 9999px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1.2;
+  display: inline-block;
+  line-height: 1.35;
   box-sizing: border-box;
   white-space: nowrap;
 }
