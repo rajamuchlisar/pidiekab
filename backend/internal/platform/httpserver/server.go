@@ -393,20 +393,38 @@ func serveCMSStatic(w http.ResponseWriter, r *http.Request, rootDir string) {
 		return
 	}
 
-	targetPath := filepath.Join(rootDir, cleanPath)
-	stat, err := os.Stat(targetPath)
-	if err == nil && !stat.IsDir() {
-		applyCacheHeaders(w, r.URL.Path)
-		http.ServeFile(w, r, targetPath)
-		return
+	// Try rootDir and common fallback locations
+	candidateRoots := []string{
+		rootDir,
+		filepath.Join(filepath.Dir(rootDir), "cms"),
+		"cms",
+		"frontend/admin-cms/dist",
 	}
 
-	// SPA fallback: serve /cms/index.html with no-cache
-	spaIndex := filepath.Join(rootDir, "index.html")
-	if _, err := os.Stat(spaIndex); err == nil {
-		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
-		http.ServeFile(w, r, spaIndex)
-		return
+	for _, dir := range candidateRoots {
+		if dir == "" {
+			continue
+		}
+		targetPath := filepath.Join(dir, cleanPath)
+		stat, err := os.Stat(targetPath)
+		if err == nil && !stat.IsDir() {
+			applyCacheHeaders(w, r.URL.Path)
+			http.ServeFile(w, r, targetPath)
+			return
+		}
+	}
+
+	// SPA fallback: serve index.html with no-cache from any candidate root
+	for _, dir := range candidateRoots {
+		if dir == "" {
+			continue
+		}
+		spaIndex := filepath.Join(dir, "index.html")
+		if _, err := os.Stat(spaIndex); err == nil {
+			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+			http.ServeFile(w, r, spaIndex)
+			return
+		}
 	}
 
 	http.NotFound(w, r)

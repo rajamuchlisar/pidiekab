@@ -45,6 +45,8 @@ echo "--> Creating release directory structure..."
 mkdir -p "${NEW_RELEASE_DIR}/bin"
 mkdir -p "${NEW_RELEASE_DIR}/public"
 mkdir -p "${NEW_RELEASE_DIR}/cms"
+mkdir -p "${NEW_RELEASE_DIR}/frontend/admin-cms/dist"
+mkdir -p "${NEW_RELEASE_DIR}/frontend/public-site/dist"
 mkdir -p "${NEW_RELEASE_DIR}/deploy"
 
 # 4. Copy build artifacts
@@ -54,6 +56,13 @@ chmod +x "${NEW_RELEASE_DIR}/bin/pidiekab"
 
 if [ -d "frontend/admin-cms/dist" ]; then
     cp -r frontend/admin-cms/dist/* "${NEW_RELEASE_DIR}/cms/"
+    cp -r frontend/admin-cms/dist/* "${NEW_RELEASE_DIR}/frontend/admin-cms/dist/"
+fi
+
+if [ -d "frontend/public-site/dist" ]; then
+    cp -r frontend/public-site/dist/* "${NEW_RELEASE_DIR}/frontend/public-site/dist/"
+elif [ -n "${PREV_RELEASE}" ] && [ -d "${PREV_RELEASE}/frontend/public-site/dist" ]; then
+    cp -r "${PREV_RELEASE}/frontend/public-site/dist/"* "${NEW_RELEASE_DIR}/frontend/public-site/dist/"
 fi
 
 if [ -d "deploy" ]; then
