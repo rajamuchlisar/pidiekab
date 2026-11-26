@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -11,6 +12,15 @@ import (
 	"pidiekab/internal/modules/staticpage/domain"
 	"pidiekab/internal/platform/httpserver/middleware"
 )
+
+var slugUnsafeRegex = regexp.MustCompile(`[^a-z0-9]+`)
+
+func sanitizeSlug(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = slugUnsafeRegex.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	return s
+}
 
 type PageHandler struct {
 	service     *application.PageService
@@ -46,6 +56,7 @@ func (h *PageHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/v1/admin/pages/{id}/translations/{locale}", wrapProtected(h.HandleSaveTranslation))
 	mux.Handle("POST /api/v1/admin/pages/{id}/translations/{locale}/publish", wrapProtected(h.HandlePublishTranslation))
 	mux.Handle("POST /api/v1/admin/pages/{id}/translations/{locale}/archive", wrapProtected(h.HandleArchiveTranslation))
+	mux.Handle("POST /api/v1/admin/pages/{id}/translations/{locale}/draft", wrapProtected(h.HandleDraftTranslation))
 
 	// Static-pages alias routes matching frontend /api/v1/admin/static-pages
 	mux.Handle("GET /api/v1/admin/static-pages", wrapGet(h.HandleListPages))
@@ -57,6 +68,7 @@ func (h *PageHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("PUT /api/v1/admin/static-pages/{id}/translations/{locale}", wrapProtected(h.HandleSaveTranslation))
 	mux.Handle("POST /api/v1/admin/static-pages/{id}/translations/{locale}/publish", wrapProtected(h.HandlePublishTranslation))
 	mux.Handle("POST /api/v1/admin/static-pages/{id}/translations/{locale}/archive", wrapProtected(h.HandleArchiveTranslation))
+	mux.Handle("POST /api/v1/admin/static-pages/{id}/translations/{locale}/draft", wrapProtected(h.HandleDraftTranslation))
 }
 
 type createPageRequest struct {
@@ -229,9 +241,6 @@ func (h *PageHandler) HandleUpdatePage(w http.ResponseWriter, r *http.Request) {
 		if locale != domain.LocaleID && locale != domain.LocaleEN {
 			continue
 		}
-		if strings.TrimSpace(tReq.Title) == "" {
-			continue
-		}
 
 		bodyContent := strings.TrimSpace(tReq.BodyHTML)
 		if bodyContent == "" && tReq.Body != nil {
@@ -246,18 +255,39 @@ func (h *PageHandler) HandleUpdatePage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		title := strings.TrimSpace(tReq.Title)
+		if title == "" {
+			if bodyContent != "" || strings.TrimSpace(tReq.Slug) != "" {
+				words := strings.Split(cleanKey, "-")
+				for i, w := range words {
+					if len(w) > 0 {
+						words[i] = strings.ToUpper(w[:1]) + w[1:]
+					}
+				}
+				title = strings.Join(words, " ")
+			} else {
+				continue
+			}
+		}
+
 		bodyJSON, _ := json.Marshal(map[string]string{
 			"html":     bodyContent,
 			"markdown": bodyContent,
 		})
 
-		slug := strings.TrimSpace(tReq.Slug)
+		slug := sanitizeSlug(tReq.Slug)
 		if slug == "" {
-			slug = strings.ToLower(strings.ReplaceAll(strings.TrimSpace(tReq.Title), " ", "-"))
+			slug = sanitizeSlug(title)
+		}
+		if slug == "" {
+			slug = sanitizeSlug(cleanKey)
+		}
+		if slug == "" {
+			slug = "page-" + locale
 		}
 
 		saveInput := application.SaveTranslationInput{
-			Title: tReq.Title,
+			Title: title,
 			Slug:  slug,
 			Body:  bodyJSON,
 		}
@@ -273,6 +303,8 @@ func (h *PageHandler) HandleUpdatePage(w http.ResponseWriter, r *http.Request) {
 			_ = h.service.PublishTranslation(r.Context(), admin.ID, id, locale)
 		} else if status == domain.StatusArchived {
 			_ = h.service.ArchiveTranslation(r.Context(), admin.ID, id, locale)
+		} else if status == domain.StatusDraft {
+			_ = h.service.DraftTranslation(r.Context(), admin.ID, id, locale)
 		}
 	}
 
@@ -324,6 +356,11 @@ func (h *PageHandler) HandleSaveTranslation(w http.ResponseWriter, r *http.Reque
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "INVALID_JSON", "Malformed JSON body")
 		return
+	}
+
+	input.Slug = sanitizeSlug(input.Slug)
+	if input.Slug == "" {
+		input.Slug = sanitizeSlug(input.Title)
 	}
 
 	trans, err := h.service.SaveTranslation(r.Context(), admin.ID, id, locale, input)
@@ -404,6 +441,37 @@ func (h *PageHandler) HandleArchiveTranslation(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"message": "Static page translation archived successfully",
+	})
+}
+
+func (h *PageHandler) HandleDraftTranslation(w http.ResponseWriter, r *http.Request) {
+	admin, ok := middleware.AdminFromContext(r.Context())
+	if !ok || admin == nil {
+		writeJSONError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Admin session required")
+		return
+	}
+
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "INVALID_ID", "Invalid static page ID")
+		return
+	}
+	locale := strings.ToLower(r.PathValue("locale"))
+
+	err = h.service.DraftTranslation(r.Context(), admin.ID, id, locale)
+	if err != nil {
+		if errors.Is(err, domain.ErrTranslationNotFound) {
+			writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "Translation not found")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to draft static page translation")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"message": "Static page translation set to draft successfully",
 	})
 }
 

@@ -206,6 +206,23 @@ func (s *PageService) PublishTranslation(ctx context.Context, adminID int64, pag
 	return nil
 }
 
+func (s *PageService) DraftTranslation(ctx context.Context, adminID int64, pageID int64, locale string) error {
+	if err := domain.ValidateLocale(locale); err != nil {
+		return err
+	}
+
+	if err := s.repo.UpdateStatus(ctx, pageID, locale, domain.StatusDraft, adminID); err != nil {
+		return err
+	}
+
+	s.recordAudit(ctx, &adminID, "static_page.draft", "static_page_translation", nil, map[string]any{
+		"static_page_id": pageID,
+		"locale":         locale,
+	}, nil)
+
+	return nil
+}
+
 func (s *PageService) ArchiveTranslation(ctx context.Context, adminID int64, pageID int64, locale string) error {
 	if err := domain.ValidateLocale(locale); err != nil {
 		return err

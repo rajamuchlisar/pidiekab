@@ -75,29 +75,99 @@ async function loadPages(selectKey?: string) {
   }
 }
 
+function cleanSlug(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function humanize(key: string): string {
+  return (key || '')
+    .split('-')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
+}
+
 function selectPage(page: any) {
   selectedPage.value = page
-  form.pageKey = page.pageKey || page.page_key
+  const key = page.pageKey || page.page_key || ''
+  form.pageKey = key
 
   const transId = page.translations?.id || {}
   const transEn = page.translations?.en || {}
 
+  const idTitle = transId.title || (key ? humanize(key) : '')
+  const idSlug = cleanSlug(transId.slug || key)
+
+  let defaultEnTitle = transEn.title || ''
+  if (!defaultEnTitle && key) {
+    if (key === 'hubungi') defaultEnTitle = 'Contact Us'
+    else if (key === 'tentang-kami') defaultEnTitle = 'About Us'
+    else if (key === 'syarat-ketentuan') defaultEnTitle = 'Terms & Conditions'
+    else if (key === 'kebijakan-privasi') defaultEnTitle = 'Privacy Policy'
+    else defaultEnTitle = humanize(key)
+  }
+
+  let defaultEnSlug = cleanSlug(transEn.slug || '')
+  if (!defaultEnSlug && key) {
+    if (key === 'hubungi') defaultEnSlug = 'contact-us'
+    else if (key === 'tentang-kami') defaultEnSlug = 'about-us'
+    else if (key === 'syarat-ketentuan') defaultEnSlug = 'terms-and-conditions'
+    else if (key === 'kebijakan-privasi') defaultEnSlug = 'privacy-policy'
+    else defaultEnSlug = cleanSlug(key)
+  }
+
   form.translations.id = {
-    title: transId.title || '',
-    slug: transId.slug || '',
+    title: transId.title || idTitle,
+    slug: transId.slug || idSlug,
     bodyHtml: extractBodyHtml(transId),
     status: transId.status || 'draft',
   }
   form.translations.en = {
-    title: transEn.title || '',
-    slug: transEn.slug || '',
+    title: transEn.title || defaultEnTitle,
+    slug: transEn.slug || defaultEnSlug,
     bodyHtml: extractBodyHtml(transEn),
     status: transEn.status || 'draft',
   }
 }
 
+function onTitleInput(locale: 'id' | 'en') {
+  const t = form.translations[locale]
+  if (!t.slug || t.slug.trim() === '') {
+    t.slug = cleanSlug(t.title)
+  }
+}
+
+function onSlugBlur(locale: 'id' | 'en') {
+  const t = form.translations[locale]
+  t.slug = cleanSlug(t.slug || t.title || form.pageKey)
+}
+
 async function savePage() {
   if (!selectedPage.value) return
+
+  // Validate active tab
+  const curLocale = activeLocale.value
+  const curTrans = form.translations[curLocale]
+  if (!curTrans.title.trim()) {
+    notification.error('Validasi Gagal', `Judul Halaman (${curLocale.toUpperCase()}) wajib diisi.`)
+    return
+  }
+
+  // Ensure slugs are clean
+  form.translations.id.slug = cleanSlug(form.translations.id.slug || form.translations.id.title || form.pageKey)
+  form.translations.en.slug = cleanSlug(form.translations.en.slug || form.translations.en.title || form.pageKey)
+
+  // Ensure title is present if body is provided
+  if (!form.translations.en.title.trim()) {
+    form.translations.en.title = humanize(form.pageKey) || 'Page'
+  }
+  if (!form.translations.id.title.trim()) {
+    form.translations.id.title = humanize(form.pageKey) || 'Halaman'
+  }
 
   isSaving.value = true
   try {
@@ -105,14 +175,14 @@ async function savePage() {
       page_key: form.pageKey,
       translations: {
         id: {
-          title: form.translations.id.title,
-          slug: form.translations.id.slug,
+          title: form.translations.id.title.trim(),
+          slug: form.translations.id.slug.trim(),
           body_html: form.translations.id.bodyHtml,
           status: form.translations.id.status,
         },
         en: {
-          title: form.translations.en.title,
-          slug: form.translations.en.slug,
+          title: form.translations.en.title.trim(),
+          slug: form.translations.en.slug.trim(),
           body_html: form.translations.en.bodyHtml,
           status: form.translations.en.status,
         },
@@ -120,7 +190,7 @@ async function savePage() {
     }
 
     await api.put(`/api/v1/admin/static-pages/${selectedPage.value.id}`, payload)
-    notification.success('Halaman Disimpan', `Halaman "${form.pageKey}" berhasil disimpan dan dipublikasikan.`)
+    notification.success('Halaman Disimpan', `Halaman "${form.pageKey}" berhasil disimpan.`)
     await loadPages(form.pageKey)
   } catch (err: any) {
     notification.error('Gagal Menyimpan', err.detail || err.message || 'Terjadi kesalahan.', err.requestId)
@@ -370,6 +440,7 @@ onMounted(() => {
                   type="text"
                   class="input-control"
                   placeholder="Contoh: Tentang PidieKab"
+                  @input="onTitleInput(activeLocale)"
                 />
               </div>
               <div class="form-group flex-1">
@@ -379,6 +450,7 @@ onMounted(() => {
                   type="text"
                   class="input-control"
                   placeholder="contoh: tentang-kami"
+                  @blur="onSlugBlur(activeLocale)"
                 />
               </div>
               <div class="form-group status-group">
@@ -395,6 +467,7 @@ onMounted(() => {
             <div class="form-group">
               <label>Konten Halaman (WYSIWYG Rich Editor) *</label>
               <RichTextEditor
+                :key="selectedPage.id + '-' + activeLocale"
                 v-model="form.translations[activeLocale].bodyHtml"
                 placeholder="Tuliskan narasi dan informasi halaman lengkap di sini..."
                 min-height="400px"
