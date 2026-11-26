@@ -145,7 +145,8 @@ async function loadMedia() {
         fileName: m.original_filename || m.originalFilename || `media-${m.id}`,
         mimeType: m.mime_type || m.mimeType || 'image/jpeg',
         fileSize: m.file_size || m.fileSize || 0,
-        inUse: m.in_use !== undefined ? m.in_use : (m.inUse !== undefined ? m.inUse : false),
+        inUse: Boolean(m.in_use || (m.usage_count && m.usage_count > 0)),
+        usageCount: m.usage_count || (m.in_use ? 1 : 0),
         altTextId: m.alt_text_id || m.altTextId || '',
         altTextEn: m.alt_text_en || m.altTextEn || '',
       }))
@@ -247,18 +248,42 @@ async function handleUpload() {
   }
 }
 
-async function deleteMedia(item: any) {
-  const confirmed = confirm(
-    `Apakah Anda yakin ingin menghapus media "${item.title || item.fileName}"?\n\nMedia yang sedang digunakan sebagai foto utama artikel tidak dapat dihapus.`
-  )
+async function deleteMedia(item: any, force = false) {
+  let msg = `Apakah Anda yakin ingin menghapus media "${item.title || item.fileName}"?`
+  if (item.inUse && !force) {
+    msg += `\n\nPerhatian: Media ini sedang digunakan pada ${item.usageCount || 1} artikel atau pengaturan situs.`
+  }
+
+  const confirmed = confirm(msg)
   if (!confirmed) return
 
   try {
-    await api.del(`/api/v1/admin/media/${item.id}`)
-    notification.success('Media Dihapus', 'File media berhasil dihapus.')
+    const url = force ? `/api/v1/admin/media/${item.id}?force=true` : `/api/v1/admin/media/${item.id}`
+    await api.del(url)
+    notification.success('Media Dihapus', force ? 'File media dan kaitan artikel berhasil dihapus.' : 'File media berhasil dihapus.')
     loadMedia()
   } catch (err: any) {
+    if (err.code === 'MEDIA_IN_USE' || err.status === 409 || err.in_use || err.detail?.includes('digunakan') || err.detail?.includes('referenced')) {
+      const refList = err.references?.length ? `\n\nDigunakan pada:\n• ${err.references.join('\n• ')}` : (err.detail ? `\n\n${err.detail}` : '')
+      const forceConfirmed = confirm(
+        `Media "${item.title || item.fileName}" sedang aktif digunakan.${refList}\n\nApakah Anda ingin melepaskan kaitan dari artikel tersebut dan TETAP MENGHAPUS file ini?`
+      )
+      if (forceConfirmed) {
+        await executeForceDelete(item)
+        return
+      }
+    }
     notification.error('Gagal Menghapus Media', err.detail || 'Gambar sedang digunakan dalam artikel.', err.requestId)
+  }
+}
+
+async function executeForceDelete(item: any) {
+  try {
+    await api.del(`/api/v1/admin/media/${item.id}?force=true`)
+    notification.success('Media Dihapus', 'File media berhasil dihapus dan kaitan foto artikel telah dilepas.')
+    loadMedia()
+  } catch (err: any) {
+    notification.error('Gagal Menghapus Media', err.detail || 'Terjadi kesalahan saat menghapus media.', err.requestId)
   }
 }
 
@@ -302,7 +327,9 @@ onMounted(() => {
           <div v-for="item in mediaList" :key="item.id" class="media-card">
             <div class="thumb-wrap">
               <img :src="item.url" :alt="item.altTextId || item.title" class="media-img" loading="lazy" />
-              <span v-if="item.inUse" class="badge-in-use">Digunakan</span>
+              <span v-if="item.inUse" class="badge-in-use" :title="'Digunakan di ' + (item.usageCount || 1) + ' konten/artikel'">
+                Digunakan ({{ item.usageCount || 1 }})
+              </span>
             </div>
             <div class="media-meta">
               <span class="media-name" :title="item.title || item.fileName">
@@ -319,9 +346,8 @@ onMounted(() => {
                 </button>
                 <button
                   class="btn-xs btn-danger"
-                  :disabled="item.inUse"
                   @click="deleteMedia(item)"
-                  :title="item.inUse ? 'Media sedang digunakan dalam artikel' : 'Hapus media'"
+                  :title="item.inUse ? 'Media sedang digunakan dalam artikel (klik untuk opsi hapus paksa)' : 'Hapus media'"
                 >
                   <BladeIcon name="trash" size="12" />
                   <span>Hapus</span>

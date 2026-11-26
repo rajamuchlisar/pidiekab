@@ -3,6 +3,7 @@ package http
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -285,17 +286,31 @@ func (h *MediaHandler) HandleDeleteMedia(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	err = h.service.DeleteMedia(r.Context(), admin.ID, id)
+	force := r.URL.Query().Get("force") == "true" || r.URL.Query().Get("force") == "1"
+
+	err = h.service.DeleteMedia(r.Context(), admin.ID, id, force)
 	if err != nil {
 		if errors.Is(err, mediaDomain.ErrMediaNotFound) {
 			writeJSONError(w, http.StatusNotFound, "NOT_FOUND", "Media asset not found")
 			return
 		}
 		if errors.Is(err, mediaDomain.ErrMediaInUse) {
-			writeJSONError(w, http.StatusConflict, "MEDIA_IN_USE", "Cannot delete media asset that is currently referenced by content or site settings")
+			references, _ := h.service.GetMediaUsage(r.Context(), id)
+			detailMsg := "Media ini sedang digunakan sebagai gambar utama artikel atau pengaturan situs."
+			if len(references) > 0 {
+				detailMsg = fmt.Sprintf("Media ini sedang digunakan pada: %s.", strings.Join(references, ", "))
+			}
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			w.WriteHeader(http.StatusConflict)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code":       "MEDIA_IN_USE",
+				"detail":     detailMsg,
+				"in_use":     true,
+				"references": references,
+			})
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete media asset")
+		writeJSONError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete media asset: "+err.Error())
 		return
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -141,35 +142,75 @@ func (r *MediaRepository) UpdateMetadata(ctx context.Context, id int64, params U
 	return &m, nil
 }
 
-func (r *MediaRepository) Delete(ctx context.Context, id int64) error {
-	// Check if in use in contents
-	var contentCount int
-	err := r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM contents WHERE main_media_id = $1`, id).Scan(&contentCount)
-	if err != nil {
-		return fmt.Errorf("failed to check content media references: %w", err)
-	}
-	if contentCount > 0 {
-		return domain.ErrMediaInUse
+func (r *MediaRepository) GetUsage(ctx context.Context, id int64) ([]string, error) {
+	var references []string
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT COALESCE(ct.title, 'Artikel #' || c.id::text)
+		FROM contents c
+		LEFT JOIN content_translations ct ON ct.content_id = c.id AND ct.locale = 'id'
+		WHERE c.main_media_id = $1
+	`, id)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var title string
+			if err := rows.Scan(&title); err == nil && title != "" {
+				references = append(references, title)
+			}
+		}
 	}
 
-	// Check if in use in site settings
-	var settingsCount int
-	err = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM site_settings WHERE logo_media_id = $1 OR favicon_media_id = $1`, id).Scan(&settingsCount)
-	if err != nil {
-		return fmt.Errorf("failed to check site settings media references: %w", err)
+	var logoCount, faviconCount int
+	_ = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM site_settings WHERE logo_media_id = $1`, id).Scan(&logoCount)
+	if logoCount > 0 {
+		references = append(references, "Logo Website (Pengaturan)")
 	}
-	if settingsCount > 0 {
-		return domain.ErrMediaInUse
+	_ = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM site_settings WHERE favicon_media_id = $1`, id).Scan(&faviconCount)
+	if faviconCount > 0 {
+		references = append(references, "Favicon Website (Pengaturan)")
 	}
 
-	tag, err := r.pool.Exec(ctx, `DELETE FROM media_assets WHERE id = $1`, id)
+	return references, nil
+}
+
+func (r *MediaRepository) Delete(ctx context.Context, id int64, force bool) error {
+	references, err := r.GetUsage(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	if len(references) > 0 && !force {
+		return fmt.Errorf("%w: %s", domain.ErrMediaInUse, strings.Join(references, ", "))
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if force && len(references) > 0 {
+		if _, err := tx.Exec(ctx, `UPDATE contents SET main_media_id = NULL WHERE main_media_id = $1`, id); err != nil {
+			return fmt.Errorf("failed to unlink contents main_media_id: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE site_settings SET logo_media_id = NULL WHERE logo_media_id = $1`, id); err != nil {
+			return fmt.Errorf("failed to unlink site_settings logo_media_id: %w", err)
+		}
+		if _, err := tx.Exec(ctx, `UPDATE site_settings SET favicon_media_id = NULL WHERE favicon_media_id = $1`, id); err != nil {
+			return fmt.Errorf("failed to unlink site_settings favicon_media_id: %w", err)
+		}
+	}
+
+	tag, err := tx.Exec(ctx, `DELETE FROM media_assets WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete media asset: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return domain.ErrMediaNotFound
 	}
-	return nil
+
+	return tx.Commit(ctx)
 }
 
 func (r *MediaRepository) List(ctx context.Context, page, perPage int, q string) ([]domain.MediaAsset, int, error) {
@@ -194,7 +235,11 @@ func (r *MediaRepository) List(ctx context.Context, page, perPage int, q string)
 			SELECT
 				id, storage_key, original_filename, mime_type, file_size, width, height,
 				alt_text_id, alt_text_en, source_url, rights_status, attribution,
-				uploaded_by, created_at
+				uploaded_by, created_at,
+				(
+					(SELECT COUNT(*) FROM contents WHERE main_media_id = media_assets.id) +
+					(SELECT COUNT(*) FROM site_settings WHERE logo_media_id = media_assets.id OR favicon_media_id = media_assets.id)
+				) AS usage_count
 			FROM media_assets
 			WHERE original_filename ILIKE $1 OR attribution ILIKE $1 OR alt_text_id ILIKE $1
 			ORDER BY created_at DESC
@@ -207,7 +252,11 @@ func (r *MediaRepository) List(ctx context.Context, page, perPage int, q string)
 			SELECT
 				id, storage_key, original_filename, mime_type, file_size, width, height,
 				alt_text_id, alt_text_en, source_url, rights_status, attribution,
-				uploaded_by, created_at
+				uploaded_by, created_at,
+				(
+					(SELECT COUNT(*) FROM contents WHERE main_media_id = media_assets.id) +
+					(SELECT COUNT(*) FROM site_settings WHERE logo_media_id = media_assets.id OR favicon_media_id = media_assets.id)
+				) AS usage_count
 			FROM media_assets
 			ORDER BY created_at DESC
 			LIMIT $1 OFFSET $2
@@ -238,9 +287,11 @@ func (r *MediaRepository) List(ctx context.Context, page, perPage int, q string)
 			&m.ID, &m.StorageKey, &m.OriginalFilename, &m.MimeType, &m.FileSize,
 			&m.Width, &m.Height, &m.AltTextID, &m.AltTextEN, &m.SourceURL,
 			&m.RightsStatus, &m.Attribution, &m.UploadedBy, &m.CreatedAt,
+			&m.UsageCount,
 		); err != nil {
 			return nil, 0, fmt.Errorf("failed to scan media row: %w", err)
 		}
+		m.InUse = m.UsageCount > 0
 		assets = append(assets, m)
 	}
 

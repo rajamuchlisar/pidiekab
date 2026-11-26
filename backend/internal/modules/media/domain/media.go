@@ -46,6 +46,8 @@ type MediaAsset struct {
 	Attribution      string    `json:"attribution"`
 	UploadedBy       *int64    `json:"uploaded_by,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
+	InUse            bool      `json:"in_use"`
+	UsageCount       int       `json:"usage_count"`
 }
 
 // SniffAndValidateImage analyzes raw bytes to determine MIME type, dimensions, and integrity.

@@ -143,14 +143,14 @@ func (s *MediaService) UpdateMetadata(ctx context.Context, adminID int64, id int
 	return updated, nil
 }
 
-func (s *MediaService) DeleteMedia(ctx context.Context, adminID int64, id int64) error {
+func (s *MediaService) DeleteMedia(ctx context.Context, adminID int64, id int64, force bool) error {
 	asset, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
 	// Delete from DB first (handles foreign key in-use constraints)
-	if err := s.repo.Delete(ctx, id); err != nil {
+	if err := s.repo.Delete(ctx, id, force); err != nil {
 		return err
 	}
 
@@ -159,9 +159,14 @@ func (s *MediaService) DeleteMedia(ctx context.Context, adminID int64, id int64)
 
 	s.recordAudit(ctx, &adminID, "media.delete", "media_asset", &id, map[string]any{
 		"storage_key": asset.StorageKey,
+		"forced":      force,
 	}, nil)
 
 	return nil
+}
+
+func (s *MediaService) GetMediaUsage(ctx context.Context, id int64) ([]string, error) {
+	return s.repo.GetUsage(ctx, id)
 }
 
 func (s *MediaService) recordAudit(ctx context.Context, adminID *int64, action, entityType string, entityID *int64, meta map[string]any, ip *string) {
