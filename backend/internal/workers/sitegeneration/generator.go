@@ -775,7 +775,32 @@ func buildHeaderNavHTML(
 			targetAttr = ` rel="nofollow noopener noreferrer"`
 		}
 
-		sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="%s"%s>%s</a></li>`, template.HTMLEscapeString(href), targetAttr, template.HTMLEscapeString(title)))
+		var subItems []ContentRender
+		if m.ItemType == "category" && m.TargetID != nil {
+			if cat, ok := cats[*m.TargetID]; ok {
+				for _, c := range contents {
+					if c.CategorySlug == cat.Slug {
+						subItems = append(subItems, c)
+					}
+				}
+			}
+		}
+
+		if len(subItems) > 0 {
+			var subSb strings.Builder
+			subSb.WriteString(`<li class="header-nav-item has-dropdown">`)
+			subSb.WriteString(fmt.Sprintf(`<a href="%s"%s class="dropdown-trigger"><span>%s</span><svg class="dropdown-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></a>`, template.HTMLEscapeString(href), targetAttr, template.HTMLEscapeString(title)))
+			subSb.WriteString(`<ul class="header-dropdown-menu">`)
+			for idx, item := range subItems {
+				itemURL := fmt.Sprintf("/%s/%s/%s/", locale, item.CategorySlug, item.Slug)
+				numStr := fmt.Sprintf("%02d.", idx+1)
+				subSb.WriteString(fmt.Sprintf(`<li><a href="%s"><span class="sub-num">%s</span><span class="sub-title">%s</span></a></li>`, template.HTMLEscapeString(itemURL), numStr, template.HTMLEscapeString(item.Title)))
+			}
+			subSb.WriteString(`</ul></li>`)
+			sb.WriteString(subSb.String())
+		} else {
+			sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="%s"%s>%s</a></li>`, template.HTMLEscapeString(href), targetAttr, template.HTMLEscapeString(title)))
+		}
 	}
 
 	if sb.Len() == 0 {
@@ -787,7 +812,27 @@ func buildHeaderNavHTML(
 		}
 		sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="/%s/">%s</a></li>`, locale, homeText))
 		for _, cat := range cats {
-			sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="/%s/%s/">%s</a></li>`, locale, cat.Slug, template.HTMLEscapeString(cat.Name)))
+			var catSubItems []ContentRender
+			for _, c := range contents {
+				if c.CategorySlug == cat.Slug {
+					catSubItems = append(catSubItems, c)
+				}
+			}
+			if len(catSubItems) > 0 && (cat.Slug == "layanan-publik" || cat.Slug == "public-services") {
+				var subSb strings.Builder
+				subSb.WriteString(`<li class="header-nav-item has-dropdown">`)
+				subSb.WriteString(fmt.Sprintf(`<a href="/%s/%s/" class="dropdown-trigger"><span>%s</span><svg class="dropdown-arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></a>`, locale, cat.Slug, template.HTMLEscapeString(cat.Name)))
+				subSb.WriteString(`<ul class="header-dropdown-menu">`)
+				for idx, item := range catSubItems {
+					itemURL := fmt.Sprintf("/%s/%s/%s/", locale, item.CategorySlug, item.Slug)
+					numStr := fmt.Sprintf("%02d.", idx+1)
+					subSb.WriteString(fmt.Sprintf(`<li><a href="%s"><span class="sub-num">%s</span><span class="sub-title">%s</span></a></li>`, template.HTMLEscapeString(itemURL), numStr, template.HTMLEscapeString(item.Title)))
+				}
+				subSb.WriteString(`</ul></li>`)
+				sb.WriteString(subSb.String())
+			} else {
+				sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="/%s/%s/">%s</a></li>`, locale, cat.Slug, template.HTMLEscapeString(cat.Name)))
+			}
 		}
 		if len(pages) > 0 {
 			sb.WriteString(fmt.Sprintf(`<li class="header-nav-item"><a href="/%s/%s/">%s</a></li>`, locale, pages[0].Slug, aboutText))
@@ -1019,6 +1064,78 @@ body {
 .header-nav-item a:hover {
     color: #047857;
 }
+.header-nav-item.has-dropdown {
+    position: relative;
+}
+.header-nav-item.has-dropdown .dropdown-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.header-nav-item.has-dropdown .dropdown-arrow {
+    transition: transform 0.2s ease;
+}
+.header-nav-item.has-dropdown:hover .dropdown-arrow {
+    transform: rotate(180deg);
+}
+.header-dropdown-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 0.3rem);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 320px;
+    max-width: 400px;
+    max-height: 480px;
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+    padding: 0.5rem 0;
+    margin: 0;
+    list-style: none;
+    z-index: 100;
+}
+.header-nav-item.has-dropdown:hover .header-dropdown-menu,
+.header-nav-item.has-dropdown:focus-within .header-dropdown-menu {
+    display: block;
+}
+.header-dropdown-menu li {
+    margin: 0;
+    padding: 0;
+}
+.header-dropdown-menu li a {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 0.55rem 0.9rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    line-height: 1.4;
+    color: #334155;
+    text-decoration: none;
+    border-bottom: 1px solid #f1f5f9;
+    white-space: normal;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+.header-dropdown-menu li:last-child a {
+    border-bottom: none;
+}
+.header-dropdown-menu li a:hover {
+    background: #ecfdf5;
+    color: #047857;
+}
+.header-dropdown-menu .sub-num {
+    font-weight: 700;
+    color: #059669;
+    font-size: 0.75rem;
+    min-width: 1.5rem;
+    flex-shrink: 0;
+}
+.header-dropdown-menu .sub-title {
+    flex: 1;
+}
 .header-right {
     display: flex;
     align-items: center;
@@ -1064,6 +1181,25 @@ body {
         font-size: 0.95rem;
         display: block;
         padding: 0.4rem 0;
+    }
+    .header-nav-item.has-dropdown {
+        width: 100%;
+    }
+    .header-dropdown-menu {
+        position: static;
+        transform: none;
+        box-shadow: none;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        margin-top: 0.5rem;
+        max-height: none;
+        background: #f8fafc;
+        display: block;
+        width: 100%;
+    }
+    .header-dropdown-menu li a {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.825rem;
     }
 }
 .brand-group {
@@ -3220,12 +3356,18 @@ html {
 		var catCardsBuilder strings.Builder
 		if len(catContents) > 0 {
 			catCardsBuilder.WriteString(`<div class="card-grid">`)
-			for _, c := range catContents {
+			for idx, c := range catContents {
 				detailPath := fmt.Sprintf("/%s/%s/%s/", locale, c.CategorySlug, c.Slug)
+				numBadge := ""
+				if cat.Slug == "layanan-publik" || cat.Slug == "public-services" {
+					numBadge = fmt.Sprintf(`<span style="background:#047857;color:#ffffff;font-size:0.75rem;font-weight:700;padding:0.15rem 0.5rem;border-radius:9999px;margin-right:0.4rem;">#%02d</span>`, idx+1)
+				}
 				catCardsBuilder.WriteString(fmt.Sprintf(`
                 <article class="card">
                     <div>
-                        <span class="badge">%s</span>
+                        <div style="display:flex;align-items:center;gap:0.35rem;margin-bottom:0.5rem;">
+                            %s<span class="badge">%s</span>
+                        </div>
                         <h3><a href="%s">%s</a></h3>
                         <p>%s</p>
                     </div>
@@ -3233,6 +3375,7 @@ html {
                         <a href="%s" class="card-action">%s</a>
                     </div>
                 </article>`,
+					numBadge,
 					template.HTMLEscapeString(c.CategoryName),
 					detailPath,
 					template.HTMLEscapeString(c.Title),
