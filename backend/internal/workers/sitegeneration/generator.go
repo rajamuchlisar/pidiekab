@@ -805,6 +805,12 @@ func buildHeaderNavHTML(
 					}
 				}
 			}
+		} else if strings.Contains(href, "/layanan-publik") || strings.Contains(href, "/public-services") {
+			for _, c := range contents {
+				if c.CategorySlug == "layanan-publik" || c.CategorySlug == "public-services" {
+					subItems = append(subItems, c)
+				}
+			}
 		}
 
 		if len(subItems) > 0 {
