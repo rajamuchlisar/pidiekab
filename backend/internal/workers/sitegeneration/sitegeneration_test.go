@@ -134,7 +134,6 @@ func TestSSGJobLifecycleAndGeneration(t *testing.T) {
 	}
 
 	checkFile("id/index.html", "Bahasa Indonesia")
-	checkFile("id/index.html", "Eksplorasi, Pesona, Wisata, Kuliner &amp; Budaya Kabupaten Pidie")
 	checkFile("id/index.html", "SearchAction")
 	checkFile("id/index.html", "Raja Muchlisar")
 	checkFile("en/index.html", "English")

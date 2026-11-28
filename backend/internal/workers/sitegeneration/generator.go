@@ -1443,105 +1443,6 @@ body {
     background: #10b981;
 }
 
-/* SEO Pillars Section (GEO & AEO Knowledge Blocks) */
-.seo-pillars-section {
-    margin: 2.25rem 0 2.75rem;
-    padding: 2.25rem 1.75rem;
-    background: #ffffff;
-    border-radius: 16px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
-}
-.seo-pillars-header {
-    text-align: center;
-    max-width: 820px;
-    margin: 0 auto 2rem;
-}
-.seo-pillars-badge {
-    display: inline-block;
-    padding: 0.25rem 0.85rem;
-    font-size: 0.8125rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: #175c40;
-    background: #e4eee7;
-    border-radius: 9999px;
-    margin-bottom: 0.75rem;
-}
-.seo-pillars-title {
-    font-size: 1.65rem;
-    font-weight: 800;
-    color: #0f172a;
-    line-height: 1.35;
-    margin: 0 0 0.75rem;
-}
-.seo-pillars-subtitle {
-    font-size: 0.975rem;
-    color: #475569;
-    margin: 0;
-    line-height: 1.6;
-}
-.seo-pillars-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.25rem;
-}
-@media (min-width: 768px) {
-    .seo-pillars-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-@media (min-width: 1200px) {
-    .seo-pillars-grid {
-        grid-template-columns: repeat(3, 1fr);
-    }
-}
-.seo-pillar-card {
-    background: #f8fafc;
-    border: 1px solid #f1f5f9;
-    border-radius: 12px;
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-}
-.seo-pillar-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.06);
-    border-color: #cbd5e1;
-}
-.seo-pillar-icon {
-    font-size: 1.75rem;
-    margin-bottom: 0.75rem;
-}
-.seo-pillar-card h3 {
-    font-size: 1.15rem;
-    font-weight: 700;
-    color: #174b36;
-    margin: 0 0 0.5rem;
-}
-.seo-pillar-card p {
-    font-size: 0.9375rem;
-    color: #334155;
-    line-height: 1.65;
-    margin: 0 0 1.25rem;
-}
-.seo-pillar-link {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: #175c40;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-}
-.seo-pillar-link:hover {
-    color: #0f3d2a;
-    text-decoration: underline;
-}
-
 /* Curated Stories Section */
 .curated-stories-section {
     margin-bottom: 2.75rem;
@@ -3109,111 +3010,6 @@ html {
 		Locale:       locale,
 	})
 
-	seoPillarsHTML := ""
-	if locale == "id" {
-		seoPillarsHTML = `
-        <section class="seo-pillars-section" aria-label="Eksplorasi dan Potensi Kabupaten Pidie">
-            <div class="seo-pillars-header">
-                <span class="seo-pillars-badge">Pilar Informasi Pidie</span>
-                <h2 class="seo-pillars-title">Eksplorasi, Pesona, Wisata, Kuliner &amp; Budaya Kabupaten Pidie</h2>
-                <p class="seo-pillars-subtitle">Panduan komprehensif mengenal kekayaan Tanah Pedir: dari petualangan alam terbuka, keelokan panorama, ragam kuliner legendaris, hingga jejak peradaban sejarah Aceh.</p>
-            </div>
-            <div class="seo-pillars-grid">
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🧭</div>
-                        <h3>Eksplorasi Pidie</h3>
-                        <p>Jelajahi petualangan alam menantang di Kabupaten Pidie, mulai dari ekspedisi lorong karst Guha Tujoh Laweung di pesisir Selat Malaka, arung jeram sungai pegunungan Tangse, hingga pesona belantara Geumpang dan Mane yang eksotis.</p>
-                    </div>
-                    <a href="/id/wisata-alam/" class="seo-pillar-link">Eksplorasi Destinasi &rarr;</a>
-                </article>
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🌄</div>
-                        <h3>Pesona Pidie</h3>
-                        <p>Nikmati pesona lanskap agraris nan asri di jantung Aceh. Hamparan persawahan hijau berlatar jajaran Bukit Barisan, pesisir pantai nelayan Selat Malaka, dan keanggunan arsitektur tradisional Rumoh Aceh yang sarat filosofi hidup.</p>
-                    </div>
-                    <a href="/id/" class="seo-pillar-link">Lihat Pesona Alam &rarr;</a>
-                </article>
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🏖️</div>
-                        <h3>Wisata Pidie</h3>
-                        <p>Destinasi wisata terlengkap di Pidie meliputi pemandian alami air pegunungan Tangse, cagar budaya benteng Kuta Asan, jejak sejarah Masjid Po Teumeureuhom Mila abad ke-17, hingga pesona bahari pantai pesisir Muara Tiga.</p>
-                    </div>
-                    <a href="/id/wisata-alam/" class="seo-pillar-link">Direktori Wisata &rarr;</a>
-                </article>
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🍲</div>
-                        <h3>Kuliner Pidie</h3>
-                        <p>Rasakan warisan gastronomi autentik Aceh: kelezatan gurih Kerupuk Mulieng Beureunuen dari sentra emping melinjo terbaik, legit manisnya Kue Adee tradisional khas Pidie, dan aroma rempah hidangan khas Tanah Pedir.</p>
-                    </div>
-                    <a href="/id/kuliner/" class="seo-pillar-link">Jelajahi Kuliner Khas &rarr;</a>
-                </article>
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🏛️</div>
-                        <h3>Budaya Kabupaten Pidie</h3>
-                        <p>Telusuri jejak kejayaan peradaban maritim Kerajaan Pedir dalam jalur perdagangan rempah dunia, tradisi keilmuan Islam dayah dan meunasah yang mengakar kuat, serta kearifan adat istiadat masyarakat Pidie yang luhur.</p>
-                    </div>
-                    <a href="/id/budaya-sejarah/" class="seo-pillar-link">Telusuri Jejak Budaya &rarr;</a>
-                </article>
-            </div>
-        </section>`
-	} else {
-		seoPillarsHTML = `
-        <section class="seo-pillars-section" aria-label="Exploration and Potentials of Pidie Regency">
-            <div class="seo-pillars-header">
-                <span class="seo-pillars-badge">Pidie Knowledge Pillars</span>
-                <h2 class="seo-pillars-title">Explore Pidie: Travel, Nature, Culinary &amp; Cultural Heritage</h2>
-                <p class="seo-pillars-subtitle">A comprehensive editorial guide to Pidie Regency (Land of Pedir): outdoor expeditions, scenic valleys, authentic culinary treasures, and centuries of maritime Acehnese history.</p>
-            </div>
-            <div class="seo-pillars-grid">
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🧭</div>
-                        <h3>Explore Pidie</h3>
-                        <p>Embark on thrilling outdoor adventures across Pidie Regency: spelunking the 7 mystical karst caverns of Guha Tujoh Laweung on the Malacca Strait, white-water river rafting in Tangse, and lush highlands in Geumpang.</p>
-                    </div>
-                    <a href="/en/wisata-alam/" class="seo-pillar-link">Explore Adventures &rarr;</a>
-                </article>
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🌄</div>
-                        <h3>Pidie Splendor</h3>
-                        <p>Experience the breathtaking landscapes of Aceh's agricultural heartland: emerald rice terraces framed by the Bukit Barisan mountain range, coastal fishing villages, and the timeless elegance of traditional Rumoh Aceh architecture.</p>
-                    </div>
-                    <a href="/en/" class="seo-pillar-link">View Landscapes &rarr;</a>
-                </article>
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🏖️</div>
-                        <h3>Pidie Tourism</h3>
-                        <p>The definitive travel directory for Pidie Regency: crystal-clear mountain streams in Tangse, historical fortifications, the 17th-century Po Teumeureuhom Mosque in Mila, and scenic coastal shores along Muara Tiga.</p>
-                    </div>
-                    <a href="/en/wisata-alam/" class="seo-pillar-link">Travel Directory &rarr;</a>
-                </article>
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🍲</div>
-                        <h3>Pidie Culinary</h3>
-                        <p>Savor authentic heritage gastronomy: crispy handmade Kerupuk Mulieng from Beureunuen (Aceh's premier melinjo crackers), sweet caramelized Adee cake, and rich spiced traditional culinary specialties.</p>
-                    </div>
-                    <a href="/en/kuliner/" class="seo-pillar-link">Taste Culinary Gems &rarr;</a>
-                </article>
-                <article class="seo-pillar-card">
-                    <div>
-                        <div class="seo-pillar-icon" aria-hidden="true">🏛️</div>
-                        <h3>Culture of Pidie Regency</h3>
-                        <p>Uncover the historic legacy of the ancient Kingdom of Pedir on global maritime silk routes, deep-rooted Islamic scholarship in traditional dayah institutions, and cherished community customs.</p>
-                    </div>
-                    <a href="/en/budaya-sejarah/" class="seo-pillar-link">Discover Heritage &rarr;</a>
-                </article>
-            </div>
-        </section>`
-	}
-
 	headerTopBanners := renderBanners(banners, "header_top")
 	if headerTopBanners != "" {
 		headerTopBanners = fmt.Sprintf(`<div class="site-wrapper" style="padding-top:0.5rem;">%s</div>`, headerTopBanners)
@@ -3244,7 +3040,6 @@ html {
 %s
 %s
 %s
-%s
     </main>
 %s
 </body>
@@ -3259,7 +3054,6 @@ html {
 		template.HTMLEscapeString(heroSubtitle),
 		belowHeroBanners,
 		catChipsBuilder.String(),
-		seoPillarsHTML,
 		storiesHTML.String(),
 		featuredHTML.String(),
 		allArticlesHTML.String(),
