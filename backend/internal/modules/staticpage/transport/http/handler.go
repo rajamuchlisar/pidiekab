@@ -11,6 +11,7 @@ import (
 	"pidiekab/internal/modules/staticpage/application"
 	"pidiekab/internal/modules/staticpage/domain"
 	"pidiekab/internal/platform/httpserver/middleware"
+	"pidiekab/internal/platform/sanitizer"
 )
 
 var slugUnsafeRegex = regexp.MustCompile(`[^a-z0-9]+`)
@@ -255,6 +256,8 @@ func (h *PageHandler) HandleUpdatePage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		bodyContent = sanitizer.SanitizeHTML(bodyContent)
+
 		title := strings.TrimSpace(tReq.Title)
 		if title == "" {
 			if bodyContent != "" || strings.TrimSpace(tReq.Slug) != "" {
@@ -361,6 +364,22 @@ func (h *PageHandler) HandleSaveTranslation(w http.ResponseWriter, r *http.Reque
 	input.Slug = sanitizeSlug(input.Slug)
 	if input.Slug == "" {
 		input.Slug = sanitizeSlug(input.Title)
+	}
+
+	// Sanitize body HTML against XSS & HTML injection
+	if len(input.Body) > 0 {
+		var bodyMap map[string]any
+		if err := json.Unmarshal(input.Body, &bodyMap); err == nil {
+			if hVal, ok := bodyMap["html"].(string); ok {
+				bodyMap["html"] = sanitizer.SanitizeHTML(hVal)
+				if mdVal, ok := bodyMap["markdown"].(string); ok && mdVal == hVal {
+					bodyMap["markdown"] = bodyMap["html"]
+				}
+				if newJSON, err := json.Marshal(bodyMap); err == nil {
+					input.Body = newJSON
+				}
+			}
+		}
 	}
 
 	trans, err := h.service.SaveTranslation(r.Context(), admin.ID, id, locale, input)

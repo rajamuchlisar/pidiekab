@@ -14,6 +14,7 @@ import (
 	"pidiekab/internal/modules/content/infrastructure/postgres"
 	identityApp "pidiekab/internal/modules/identity/application"
 	"pidiekab/internal/platform/httpserver/middleware"
+	"pidiekab/internal/platform/sanitizer"
 )
 
 // Handler manages HTTP transport for content and translations.
@@ -194,6 +195,29 @@ type translationPayloadRequest struct {
 	ScheduledAt    *time.Time     `json:"scheduled_at"`
 }
 
+func cleanContentBody(body map[string]any, bodyHtml string) map[string]any {
+	if body == nil && bodyHtml != "" {
+		sanitized := sanitizer.SanitizeHTML(bodyHtml)
+		return map[string]any{"html": sanitized, "markdown": sanitized}
+	}
+	if body == nil {
+		return map[string]any{"html": "", "markdown": ""}
+	}
+	cleaned := make(map[string]any, len(body))
+	for k, v := range body {
+		cleaned[k] = v
+	}
+	if htmlVal, ok := cleaned["html"].(string); ok && htmlVal != "" {
+		cleaned["html"] = sanitizer.SanitizeHTML(htmlVal)
+	}
+	if mdVal, ok := cleaned["markdown"].(string); ok && mdVal != "" && cleaned["html"] != nil {
+		if _, ok := body["html"].(string); !ok {
+			cleaned["markdown"] = sanitizer.SanitizeHTML(mdVal)
+		}
+	}
+	return cleaned
+}
+
 func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 	admin, ok := middleware.AdminFromContext(r.Context())
 	if !ok {
@@ -241,13 +265,7 @@ func (h *Handler) handleCreateContent(w http.ResponseWriter, r *http.Request) {
 				if slug == "" {
 					slug = strings.ToLower(strings.ReplaceAll(t.Title, " ", "-"))
 				}
-				body := t.Body
-				if body == nil && t.BodyHtml != "" {
-					body = map[string]any{"html": t.BodyHtml, "markdown": t.BodyHtml}
-				}
-				if body == nil {
-					body = map[string]any{"html": "", "markdown": ""}
-				}
+				body := cleanContentBody(t.Body, t.BodyHtml)
 				_, _ = h.service.SaveTranslation(r.Context(), c.ID, loc, t.Title, slug, t.Summary, body, t.SEOTitle, t.SEODescription, admin.ID, &ip)
 				if t.Status != nil && *t.Status == string(domain.StatusScheduled) && t.ScheduledAt != nil {
 					_ = h.service.ScheduleLocale(r.Context(), c.ID, loc, *t.ScheduledAt, admin.ID, &ip)
@@ -407,13 +425,7 @@ func (h *Handler) handleUpdateShared(w http.ResponseWriter, r *http.Request) {
 				if slug == "" {
 					slug = strings.ToLower(strings.ReplaceAll(t.Title, " ", "-"))
 				}
-				body := t.Body
-				if body == nil && t.BodyHtml != "" {
-					body = map[string]any{"html": t.BodyHtml, "markdown": t.BodyHtml}
-				}
-				if body == nil {
-					body = map[string]any{"html": "", "markdown": ""}
-				}
+				body := cleanContentBody(t.Body, t.BodyHtml)
 				_, _ = h.service.SaveTranslation(r.Context(), id, loc, t.Title, slug, t.Summary, body, t.SEOTitle, t.SEODescription, admin.ID, &ip)
 				if t.Status != nil && *t.Status == string(domain.StatusScheduled) && t.ScheduledAt != nil {
 					_ = h.service.ScheduleLocale(r.Context(), id, loc, *t.ScheduledAt, admin.ID, &ip)
@@ -481,6 +493,7 @@ type translationWriteRequest struct {
 	Slug           string         `json:"slug"`
 	Summary        *string        `json:"summary"`
 	Body           map[string]any `json:"body"`
+	BodyHtml       string         `json:"body_html"`
 	SEOTitle       *string        `json:"seo_title"`
 	SEODescription *string        `json:"seo_description"`
 }
@@ -506,7 +519,8 @@ func (h *Handler) handleSaveTranslation(w http.ResponseWriter, r *http.Request) 
 	}
 
 	ip := extractClientIP(r)
-	t, err := h.service.SaveTranslation(r.Context(), id, locale, req.Title, req.Slug, req.Summary, req.Body, req.SEOTitle, req.SEODescription, admin.ID, &ip)
+	cleanedBody := cleanContentBody(req.Body, req.BodyHtml)
+	t, err := h.service.SaveTranslation(r.Context(), id, locale, req.Title, req.Slug, req.Summary, cleanedBody, req.SEOTitle, req.SEODescription, admin.ID, &ip)
 	if err != nil {
 		if errors.Is(err, domain.ErrContentNotFound) {
 			writeProblem(w, r, http.StatusNotFound, "NOT_FOUND", "Content not found.")

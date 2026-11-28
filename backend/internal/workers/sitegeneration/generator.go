@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"pidiekab/internal/platform/sanitizer"
 )
 
 type Generator struct {
@@ -623,36 +625,12 @@ var (
 	targetAttrRegex = regexp.MustCompile(`(?i)\btarget\s*=\s*["'][^"']*["']`)
 )
 
-// enforceNofollow ensures all external outbound links strictly carry rel="nofollow noopener noreferrer" and target="_blank".
+// enforceNofollow sanitizes HTML against XSS/HTML injection and ensures all external outbound links carry rel="nofollow noopener noreferrer" and target="_blank".
 func enforceNofollow(htmlStr string) string {
 	if htmlStr == "" {
 		return ""
 	}
-
-	return linkTagRegex.ReplaceAllStringFunc(htmlStr, func(fullTag string) string {
-		hrefMatches := hrefAttrRegex.FindStringSubmatch(fullTag)
-		if len(hrefMatches) < 2 {
-			return fullTag
-		}
-
-		href := strings.TrimSpace(hrefMatches[1])
-		// External links start with http://, https://, or //, and do NOT point to internal pidiekab.web.id
-		isExternal := (strings.HasPrefix(strings.ToLower(href), "http://") ||
-			strings.HasPrefix(strings.ToLower(href), "https://") ||
-			strings.HasPrefix(href, "//")) &&
-			!strings.Contains(strings.ToLower(href), "pidiekab.web.id")
-
-		if !isExternal {
-			return fullTag
-		}
-
-		// Remove existing rel and target attributes
-		cleaned := relAttrRegex.ReplaceAllString(fullTag, "")
-		cleaned = targetAttrRegex.ReplaceAllString(cleaned, "")
-		cleaned = strings.TrimSuffix(strings.TrimSpace(cleaned), ">")
-
-		return fmt.Sprintf(`%s rel="nofollow noopener noreferrer" target="_blank">`, cleaned)
-	})
+	return sanitizer.SanitizeHTML(htmlStr)
 }
 
 func renderBodyBlocksToHTML(bodyBytes []byte) template.HTML {
