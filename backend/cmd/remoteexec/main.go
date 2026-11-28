@@ -81,6 +81,8 @@ func main() {
 	}
 	defer session.Close()
 
+	cmd = strings.ReplaceAll(cmd, "\r\n", "\n")
+	cmd = strings.ReplaceAll(cmd, "\r", "\n")
 	b64 := base64.StdEncoding.EncodeToString([]byte(cmd))
 	remoteCmd := fmt.Sprintf("echo %s | base64 -d | bash", b64)
 
