@@ -218,8 +218,8 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 	}
 
 	// 7. Render Root Redirect index.html (redirects / to /id/)
-	rootTitle := "PidieKab — Cerita, Budaya, Kuliner & Potensi Daerah Pidie"
-	rootDesc := "Platform informasi independen, promosi warisan sejarah, pariwisata, kuliner, dan potensi daerah Kabupaten Pidie, Aceh."
+	rootTitle := "PidieKab — Eksplorasi Pidie, Pesona Pidie, Wisata Pidie, Kuliner Pidie & Budaya Kabupaten Pidie"
+	rootDesc := "Portal independen eksplorasi dan pesona Kabupaten Pidie. Panduan lengkap destinasi wisata Pidie, ragam kuliner khas, cagar budaya, dan warisan sejarah Tanah Pedir, Aceh."
 	if siteCtx != nil && siteCtx.TaglineID != "" {
 		rootDesc = siteCtx.TaglineID
 	}
@@ -251,8 +251,41 @@ func (g *Generator) Generate(ctx context.Context, targetDir string) error {
 		return fmt.Errorf("failed to render sitemap: %w", err)
 	}
 
+	// 8b. Render llms.txt & llms-full.txt for AI Search & GEO (Google Gemini, OpenAI ChatGPT/GPT Search, Perplexity)
+	if err := g.renderLLMsTxt(targetDir, siteCtx, contentsID, contentsEN, pagesID, pagesEN); err != nil {
+		return fmt.Errorf("failed to render llms.txt: %w", err)
+	}
+
 	// 9. Render robots.txt
-	robotsContent := fmt.Sprintf("User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n", g.baseURL)
+	robotsContent := fmt.Sprintf(`User-agent: *
+Allow: /
+Disallow: /cms/
+Disallow: /api/
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+Sitemap: %s/sitemap.xml
+LLMs: %s/llms.txt
+`, g.baseURL, g.baseURL)
 	if err := os.WriteFile(filepath.Join(targetDir, "robots.txt"), []byte(robotsContent), 0644); err != nil {
 		return err
 	}
@@ -1272,6 +1305,105 @@ body {
     height: 6px;
     border-radius: 50%;
     background: #10b981;
+}
+
+/* SEO Pillars Section (GEO & AEO Knowledge Blocks) */
+.seo-pillars-section {
+    margin: 2.25rem 0 2.75rem;
+    padding: 2.25rem 1.75rem;
+    background: #ffffff;
+    border-radius: 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
+}
+.seo-pillars-header {
+    text-align: center;
+    max-width: 820px;
+    margin: 0 auto 2rem;
+}
+.seo-pillars-badge {
+    display: inline-block;
+    padding: 0.25rem 0.85rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #175c40;
+    background: #e4eee7;
+    border-radius: 9999px;
+    margin-bottom: 0.75rem;
+}
+.seo-pillars-title {
+    font-size: 1.65rem;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.35;
+    margin: 0 0 0.75rem;
+}
+.seo-pillars-subtitle {
+    font-size: 0.975rem;
+    color: #475569;
+    margin: 0;
+    line-height: 1.6;
+}
+.seo-pillars-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+}
+@media (min-width: 768px) {
+    .seo-pillars-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+@media (min-width: 1200px) {
+    .seo-pillars-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+.seo-pillar-card {
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.seo-pillar-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.06);
+    border-color: #cbd5e1;
+}
+.seo-pillar-icon {
+    font-size: 1.75rem;
+    margin-bottom: 0.75rem;
+}
+.seo-pillar-card h3 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #174b36;
+    margin: 0 0 0.5rem;
+}
+.seo-pillar-card p {
+    font-size: 0.9375rem;
+    color: #334155;
+    line-height: 1.65;
+    margin: 0 0 1.25rem;
+}
+.seo-pillar-link {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #175c40;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.seo-pillar-link:hover {
+    color: #0f3d2a;
+    text-decoration: underline;
 }
 
 /* Curated Stories Section */
@@ -2824,13 +2956,15 @@ html {
 
 	// 1. Render Homepage: <locale>/index.html
 	homeCanonical := fmt.Sprintf("%s/%s/", g.baseURL, locale)
-	homeTitle := "PidieKab — Cerita, Budaya, Kuliner & Potensi Daerah Pidie"
+	homeTitle := "PidieKab — Eksplorasi Pidie, Pesona Pidie, Wisata Pidie, Kuliner Pidie & Budaya Kabupaten Pidie"
+	homeDesc := "Portal independen eksplorasi dan pesona Kabupaten Pidie. Panduan lengkap destinasi wisata Pidie, ragam kuliner khas, cagar budaya, dan warisan sejarah Tanah Pedir, Aceh."
 	if locale == "en" {
-		homeTitle = "PidieKab — Heritage, Culture, and Living Potentials of Pidie"
+		homeTitle = "PidieKab — Explore Pidie, Travel Guide, Culinary, Heritage & Culture of Pidie Regency"
+		homeDesc = "Independent editorial portal exploring the wonders of Pidie Regency (Land of Pedir): travel guide, culinary heritage, culture, and nature in Aceh, Indonesia."
 	}
 	homeSEO := renderSEOHeadTags(sc, g.baseURL, SEOMetadata{
 		Title:        homeTitle,
-		Description:  tagline,
+		Description:  homeDesc,
 		CanonicalURL: homeCanonical,
 		AlternateID:  fmt.Sprintf("%s/id/", g.baseURL),
 		AlternateEN:  fmt.Sprintf("%s/en/", g.baseURL),
@@ -2838,6 +2972,111 @@ html {
 		Type:         "website",
 		Locale:       locale,
 	})
+
+	seoPillarsHTML := ""
+	if locale == "id" {
+		seoPillarsHTML = `
+        <section class="seo-pillars-section" aria-label="Eksplorasi dan Potensi Kabupaten Pidie">
+            <div class="seo-pillars-header">
+                <span class="seo-pillars-badge">Pilar Informasi Pidie</span>
+                <h2 class="seo-pillars-title">Eksplorasi, Pesona, Wisata, Kuliner &amp; Budaya Kabupaten Pidie</h2>
+                <p class="seo-pillars-subtitle">Panduan komprehensif mengenal kekayaan Tanah Pedir: dari petualangan alam terbuka, keelokan panorama, ragam kuliner legendaris, hingga jejak peradaban sejarah Aceh.</p>
+            </div>
+            <div class="seo-pillars-grid">
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🧭</div>
+                        <h3>Eksplorasi Pidie</h3>
+                        <p>Jelajahi petualangan alam menantang di Kabupaten Pidie, mulai dari ekspedisi lorong karst Guha Tujoh Laweung di pesisir Selat Malaka, arung jeram sungai pegunungan Tangse, hingga pesona belantara Geumpang dan Mane yang eksotis.</p>
+                    </div>
+                    <a href="/id/wisata-alam/" class="seo-pillar-link">Eksplorasi Destinasi &rarr;</a>
+                </article>
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🌄</div>
+                        <h3>Pesona Pidie</h3>
+                        <p>Nikmati pesona lanskap agraris nan asri di jantung Aceh. Hamparan persawahan hijau berlatar jajaran Bukit Barisan, pesisir pantai nelayan Selat Malaka, dan keanggunan arsitektur tradisional Rumoh Aceh yang sarat filosofi hidup.</p>
+                    </div>
+                    <a href="/id/" class="seo-pillar-link">Lihat Pesona Alam &rarr;</a>
+                </article>
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🏖️</div>
+                        <h3>Wisata Pidie</h3>
+                        <p>Destinasi wisata terlengkap di Pidie meliputi pemandian alami air pegunungan Tangse, cagar budaya benteng Kuta Asan, jejak sejarah Masjid Po Teumeureuhom Mila abad ke-17, hingga pesona bahari pantai pesisir Muara Tiga.</p>
+                    </div>
+                    <a href="/id/wisata-alam/" class="seo-pillar-link">Direktori Wisata &rarr;</a>
+                </article>
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🍲</div>
+                        <h3>Kuliner Pidie</h3>
+                        <p>Rasakan warisan gastronomi autentik Aceh: kelezatan gurih Kerupuk Mulieng Beureunuen dari sentra emping melinjo terbaik, legit manisnya Kue Adee tradisional khas Pidie, dan aroma rempah hidangan khas Tanah Pedir.</p>
+                    </div>
+                    <a href="/id/kuliner/" class="seo-pillar-link">Jelajahi Kuliner Khas &rarr;</a>
+                </article>
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🏛️</div>
+                        <h3>Budaya Kabupaten Pidie</h3>
+                        <p>Telusuri jejak kejayaan peradaban maritim Kerajaan Pedir dalam jalur perdagangan rempah dunia, tradisi keilmuan Islam dayah dan meunasah yang mengakar kuat, serta kearifan adat istiadat masyarakat Pidie yang luhur.</p>
+                    </div>
+                    <a href="/id/budaya-sejarah/" class="seo-pillar-link">Telusuri Jejak Budaya &rarr;</a>
+                </article>
+            </div>
+        </section>`
+	} else {
+		seoPillarsHTML = `
+        <section class="seo-pillars-section" aria-label="Exploration and Potentials of Pidie Regency">
+            <div class="seo-pillars-header">
+                <span class="seo-pillars-badge">Pidie Knowledge Pillars</span>
+                <h2 class="seo-pillars-title">Explore Pidie: Travel, Nature, Culinary &amp; Cultural Heritage</h2>
+                <p class="seo-pillars-subtitle">A comprehensive editorial guide to Pidie Regency (Land of Pedir): outdoor expeditions, scenic valleys, authentic culinary treasures, and centuries of maritime Acehnese history.</p>
+            </div>
+            <div class="seo-pillars-grid">
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🧭</div>
+                        <h3>Explore Pidie</h3>
+                        <p>Embark on thrilling outdoor adventures across Pidie Regency: spelunking the 7 mystical karst caverns of Guha Tujoh Laweung on the Malacca Strait, white-water river rafting in Tangse, and lush highlands in Geumpang.</p>
+                    </div>
+                    <a href="/en/wisata-alam/" class="seo-pillar-link">Explore Adventures &rarr;</a>
+                </article>
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🌄</div>
+                        <h3>Pidie Splendor</h3>
+                        <p>Experience the breathtaking landscapes of Aceh's agricultural heartland: emerald rice terraces framed by the Bukit Barisan mountain range, coastal fishing villages, and the timeless elegance of traditional Rumoh Aceh architecture.</p>
+                    </div>
+                    <a href="/en/" class="seo-pillar-link">View Landscapes &rarr;</a>
+                </article>
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🏖️</div>
+                        <h3>Pidie Tourism</h3>
+                        <p>The definitive travel directory for Pidie Regency: crystal-clear mountain streams in Tangse, historical fortifications, the 17th-century Po Teumeureuhom Mosque in Mila, and scenic coastal shores along Muara Tiga.</p>
+                    </div>
+                    <a href="/en/wisata-alam/" class="seo-pillar-link">Travel Directory &rarr;</a>
+                </article>
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🍲</div>
+                        <h3>Pidie Culinary</h3>
+                        <p>Savor authentic heritage gastronomy: crispy handmade Kerupuk Mulieng from Beureunuen (Aceh's premier melinjo crackers), sweet caramelized Adee cake, and rich spiced traditional culinary specialties.</p>
+                    </div>
+                    <a href="/en/kuliner/" class="seo-pillar-link">Taste Culinary Gems &rarr;</a>
+                </article>
+                <article class="seo-pillar-card">
+                    <div>
+                        <div class="seo-pillar-icon" aria-hidden="true">🏛️</div>
+                        <h3>Culture of Pidie Regency</h3>
+                        <p>Uncover the historic legacy of the ancient Kingdom of Pedir on global maritime silk routes, deep-rooted Islamic scholarship in traditional dayah institutions, and cherished community customs.</p>
+                    </div>
+                    <a href="/en/budaya-sejarah/" class="seo-pillar-link">Discover Heritage &rarr;</a>
+                </article>
+            </div>
+        </section>`
+	}
 
 	headerTopBanners := renderBanners(banners, "header_top")
 	if headerTopBanners != "" {
@@ -2869,6 +3108,7 @@ html {
 %s
 %s
 %s
+%s
     </main>
 %s
 </body>
@@ -2883,6 +3123,7 @@ html {
 		template.HTMLEscapeString(heroSubtitle),
 		belowHeroBanners,
 		catChipsBuilder.String(),
+		seoPillarsHTML,
 		storiesHTML.String(),
 		featuredHTML.String(),
 		allArticlesHTML.String(),
@@ -3970,6 +4211,88 @@ func (g *Generator) renderSitemap(
 	return os.WriteFile(filepath.Join(targetDir, "sitemap.xml"), []byte(sb.String()), 0644)
 }
 
+func (g *Generator) renderLLMsTxt(
+	targetDir string,
+	sc *SiteContext,
+	contentsID, contentsEN []ContentRender,
+	pagesID, pagesEN []StaticPageRender,
+) error {
+	var sb strings.Builder
+	sb.WriteString("# PidieKab — Dokumentasi Digital & Eksplorasi Kabupaten Pidie\n")
+	sb.WriteString("> Platform editorial independen dokumentasi potensi daerah, pesona wisata, kuliner legendaris, dan warisan budaya Kabupaten Pidie (Tanah Pedir), Provinsi Aceh, Indonesia.\n\n")
+
+	sb.WriteString("## Informasi Entitas & Identitas Resmi\n")
+	sb.WriteString("- Nama Entitas: Kabupaten Pidie (historis: Tanah Pedir / Kerajaan Pedir)\n")
+	sb.WriteString("- Wilayah: Provinsi Aceh, Indonesia\n")
+	sb.WriteString("- Pusat Pemerintahan: Kota Sigli\n")
+	sb.WriteString(fmt.Sprintf("- URL Platform: %s/\n", g.baseURL))
+	sb.WriteString("- Pendiri & Pengelola: Raja Muchlisar (Software Programmer & Founder)\n")
+	sb.WriteString("- Referensi Wikidata: https://www.wikidata.org/wiki/Q5935 (Q5935)\n")
+	sb.WriteString("- Referensi Wikipedia: https://id.wikipedia.org/wiki/Kabupaten_Pidie\n\n")
+
+	sb.WriteString("## 5 Pilar Utama Informasi (Core Topic Pillars)\n")
+	sb.WriteString(fmt.Sprintf("- [Eksplorasi Pidie](%s/id/wisata-alam/): Panduan ekspedisi bentang alam karst Guha Tujoh Laweung di pesisir Selat Malaka, petualangan arung jeram Tangse, dan perbukitan Geumpang.\n", g.baseURL))
+	sb.WriteString(fmt.Sprintf("- [Pesona Pidie](%s/id/): Panorama keindahan lanskap agraris persawahan terasering, lembah pegunungan Bukit Barisan, pesisir Selat Malaka, dan keelokan arsitektur vernakular Rumoh Aceh.\n", g.baseURL))
+	sb.WriteString(fmt.Sprintf("- [Wisata Pidie](%s/id/wisata-alam/): Direktori destinasi wisata alam, wisata sejarah cagar budaya, pemandian alami, rute perjalanan, dan fasilitas pendukung terlengkap di Kabupaten Pidie.\n", g.baseURL))
+	sb.WriteString(fmt.Sprintf("- [Kuliner Pidie](%s/id/kuliner/): Cita rasa autentik Tanah Pedir: Kerupuk Mulieng Beureunuen (sentra emping melinjo terbaik), Kue Adee tradisional legit manis, Meuseukat, dan rempah Aceh.\n", g.baseURL))
+	sb.WriteString(fmt.Sprintf("- [Budaya Kabupaten Pidie](%s/id/budaya-sejarah/): Napak tilas kejayaan peradaban maritim Kerajaan Pedir dalam jalur rempah dunia, jejak Masjid Kuno Po Teumeureuhom Mila abad ke-17, dan tradisi dayah.\n\n", g.baseURL))
+
+	sb.WriteString("## Direktori Artikel Terverifikasi (Bahasa Indonesia)\n")
+	for _, c := range contentsID {
+		desc := c.Summary
+		if desc == "" {
+			desc = c.Title
+		}
+		sb.WriteString(fmt.Sprintf("- [%s](%s/id/%s/%s/): %s\n", c.Title, g.baseURL, c.CategorySlug, c.Slug, desc))
+	}
+
+	sb.WriteString("\n## Verified Article Directory (English)\n")
+	for _, c := range contentsEN {
+		desc := c.Summary
+		if desc == "" {
+			desc = c.Title
+		}
+		sb.WriteString(fmt.Sprintf("- [%s](%s/en/%s/%s/): %s\n", c.Title, g.baseURL, c.CategorySlug, c.Slug, desc))
+	}
+
+	sb.WriteString("\n## Halaman Statis & Informasi Tata Kelola (Static Pages)\n")
+	for _, p := range pagesID {
+		sb.WriteString(fmt.Sprintf("- [%s](%s/id/%s/): Informasi %s\n", p.Title, g.baseURL, p.Slug, p.Title))
+	}
+	for _, p := range pagesEN {
+		sb.WriteString(fmt.Sprintf("- [%s](%s/en/%s/): Information regarding %s\n", p.Title, g.baseURL, p.Slug, p.Title))
+	}
+
+	sb.WriteString("\n## Lisensi & Atribusi (RSL 1.0 & Attribution)\n")
+	sb.WriteString("Konten dokumentasi editorial pada pidiekab.web.id dapat disitasi dan dirujuk oleh mesin pencari AI (Google Gemini, OpenAI ChatGPT/GPT Search, Perplexity) dengan atribusi tautan balik kanonikal ke https://pidiekab.web.id/.\n")
+
+	if err := os.WriteFile(filepath.Join(targetDir, "llms.txt"), []byte(sb.String()), 0644); err != nil {
+		return err
+	}
+
+	// Full extended version for deep citations
+	var fullSb strings.Builder
+	fullSb.WriteString(sb.String())
+	fullSb.WriteString("\n## Rangkuman Pengetahuan & Fakta Kunci (Passage Indexing & Knowledge Citations)\n\n")
+
+	fullSb.WriteString("### 1. Eksplorasi Pidie: Bentang Alam & Petualangan Karst\n")
+	fullSb.WriteString("Eksplorasi Pidie menawarkan petualangan alam terbuka yang kaya dan beragam di pesisir Selat Malaka serta punggung Pegunungan Bukit Barisan. Objek eksplorasi terkemuka adalah Guha Tujoh Laweung di Kecamatan Muara Tiga, formasi gua karst purba dengan 7 lorong utama yang memiliki stalaktit, stalagmit berkilau, dan kubah tembus cahaya matahari alami. Selain karst pesisir, ekspedisi arung jeram di aliran Sungai Tangse dan penjelajahan hutan lindung Geumpang menyajikan tantangan alam yang memikat bagi para pencinta alam dan peneliti geologi.\n\n")
+
+	fullSb.WriteString("### 2. Pesona Pidie: Lanskap Agraris & Arsitektur Tradisional\n")
+	fullSb.WriteString("Pesona Pidie memancar dari keindahan bentang alam agraris yang membentang dari perbukitan hingga pesisir pantai. Sebagai salah satu lumbung padi utama di Aceh, Pidie dikenal dengan hamparan sawah subur yang diapit oleh pegunungan hijau yang asri. Pesona ini disempurnakan oleh warisan budaya berupa Rumoh Aceh, rumah panggung kayu khas Aceh beratap rumbia yang tahan gempa dan sarat ukiran ornamen tradisional Aceh, mencerminkan kearifan arsitektur lokal yang diwariskan turun-temurun.\n\n")
+
+	fullSb.WriteString("### 3. Wisata Pidie: Destinasi Wisata Alam, Sejarah & Religi\n")
+	fullSb.WriteString("Wisata Pidie menyuguhkan perpaduan lengkap antara destinasi alam, peninggalan sejarah, dan wisata religi. Lokasi wisata populer meliputi kawasan pemandian alami Tangse dengan udara sejuk pegunungan, Pantai Pelangi di Sigli, dan tebing karst Laweung. Di ranah sejarah dan religi, pengunjung dapat menziarahi Masjid Po Teumeureuhom di Kecamatan Mila yang didirikan pada abad ke-17 oleh Sultan Iskandar Muda, Benteng Kuta Asan, serta makam tokoh ulama dan pahlawan kemerdekaan Aceh.\n\n")
+
+	fullSb.WriteString("### 4. Kuliner Pidie: Kerupuk Mulieng Beureunuen & Kue Adee Tradisional\n")
+	fullSb.WriteString("Kuliner Pidie terkenal dengan cita rasa khas yang legendaris di seantero Aceh dan Nusantara. Ikon kuliner utama daerah ini adalah Kerupuk Mulieng (emping melinjo) khas Beureunuen, yang diproduksi secara tradisional dengan kualitas kerenyahan dan rasa gurih terbaik tanpa bahan pengawet. Selain itu, terdapat Kue Adee (kue bingka basah khas Pidie & Meureudu) dengan tekstur lembut, aroma pandan, dan rasa manis legit yang gurih berkat perpaduan santan kental, telur, dan ubi kayu atau tepung terigu pilihan.\n\n")
+
+	fullSb.WriteString("### 5. Budaya Kabupaten Pidie: Warisan Kerajaan Pedir & Tradisi Dayah\n")
+	fullSb.WriteString("Budaya Kabupaten Pidie berakar pada sejarah panjang Kerajaan Pedir, salah satu bandar pelabuhan tertua dan terpenting di pesisir utara Aceh pada abad ke-15 yang menghubungkan jalur sutra maritim antara Timur Tengah, India, dan Tiongkok. Budaya masyarakat Pidie sangat menjunjung tinggi nilai syariat Islam, sistem kemasyarakatan berbasis meunasah di setiap gampong, tradisi keilmuan pesantren dayah, serta tradisi adat peusijuek (tepung tawar) dan khanduri blang dalam siklus pertanian.\n")
+
+	return os.WriteFile(filepath.Join(targetDir, "llms-full.txt"), []byte(fullSb.String()), 0644)
+}
+
 var firstImgRegex = regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+)["']`)
 
 type SEOMetadata struct {
@@ -4147,11 +4470,35 @@ func buildJSONLD(sc *SiteContext, baseURL string, meta SEOMetadata, imageURL str
 	}
 
 	orgSchema := map[string]any{
-		"@type":       "Organization",
-		"@id":         baseURL + "/#organization",
-		"name":        "pidiekab.web.id",
-		"url":         baseURL + "/",
-		"description": "Platform independen promosi potensi daerah & direktori informasi Kabupaten Pidie, Aceh. Bukan website resmi pemerintah.",
+		"@type":         []string{"Organization", "NewsMediaOrganization"},
+		"@id":           baseURL + "/#organization",
+		"name":          "pidiekab.web.id",
+		"alternateName": []string{"PidieKab", "Pidie Regency Documentation Platform"},
+		"url":           baseURL + "/",
+		"description":   "Portal editorial independen eksplorasi potensi daerah, pesona wisata, kuliner legendaris, dan warisan budaya Kabupaten Pidie (Tanah Pedir), Provinsi Aceh, Indonesia.",
+		"founder": map[string]any{
+			"@type":    "Person",
+			"name":     "Raja Muchlisar",
+			"jobTitle": "Founder & Software Programmer",
+			"url":      baseURL + "/id/hubungi/",
+		},
+		"sameAs": []string{
+			"https://id.wikipedia.org/wiki/Kabupaten_Pidie",
+			"https://www.wikidata.org/wiki/Q5935",
+			"https://github.com/rajamuchlisar/pidiekab",
+		},
+		"knowsAbout": []string{
+			"Kabupaten Pidie",
+			"Eksplorasi Pidie",
+			"Pesona Pidie",
+			"Wisata Pidie",
+			"Kuliner Pidie",
+			"Budaya Kabupaten Pidie",
+			"Kerajaan Pedir",
+			"Guha Tujoh Laweung",
+			"Kue Adee",
+			"Kerupuk Mulieng Beureunuen",
+		},
 	}
 	if logoURL != "" {
 		orgSchema["logo"] = map[string]any{
@@ -4162,18 +4509,29 @@ func buildJSONLD(sc *SiteContext, baseURL string, meta SEOMetadata, imageURL str
 
 	if meta.Type == "article" {
 		articleSchema := map[string]any{
-			"@type":            "Article",
+			"@type":            []string{"Article", "NewsArticle"},
 			"@id":              meta.CanonicalURL + "#article",
 			"headline":         meta.Title,
 			"description":      meta.Description,
 			"mainEntityOfPage": meta.CanonicalURL,
 			"inLanguage":       meta.Locale,
 			"author": map[string]any{
-				"@type": "Organization",
-				"name":  "pidiekab.web.id",
-				"url":   baseURL + "/",
+				"@type":    "Person",
+				"name":     "Raja Muchlisar",
+				"jobTitle": "Founder & Software Programmer",
+				"url":      baseURL + "/id/hubungi/",
 			},
 			"publisher": orgSchema,
+			"speakable": map[string]any{
+				"@type":       "SpeakableSpecification",
+				"cssSelector": []string{".editorial-lead", ".editorial-prose > p:first-of-type", "h1", "h2"},
+			},
+			"about": map[string]any{
+				"@type":  "Thing",
+				"name":   "Kabupaten Pidie",
+				"sameAs": "https://id.wikipedia.org/wiki/Kabupaten_Pidie",
+			},
+			"keywords": "Eksplorasi Pidie, Pesona Pidie, Wisata Pidie, Kuliner Pidie, Budaya Kabupaten Pidie, Tanah Pedir, Aceh",
 		}
 		if imageURL != "" {
 			articleSchema["image"] = imageURL
@@ -4188,15 +4546,17 @@ func buildJSONLD(sc *SiteContext, baseURL string, meta SEOMetadata, imageURL str
 
 		if meta.GeoLat != nil && meta.GeoLng != nil {
 			placeSchema := map[string]any{
-				"@type":       "Place",
-				"@id":         meta.CanonicalURL + "#place",
-				"name":        meta.Title,
-				"description": meta.Description,
+				"@type":               "TouristAttraction",
+				"@id":                 meta.CanonicalURL + "#attraction",
+				"name":                meta.Title,
+				"description":         meta.Description,
 				"geo": map[string]any{
 					"@type":     "GeoCoordinates",
 					"latitude":  *meta.GeoLat,
 					"longitude": *meta.GeoLng,
 				},
+				"isAccessibleForFree": true,
+				"publicAccess":        true,
 			}
 			if meta.Address != "" {
 				placeSchema["address"] = map[string]any{
@@ -4211,13 +4571,22 @@ func buildJSONLD(sc *SiteContext, baseURL string, meta SEOMetadata, imageURL str
 		}
 	} else {
 		siteSchema := map[string]any{
-			"@type":       "WebSite",
-			"@id":         meta.CanonicalURL + "#website",
-			"url":         meta.CanonicalURL,
-			"name":        "pidiekab.web.id",
-			"description": meta.Description,
-			"inLanguage":  meta.Locale,
-			"publisher":   orgSchema,
+			"@type":         "WebSite",
+			"@id":           meta.CanonicalURL + "#website",
+			"url":           meta.CanonicalURL,
+			"name":          "PidieKab — Eksplorasi Pidie, Pesona Pidie, Wisata Pidie, Kuliner Pidie & Budaya Kabupaten Pidie",
+			"alternateName": "pidiekab.web.id",
+			"description":   meta.Description,
+			"inLanguage":    []string{"id", "en"},
+			"publisher":     orgSchema,
+			"potentialAction": map[string]any{
+				"@type": "SearchAction",
+				"target": map[string]any{
+					"@type":       "EntryPoint",
+					"urlTemplate": baseURL + "/id/pencarian/?q={search_term_string}",
+				},
+				"query-input": "required name=search_term_string",
+			},
 		}
 		graph = append(graph, siteSchema, orgSchema)
 	}

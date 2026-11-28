@@ -134,8 +134,16 @@ func TestSSGJobLifecycleAndGeneration(t *testing.T) {
 	}
 
 	checkFile("id/index.html", "Bahasa Indonesia")
+	checkFile("id/index.html", "Eksplorasi, Pesona, Wisata, Kuliner &amp; Budaya Kabupaten Pidie")
+	checkFile("id/index.html", "SearchAction")
+	checkFile("id/index.html", "Raja Muchlisar")
 	checkFile("en/index.html", "English")
+	checkFile("en/index.html", "Explore Pidie")
 	checkFile("sitemap.xml", "https://pidiekab.web.id/id/")
 	checkFile("robots.txt", "Sitemap: https://pidiekab.web.id/sitemap.xml")
+	checkFile("robots.txt", "GPTBot")
+	checkFile("robots.txt", "LLMs: https://pidiekab.web.id/llms.txt")
+	checkFile("llms.txt", "Eksplorasi Pidie")
+	checkFile("llms-full.txt", "Budaya Kabupaten Pidie")
 	checkFile("index.html", "content=\"0;url=/id/\"")
 }
