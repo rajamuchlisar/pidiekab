@@ -74,6 +74,7 @@ type ContentRender struct {
 	MainMediaURL string
 	PublishedAt  *time.Time
 	UpdatedAt    *time.Time
+	ViewCount    int64
 }
 
 type SourceRender struct {
@@ -482,6 +483,25 @@ func (g *Generator) fetchCategories(ctx context.Context) (map[int64]CategoryRend
 }
 
 func (g *Generator) fetchPublishedContents(ctx context.Context) ([]ContentRender, []ContentRender, error) {
+	// 1. Fetch view counts per content_id if page_views table exists
+	viewCounts := make(map[int64]int64)
+	pvRows, pvErr := g.pool.Query(ctx, `
+		SELECT content_id, COUNT(*)
+		FROM page_views
+		WHERE content_id IS NOT NULL
+		GROUP BY content_id
+	`)
+	if pvErr == nil {
+		for pvRows.Next() {
+			var cid, count int64
+			if err := pvRows.Scan(&cid, &count); err == nil {
+				viewCounts[cid] = count
+			}
+		}
+		pvRows.Close()
+	}
+
+	// 2. Fetch published contents
 	query := `
 		SELECT
 			c.id, ct.locale, ct.title, ct.slug, COALESCE(ct.summary, ''), ct.body,
@@ -517,6 +537,7 @@ func (g *Generator) fetchPublishedContents(ctx context.Context) ([]ContentRender
 		); err != nil {
 			return nil, nil, err
 		}
+		item.ViewCount = viewCounts[item.ID]
 
 		item.BodyHTML = renderBodyBlocksToHTML(bodyBytes)
 
@@ -1337,10 +1358,49 @@ body {
     .card-grid { grid-template-columns: repeat(2, 1fr); gap: 1.25rem; }
 }
 @media (min-width: 1024px) {
-    .card-grid { grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
-}
-@media (min-width: 1440px) {
     .card-grid { grid-template-columns: repeat(4, 1fr); gap: 1.5rem; }
+}
+.pagination-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+.page-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.5rem;
+    height: 2.5rem;
+    padding: 0 0.75rem;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #1e293b;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.page-btn:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #0f172a;
+}
+.page-btn.active {
+    background: #0f766e;
+    color: #ffffff;
+    border-color: #0f766e;
+    font-weight: 700;
+    box-shadow: 0 2px 4px rgba(15, 118, 110, 0.2);
+}
+.page-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    background: #f8fafc;
+    border-color: #e2e8f0;
 }
 .card {
     background: #ffffff;
@@ -2944,14 +3004,24 @@ html {
 	var remainingContents []ContentRender
 	hasCuration := (leadStory != nil || len(supportingStories) > 0 || len(featuredStories) > 0)
 	for _, c := range contents {
+		if c.CategorySlug == "layanan-publik" || c.CategorySlug == "public-services" {
+			continue
+		}
 		if hasCuration && handledStoryIDs[c.ID] {
 			continue
 		}
 		remainingContents = append(remainingContents, c)
 	}
 	if len(remainingContents) == 0 && len(contents) > 0 {
-		remainingContents = contents
+		for _, c := range contents {
+			if c.CategorySlug != "layanan-publik" && c.CategorySlug != "public-services" {
+				remainingContents = append(remainingContents, c)
+			}
+		}
 	}
+
+	const pageSize = 8
+	totalPages := (len(remainingContents) + pageSize - 1) / pageSize
 
 	var allArticlesHTML strings.Builder
 	if len(remainingContents) > 0 {
@@ -2964,9 +3034,172 @@ html {
             <h2 class="section-title">%s</h2>
             <div class="card-grid">`, displayTitle))
 
-		for _, c := range remainingContents {
+		for i, c := range remainingContents {
+			pageIndex := (i / pageSize) + 1
+			displayStyle := ""
+			if pageIndex > 1 {
+				displayStyle = ` style="display:none;"`
+			}
 			detailPath := fmt.Sprintf("/%s/%s/%s/", locale, c.CategorySlug, c.Slug)
 			allArticlesHTML.WriteString(fmt.Sprintf(`
+                <article class="card page-card" data-page="%d"%s>
+                    <div>
+                        <span class="badge">%s</span>
+                        <h3><a href="%s">%s</a></h3>
+                        <p>%s</p>
+                    </div>
+                    <div>
+                        <a href="%s" class="card-action">%s</a>
+                    </div>
+                </article>`,
+				pageIndex,
+				displayStyle,
+				template.HTMLEscapeString(c.CategoryName),
+				detailPath,
+				template.HTMLEscapeString(c.Title),
+				template.HTMLEscapeString(c.Summary),
+				detailPath,
+				readMoreText,
+			))
+		}
+
+		allArticlesHTML.WriteString(`
+            </div>`)
+
+		if totalPages > 1 {
+			prevText := "« Sebelumnya"
+			nextText := "Selanjutnya »"
+			if locale == "en" {
+				prevText = "« Previous"
+				nextText = "Next »"
+			}
+			allArticlesHTML.WriteString(fmt.Sprintf(`
+            <nav class="pagination-nav" aria-label="Navigasi Halaman" data-total-pages="%d">
+                <button type="button" class="page-btn prev-btn" disabled aria-label="%s">%s</button>`, totalPages, prevText, prevText))
+			for p := 1; p <= totalPages; p++ {
+				activeClass := ""
+				if p == 1 {
+					activeClass = " active"
+				}
+				allArticlesHTML.WriteString(fmt.Sprintf(`
+                <button type="button" class="page-btn page-num%s" data-page="%d">%d</button>`, activeClass, p, p))
+			}
+			allArticlesHTML.WriteString(fmt.Sprintf(`
+                <button type="button" class="page-btn next-btn" aria-label="%s">%s</button>
+            </nav>
+            <script>
+            (function() {
+                function initArticlesPagination() {
+                    var section = document.querySelector('.all-articles-section');
+                    if (!section) return;
+                    var nav = section.querySelector('.pagination-nav');
+                    if (!nav) return;
+                    var totalPages = parseInt(nav.getAttribute('data-total-pages'), 10) || 1;
+                    var cards = section.querySelectorAll('.page-card');
+                    var pageBtns = nav.querySelectorAll('.page-num');
+                    var prevBtn = nav.querySelector('.prev-btn');
+                    var nextBtn = nav.querySelector('.next-btn');
+                    var currentPage = 1;
+
+                    function goToPage(page) {
+                        if (page < 1 || page > totalPages) return;
+                        currentPage = page;
+                        for (var i = 0; i < cards.length; i++) {
+                            var c = cards[i];
+                            if (c.getAttribute('data-page') === String(page)) {
+                                c.style.display = 'flex';
+                            } else {
+                                c.style.display = 'none';
+                            }
+                        }
+                        for (var j = 0; j < pageBtns.length; j++) {
+                            var btn = pageBtns[j];
+                            if (btn.getAttribute('data-page') === String(page)) {
+                                btn.classList.add('active');
+                            } else {
+                                btn.classList.remove('active');
+                            }
+                        }
+                        if (prevBtn) prevBtn.disabled = (currentPage === 1);
+                        if (nextBtn) nextBtn.disabled = (currentPage === totalPages);
+                        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+
+                    for (var k = 0; k < pageBtns.length; k++) {
+                        (function(btn) {
+                            btn.addEventListener('click', function() {
+                                var p = parseInt(btn.getAttribute('data-page'), 10);
+                                goToPage(p);
+                            });
+                        })(pageBtns[k]);
+                    }
+                    if (prevBtn) {
+                        prevBtn.addEventListener('click', function() {
+                            goToPage(currentPage - 1);
+                        });
+                    }
+                    if (nextBtn) {
+                        nextBtn.addEventListener('click', function() {
+                            goToPage(currentPage + 1);
+                        });
+                    }
+                }
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initArticlesPagination);
+                } else {
+                    initArticlesPagination();
+                }
+            })();
+            </script>`, nextText, nextText))
+		}
+
+		allArticlesHTML.WriteString(`
+        </section>`)
+	}
+
+	// Build "Mungkin tertarik" Section (1 row = up to 4 items with lowest views)
+	var lowestViewCandidates []ContentRender
+	for _, c := range contents {
+		if c.CategorySlug == "layanan-publik" || c.CategorySlug == "public-services" {
+			continue
+		}
+		if hasCuration && handledStoryIDs[c.ID] {
+			continue
+		}
+		lowestViewCandidates = append(lowestViewCandidates, c)
+	}
+
+	sort.SliceStable(lowestViewCandidates, func(i, j int) bool {
+		if lowestViewCandidates[i].ViewCount != lowestViewCandidates[j].ViewCount {
+			return lowestViewCandidates[i].ViewCount < lowestViewCandidates[j].ViewCount
+		}
+		if lowestViewCandidates[i].PublishedAt != nil && lowestViewCandidates[j].PublishedAt != nil {
+			return lowestViewCandidates[i].PublishedAt.After(*lowestViewCandidates[j].PublishedAt)
+		}
+		return lowestViewCandidates[i].ID < lowestViewCandidates[j].ID
+	})
+
+	var lowestViewContents []ContentRender
+	if len(lowestViewCandidates) > 4 {
+		lowestViewContents = lowestViewCandidates[:4]
+	} else {
+		lowestViewContents = lowestViewCandidates
+	}
+
+	var lowestViewsHTML strings.Builder
+	if len(lowestViewContents) > 0 {
+		lowestViewsTitle := "Mungkin tertarik"
+		if locale == "en" {
+			lowestViewsTitle = "You Might Be Interested"
+		}
+		lowestViewsHTML.WriteString(fmt.Sprintf(`
+        <section class="lowest-views-section" style="margin-top: 2.5rem;">
+            <h2 class="section-title">%s</h2>
+            <div class="card-grid">`, lowestViewsTitle))
+
+		for _, c := range lowestViewContents {
+			detailPath := fmt.Sprintf("/%s/%s/%s/", locale, c.CategorySlug, c.Slug)
+			lowestViewsHTML.WriteString(fmt.Sprintf(`
                 <article class="card">
                     <div>
                         <span class="badge">%s</span>
@@ -2986,7 +3219,7 @@ html {
 			))
 		}
 
-		allArticlesHTML.WriteString(`
+		lowestViewsHTML.WriteString(`
             </div>
         </section>`)
 	}
@@ -3040,6 +3273,7 @@ html {
 %s
 %s
 %s
+%s
     </main>
 %s
 </body>
@@ -3057,6 +3291,7 @@ html {
 		storiesHTML.String(),
 		featuredHTML.String(),
 		allArticlesHTML.String(),
+		lowestViewsHTML.String(),
 		footerHTML,
 	)
 
